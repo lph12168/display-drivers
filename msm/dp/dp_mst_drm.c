@@ -1779,9 +1779,9 @@ dp_mst_drm_fixed_connector_init(struct dp_display *dp_display,
 static void dp_mst_hpd_event_notify(struct dp_mst_private *mst, bool hpd_status)
 {
 	struct drm_device *dev = mst->dp_display->drm_dev;
-	char event_string[] = "HOTPLUG=1";
+	char event_string[] = "MST_HOTPLUG=1";
 	char status[HPD_STRING_SIZE];
-	char *envp[3];
+	char *envp[4];
 
 	if (hpd_status)
 		snprintf(status, HPD_STRING_SIZE, "status=connected");
@@ -1790,7 +1790,8 @@ static void dp_mst_hpd_event_notify(struct dp_mst_private *mst, bool hpd_status)
 
 	envp[0] = event_string;
 	envp[1] = status;
-	envp[2] = NULL;
+	envp[2] = "HOTPLUG=1";
+	envp[3] = NULL;
 
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 
