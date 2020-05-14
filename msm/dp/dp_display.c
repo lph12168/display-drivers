@@ -4098,6 +4098,19 @@ int dp_display_get_num_of_bonds(void *dp_display)
 {
 	struct dp_display_private *dp;
 	int i, cnt = 0;
+	struct {
+		const char *name;
+		enum dp_bond_type type;
+	} static const bond_types[] =
+	{
+		{ "qcom,bond-dual-ctrl-phy", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-dual-ctrl-pclk", DP_BOND_DUAL_PCLK },
+		{ "qcom,bond-tri-ctrl-phy", DP_BOND_TRIPLE_PHY },
+		{ "qcom,bond-tri-ctrl-pclk", DP_BOND_TRIPLE_PCLK },
+		/* for backward compatiblity */
+		{ "qcom,bond-dual-ctrl", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-tri-ctrl", DP_BOND_TRIPLE_PCLK },
+	};
 
 	if (!dp_display) {
 		pr_debug("dp display not initialized\n");
@@ -4105,12 +4118,17 @@ int dp_display_get_num_of_bonds(void *dp_display)
 	}
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
-	if (!dp->parser)
-		return dp->cell_idx ? 0 : DP_BOND_MAX;
-
-	for (i = 0; i < DP_BOND_MAX; i++) {
-		if (dp->parser->bond_cfg[i].enable)
-			cnt++;
+	if (!dp->parser) {
+		for (i = 0; i < ARRAY_SIZE(bond_types); i++) {
+			if (of_property_count_u32_elems(dp->pdev->dev.of_node,
+					bond_types[i].name) == num_bond_dp[bond_types[i].type])
+				cnt++;
+		}
+	} else {
+		for (i = 0; i < DP_BOND_MAX; i++) {
+			if (dp->parser->bond_cfg[i].enable)
+				cnt++;
+		}
 	}
 
 	return cnt;
