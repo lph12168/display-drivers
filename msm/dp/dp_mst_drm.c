@@ -1920,6 +1920,52 @@ static int dp_mst_connector_post_init(struct drm_connector *connector,
 	return 0;
 }
 
+static int dp_mst_connector_update_pps(struct drm_connector *connector,
+		char *pps_cmd, void *display)
+{
+	struct dp_display *dp_disp;
+	struct sde_connector *sde_conn;
+	struct dp_mst_bridge *bridge;
+	struct dp_mst_private *mst;
+	struct drm_bridge *drm_bridge;
+	int i, ret;
+
+	if (!display || !connector) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+
+	if (!connector->state->best_encoder)
+		return -EINVAL;
+
+	drm_bridge = drm_bridge_chain_get_first_bridge(connector->encoder);
+	if (WARN_ON(!drm_bridge))
+		return 0;
+	bridge = to_dp_mst_bridge(drm_bridge);
+	dp_disp = display;
+
+	/* update pps on both connectors for super bridge */
+	if (bridge->id == MAX_DP_MST_DRM_BRIDGES) {
+		mst = dp_disp->dp_mst_prv_info;
+		for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
+			ret = dp_mst_connector_update_pps(
+					mst->mst_bridge[i].connector,
+					pps_cmd, display);
+			if (ret)
+				return ret;
+		}
+		return 0;
+	}
+
+	sde_conn = to_sde_connector(connector);
+	if (!sde_conn->drv_panel) {
+		pr_err("invalid dp panel\n");
+		return MODE_ERROR;
+	}
+
+	return dp_disp->update_pps(dp_disp, connector, pps_cmd);
+}
+
 /* DRM MST callbacks */
 
 static struct drm_connector *
@@ -1937,7 +1983,7 @@ dp_mst_add_connector(struct drm_dp_mst_topology_mgr *mgr,
 		.atomic_check = dp_mst_connector_atomic_check,
 		.config_hdr = dp_mst_connector_config_hdr,
 		.pre_destroy = dp_mst_connector_pre_destroy,
-		.update_pps = dp_connector_update_pps,
+		.update_pps = dp_mst_connector_update_pps,
 		.install_properties = dp_connector_install_properties,
 		.late_register = dp_mst_register_connector,
 		.early_unregister = dp_mst_destroy_connector,
@@ -2312,6 +2358,7 @@ dp_mst_drm_fixed_connector_init(struct dp_display *dp_display,
 		.atomic_check = dp_mst_connector_atomic_check,
 		.config_hdr = dp_mst_connector_config_hdr,
 		.pre_destroy = dp_mst_connector_pre_destroy,
+		.update_pps = dp_mst_connector_update_pps,
 	};
 	struct drm_device *dev;
 	struct drm_connector *connector;
