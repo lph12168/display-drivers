@@ -2782,7 +2782,7 @@ static void dp_panel_config_ctrl(struct dp_panel *dp_panel, bool sync)
 	catalog->config_ctrl(catalog, config);
 }
 
-static void dp_panel_config_misc(struct dp_panel *dp_panel)
+static void dp_panel_config_misc(struct dp_panel *dp_panel, bool sync)
 {
 	struct dp_panel_private *panel;
 	struct dp_catalog_panel *catalog;
@@ -2803,7 +2803,8 @@ static void dp_panel_config_misc(struct dp_panel *dp_panel)
 
 	misc_val = cc;
 	misc_val |= (tb << 5);
-	misc_val |= BIT(0); /* Configure clock to synchronous mode */
+	if (sync)
+		misc_val |= BIT(0); /* Configure clock to synchronous mode */
 
 	/* if VSC is supported then set bit 6 of MISC1 */
 	if (panel->vsc_supported)
@@ -2884,7 +2885,7 @@ static int dp_panel_hw_cfg(struct dp_panel *dp_panel, bool enable, bool sync)
 
 	if (enable) {
 		dp_panel_config_ctrl(dp_panel, sync);
-		dp_panel_config_misc(dp_panel);
+		dp_panel_config_misc(dp_panel, sync);
 		dp_panel_config_msa(dp_panel);
 		if (panel->vsc_supported) {
 			dp_panel_setup_colorimetry_sdp(dp_panel,
