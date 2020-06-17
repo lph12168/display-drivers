@@ -98,6 +98,10 @@ static const struct sde_rm_topology_def g_top_table_v1[SDE_RM_TOPOLOGY_MAX] = {
 			MSM_DISPLAY_COMPRESSION_DSC },
 	{   SDE_RM_TOPOLOGY_PPSPLIT,              1, 0, 2, 1, false,
 			MSM_DISPLAY_COMPRESSION_NONE },
+	{   SDE_RM_TOPOLOGY_TRIPLEPIPE,           3, 0, 3, 1, false,
+			MSM_DISPLAY_COMPRESSION_NONE },
+	{   SDE_RM_TOPOLOGY_TRIPLEPIPE_DSC,       3, 3, 3, 1, false,
+			MSM_DISPLAY_COMPRESSION_DSC },
 	{   SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE,     4, 0, 2, 1, false,
 			MSM_DISPLAY_COMPRESSION_NONE },
 	{   SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC, 4, 3, 2, 1, false,
@@ -2494,6 +2498,10 @@ bool sde_rm_topology_is_group(struct sde_rm *rm,
 			break;
 		case SDE_RM_TOPOLOGY_GROUP_DUALPIPE:
 			if (TOPOLOGY_DUALPIPE_MODE(name))
+				return true;
+			break;
+		case SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE:
+			if (TOPOLOGY_TRIPLEPIPE_MODE(name))
 				return true;
 			break;
 		case SDE_RM_TOPOLOGY_GROUP_QUADPIPE:

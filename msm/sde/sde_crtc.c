@@ -5829,6 +5829,9 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 	}
 
 	if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE))
+		layout_split = crtc_state->mode.hdisplay * 2 / 3;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
 			SDE_RM_TOPOLOGY_GROUP_QUADPIPE))
 		layout_split = crtc_state->mode.hdisplay >> 1;
 	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
