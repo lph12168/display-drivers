@@ -51,6 +51,8 @@ static const struct drm_prop_enum_list e_topology_name[] = {
 	{SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC,	"sde_quadpipe_3dmerge_dsc"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE,	"sde_quadpipe_dscmerge"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE,	"sde_quadpipe_dsc4hsmerge"},
+	{SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE,	"sde_sixpipemerge"},
+	{SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE,	"sde_sixpipe_dscmerge"},
 };
 static const struct drm_prop_enum_list e_topology_control[] = {
 	{SDE_RM_TOPCTL_RESERVE_LOCK,	"reserve_lock"},

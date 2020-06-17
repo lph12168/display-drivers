@@ -5458,7 +5458,6 @@ sec_err:
 static int _sde_crtc_check_secure_conn(struct drm_crtc *crtc,
 		struct drm_crtc_state *state, uint32_t fb_sec)
 {
-
 	bool conn_secure = false, is_wb = false;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
@@ -5829,8 +5828,13 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	if (!sde_rm_topology_is_group(&kms->rm, crtc_state,
+	if (sde_rm_topology_is_group(&kms->rm, crtc_state,
 			SDE_RM_TOPOLOGY_GROUP_QUADPIPE))
+		layout_split = crtc_state->mode.hdisplay >> 1;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_SIXPIPE))
+		layout_split = crtc_state->mode.hdisplay / 3;
+	else
 		return 0;
 
 	mode = &crtc->state->adjusted_mode;
@@ -5843,7 +5847,6 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 			continue;
 
 		pstate = to_sde_plane_state(plane_state);
-		layout_split = crtc_width >> 1;
 
 		if (plane_state->crtc_x >= layout_split) {
 			plane_state->crtc_x -= layout_split;

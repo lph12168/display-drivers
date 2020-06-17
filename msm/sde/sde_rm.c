@@ -106,6 +106,10 @@ static const struct sde_rm_topology_def g_top_table_v1[SDE_RM_TOPOLOGY_MAX] = {
 			MSM_DISPLAY_COMPRESSION_DSC },
 	{   SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE, 4, 4, 1, 1, false,
 			MSM_DISPLAY_COMPRESSION_DSC },
+	{   SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE,	  6, 0, 3, 1, false,
+			MSM_DISPLAY_COMPRESSION_NONE },
+	{   SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE,	  6, 6, 3, 1, false,
+			MSM_DISPLAY_COMPRESSION_DSC },
 };
 
 char sde_hw_blk_str[SDE_HW_BLK_MAX][SDE_HW_BLK_NAME_LEN] = {
@@ -2494,6 +2498,10 @@ bool sde_rm_topology_is_group(struct sde_rm *rm,
 			break;
 		case SDE_RM_TOPOLOGY_GROUP_QUADPIPE:
 			if (TOPOLOGY_QUADPIPE_MODE(name))
+				return true;
+			break;
+		case SDE_RM_TOPOLOGY_GROUP_SIXPIPE:
+			if (TOPOLOGY_SIXPIPE_MODE(name))
 				return true;
 			break;
 		case SDE_RM_TOPOLOGY_GROUP_3DMERGE:
