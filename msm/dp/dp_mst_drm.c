@@ -1924,19 +1924,15 @@ static int dp_mst_connector_update_pps(struct drm_connector *connector,
 		char *pps_cmd, void *display)
 {
 	struct dp_display *dp_disp;
-	struct sde_connector *sde_conn;
 	struct dp_mst_bridge *bridge;
 	struct dp_mst_private *mst;
 	struct drm_bridge *drm_bridge;
 	int i, ret;
 
-	if (!display || !connector) {
+	if (!display || !connector || !connector->encoder) {
 		pr_err("invalid params\n");
 		return -EINVAL;
 	}
-
-	if (!connector->state->best_encoder)
-		return -EINVAL;
 
 	drm_bridge = drm_bridge_chain_get_first_bridge(connector->encoder);
 	if (WARN_ON(!drm_bridge))
@@ -1948,19 +1944,12 @@ static int dp_mst_connector_update_pps(struct drm_connector *connector,
 	if (bridge->id == MAX_DP_MST_DRM_BRIDGES) {
 		mst = dp_disp->dp_mst_prv_info;
 		for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
-			ret = dp_mst_connector_update_pps(
-					mst->mst_bridge[i].connector,
-					pps_cmd, display);
+			ret = dp_disp->update_pps(dp_disp,
+					mst->mst_bridge[i].connector, pps_cmd);
 			if (ret)
 				return ret;
 		}
 		return 0;
-	}
-
-	sde_conn = to_sde_connector(connector);
-	if (!sde_conn->drv_panel) {
-		pr_err("invalid dp panel\n");
-		return MODE_ERROR;
 	}
 
 	return dp_disp->update_pps(dp_disp, connector, pps_cmd);
