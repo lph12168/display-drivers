@@ -31,6 +31,7 @@
 #include "dp_display.h"
 #include "sde_hdcp.h"
 #include "dp_debug.h"
+#include "dp_mst_sim.h"
 #include "dp_pll.h"
 #include "sde_dbg.h"
 
@@ -1277,7 +1278,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	 * ENOTCONN --> no downstream device connected
 	 */
 	if (rc == -ETIMEDOUT || rc == -ENOTCONN) {
-		dp_display_state_remove(DP_STATE_CONNECTED);
+		if (!dp->parser->force_connect_mode)
+			dp_display_state_remove(DP_STATE_CONNECTED);
 		goto end;
 	}
 
@@ -1289,7 +1291,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	rc = dp->ctrl->on(dp->ctrl, dp->mst.mst_active,
 			dp->panel->fec_en, dp->panel->dsc_en, false);
 	if (rc) {
-		dp_display_state_remove(DP_STATE_CONNECTED);
+		if (!dp->parser->force_connect_mode)
+			dp_display_state_remove(DP_STATE_CONNECTED);
 		goto end;
 	}
 
@@ -1597,7 +1600,10 @@ static void dp_display_clean(struct dp_display_private *dp)
 		dp_panel->deinit(dp_panel, 0);
 	}
 
-	dp_display_state_remove(DP_STATE_ENABLED | DP_STATE_CONNECTED);
+	if (!dp->parser->force_connect_mode)
+		dp_display_state_remove(DP_STATE_ENABLED)
+	else
+		dp_display_state_remove(DP_STATE_ENABLED | DP_STATE_CONNECTED);
 
 	dp->ctrl->off(dp->ctrl);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -1608,6 +1614,22 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	int rc;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
+
+	if (dp->parser->force_connect_mode) {
+		/*
+		 * switch from normal mode to simulation mode. update EDID
+		 * and send hotplug to user. this gives user a chance to
+		 * update the mode if simulation EDID is different than
+		 * current EDID.
+		 */
+		mutex_lock(&dp->session_lock);
+		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
+		mutex_unlock(&dp->session_lock);
+		dp_display_process_hpd_high(dp);
+		SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
+		return 0;
+	}
+
 	rc = dp_display_process_hpd_low(dp);
 
 	/* cancel any pending request */
@@ -1695,10 +1717,12 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 
 	dp_display_disconnect_sync(dp);
 
-	mutex_lock(&dp->session_lock);
-	dp_display_host_deinit(dp);
-	dp_display_state_remove(DP_STATE_CONFIGURED);
-	mutex_unlock(&dp->session_lock);
+	if (!dp->parser->force_connect_mode) {
+		mutex_lock(&dp->session_lock);
+		dp_display_host_deinit(dp);
+		dp_display_state_remove(DP_STATE_CONFIGURED);
+		mutex_unlock(&dp->session_lock);
+	}
 
 	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
 	    && !dp->parser->gpio_aux_switch)
@@ -1966,13 +1990,26 @@ static void dp_display_connect_work(struct work_struct *work)
 	if (dp->active_stream_cnt) {
 		if (dp->active_panels[DP_STREAM_0] == dp->panel &&
 				!dp->panel->video_test) {
-			dp->aux->abort(dp->aux, true);
-			dp->ctrl->abort(dp->ctrl, true);
+			dp->aux->abort(dp->aux, false);
+			dp->ctrl->abort(dp->ctrl, false);
 			reset_connector = dp->dp_display.base_connector;
 		} else {
 			dp_display_clean(dp);
+			dp_display_host_unready(dp);
 			dp_display_host_deinit(dp);
+			dp_display_state_add(DP_STATE_SRC_PWRDN);
 		}
+	}
+
+	if (dp->parser->force_connect_mode) {
+		if (!reset_connector) {
+			dp_display_clean(dp);
+			dp_display_host_unready(dp);
+			dp_display_host_deinit(dp);
+			dp_display_state_add(DP_STATE_SRC_PWRDN);
+		}
+		dp_display_process_mst_hpd_low(dp);
+		dp_sim_set_sim_mode(dp->aux_bridge, 0);
 	}
 
 	mutex_unlock(&dp->session_lock);
@@ -2271,6 +2308,22 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		}
 	}
 
+	if (dp->parser->force_connect_mode) {
+		/*
+		 * always enter simulation first regardless of the actual
+		 * connection state to make connector always connected.
+		 * this will fix the corner case when user tries to read
+		 * connector modes when link training is still running.
+		 */
+		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
+		dp_display_state_remove(DP_STATE_ABORTED);
+		dp_display_state_add(DP_STATE_CONFIGURED);
+		rc = dp_display_host_init(dp);
+		if (rc)
+			DP_ERR("DP%d Host init Failed", dp->cell_idx);
+		dp_display_process_hpd_high(dp);
+	}
+
 	return rc;
 error_hpd_reg:
 	dp_debug_put(dp->debug);
@@ -2486,7 +2539,7 @@ static int dp_display_prepare(struct dp_display *dp_display, void *panel)
 		goto end;
 	}
 
-	if (!dp_display_is_ready(dp)) {
+	if (!dp_display_is_ready(dp) && !dp->parser->force_connect_mode) {
 		dp_display_state_show("[not ready]");
 		goto end;
 	}
@@ -2880,8 +2933,9 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	 * reboot or suspend-resume but not from normal
 	 * hot plug.
 	 */
-	 if (dp_display_is_ready(dp))
+	 if (dp_display_is_ready(dp) || dp->parser->force_connect_mode)
 		 flags |= DP_PANEL_SRC_INITIATED_POWER_DOWN;
+
 	/*
 	 * If connector is in MST mode, skip
 	 * powering down host as aux needs to be kept
@@ -2890,15 +2944,13 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	if (dp->active_stream_cnt || dp->mst.mst_active)
 		goto end;
 
-	if (flags & DP_PANEL_SRC_INITIATED_POWER_DOWN) {
-		dp->link->psm_config(dp->link, &dp->panel->link_info, true);
-		dp->debug->psm_enabled = true;
+	dp->link->psm_config(dp->link, &dp->panel->link_info, true);
+	dp->debug->psm_enabled = true;
 
-		dp->ctrl->off(dp->ctrl);
-		dp_display_host_unready(dp);
-		dp_display_host_deinit(dp);
-		dp_display_state_add(DP_STATE_SRC_PWRDN);
-	}
+	dp->ctrl->off(dp->ctrl);
+	dp_display_host_unready(dp);
+	dp_display_host_deinit(dp);
+	dp_display_state_add(DP_STATE_SRC_PWRDN);
 
 	dp_display_state_remove(DP_STATE_ENABLED);
 	dp->aux->state = DP_STATE_CTRL_POWERED_OFF;
