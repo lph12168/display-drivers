@@ -283,6 +283,9 @@ static int dp_ctrl_lane_count_down_shift(struct dp_ctrl_private *ctrl)
 	int ret = 0;
 	u8 lanes = ctrl->link->link_params.lane_count;
 
+	if (ctrl->parser->no_lane_count_reduction)
+		return -EINVAL;
+
 	if (ctrl->panel->link_info.revision < 0x14)
 		return -EINVAL;
 
@@ -324,6 +327,9 @@ static int dp_ctrl_link_rate_down_shift(struct dp_ctrl_private *ctrl)
 	int ret = 0;
 
 	if (!ctrl)
+		return -EINVAL;
+
+	if (ctrl->parser->no_link_rate_reduction)
 		return -EINVAL;
 
 	switch (ctrl->link->link_params.bw_code) {
@@ -449,7 +455,8 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 					link_status);
 
 			active_lanes = ctrl->link->link_params.lane_count / 2;
-			if (active_lanes) {
+			if (active_lanes &&
+				!ctrl->parser->no_lane_count_reduction) {
 				/*
 				 * Retry with initial link rate and
 				 * reduced lane count.

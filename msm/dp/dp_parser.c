@@ -178,6 +178,12 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (!parser->display_type)
 		parser->display_type = "unknown";
 
+	parser->no_link_rate_reduction = of_property_read_bool(of_node,
+			"qcom,no-link-rate-reduction");
+
+	parser->no_lane_count_reduction = of_property_read_bool(of_node,
+			"qcom,no-lane-count-reduction");
+
 	return 0;
 }
 
