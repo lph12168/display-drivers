@@ -853,6 +853,7 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 	struct sde_connector *c_conn = to_sde_connector(connector);
 	struct dp_display *dp_display = c_conn->display;
 	enum dp_bond_type type, preferred_type = DP_BOND_MAX;
+	char topology[9] = {0};
 
 	if (!dp_display->dp_bond_prv_info || !dp_display->force_bond_mode)
 		return;
@@ -873,6 +874,8 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 		return;
 
 	connector->has_tile = true;
+	connector->tile_group = drm_mode_create_tile_group(connector->dev,
+		topology);
 	connector->num_h_tile = num_bond_dp[preferred_type];
 	connector->num_v_tile = 1;
 }
