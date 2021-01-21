@@ -242,7 +242,8 @@ static int dp_sim_link_training(struct dp_sim_device *sim_dev,
 		 * when actual read is needed.
 		 */
 		if (sim_dev->link_training_remain) {
-			sim_dev->link_training_remain--;
+			if (sim_dev->link_training_remain != -1)
+				sim_dev->link_training_remain--;
 			ret = drm_aux->transfer(drm_aux, msg);
 			if (ret >= 0)
 				link_status[2] &= ~DP_LINK_STATUS_UPDATED;
@@ -303,8 +304,9 @@ static ssize_t dp_sim_transfer(struct dp_aux_bridge *bridge,
 
 	mutex_lock(&sim_dev->lock);
 
-	if (sim_dev->skip_link_training &&
-			!(sim_dev->sim_mode & DP_SIM_MODE_LINK_TRAIN)) {
+	if (sim_dev->skip_link_training ||
+			((sim_dev->sim_mode & DP_SIM_MODE_DPCD_READ) &&
+			!(sim_dev->sim_mode & DP_SIM_MODE_LINK_TRAIN))) {
 		ret = dp_sim_link_training(sim_dev, drm_aux, msg);
 		if (ret)
 			goto end;
@@ -1777,9 +1779,9 @@ int dp_sim_create_bridge(struct device *dev, struct dp_aux_bridge **bridge)
 	dp_sim_dev->dpcd_reg[DP_SINK_STATUS] = 0x3;
 	dp_sim_dev->dpcd_reg[DP_PAYLOAD_TABLE_UPDATE_STATUS] = 0x3;
 
-	/* enable link training by default */
-	dp_sim_dev->skip_link_training = true;
-	dp_sim_dev->link_training_cnt = (u32)-1;
+	/* default link training count to max */
+	dp_sim_dev->link_training_cnt = -1;
+	dp_sim_dev->link_training_remain = -1;
 
 	*bridge = &dp_sim_dev->bridge;
 	return 0;
