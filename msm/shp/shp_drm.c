@@ -107,7 +107,7 @@ static void shp_plane_send_uevent(struct drm_device *dev)
 }
 
 int shp_plane_validate(struct shp_plane *splane,
-		struct drm_plane_state *state)
+		struct drm_plane_state *state, bool force_handoff)
 {
 	struct drm_plane *plane = splane->plane;
 	struct shp_pool *pool = splane->pool;
@@ -173,10 +173,10 @@ int shp_plane_validate(struct shp_plane *splane,
 		return -EINVAL;
 
 	if (shp_state->handoff != splane->state.handoff ||
-			state->crtc != plane->state->crtc) {
+			state->crtc != plane->state->crtc || force_handoff) {
 		uint32_t crtc_mask;
 
-		if (splane->detach_handoff) {
+		if (splane->detach_handoff || force_handoff) {
 			if (!shp_state->handoff)
 				return 0;
 
@@ -227,10 +227,53 @@ int shp_atomic_check(struct drm_atomic_state *state)
 	struct shp_device *shp_dev = &g_shp_device;
 	struct shp_plane *shp_plane;
 	struct drm_plane *plane;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state;
+	struct drm_crtc_state *new_crtc_state;
 	struct drm_plane_state *plane_state;
 	uint32_t plane_mask = 0;
-	int i, ret;
+	uint32_t crtc_mask = 0;
+	uint32_t handoff_mask = 0;
+	int i, ret, rc;
+	bool force_handoff = 0;
 
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state,
+			new_crtc_state, i) {
+		if (old_crtc_state->active || !new_crtc_state->active)
+			continue;
+
+		crtc_mask |= shd_get_handoff_crtc_mask(crtc);
+	}
+
+	if (!crtc_mask)
+		goto next;
+
+	drm_for_each_crtc(crtc, state->dev) {
+		for_each_if(drm_crtc_mask(crtc) & (crtc_mask)) {
+			rc = drm_modeset_lock(&crtc->mutex, state->acquire_ctx);
+			if (rc)
+				return rc;
+			new_crtc_state = drm_atomic_get_new_crtc_state(state,
+						crtc);
+			if (!new_crtc_state)
+				new_crtc_state = crtc->state;
+
+			plane_mask |= new_crtc_state->plane_mask;
+		}
+	}
+
+	if (!plane_mask)
+		goto next;
+
+	drm_for_each_plane_mask(plane, state->dev, plane_mask) {
+		plane_state = drm_atomic_get_plane_state(state, plane);
+		if (IS_ERR(plane_state))
+			return PTR_ERR(plane_state);
+	}
+
+	handoff_mask = plane_mask;
+
+next:
 	for_each_plane_in_state(state, plane, plane_state, i) {
 		shp_plane = &shp_dev->planes[plane->index];
 
@@ -252,7 +295,16 @@ int shp_atomic_check(struct drm_atomic_state *state)
 		plane_state = drm_atomic_get_existing_plane_state(
 			state, plane);
 
-		ret = shp_plane_validate(shp_plane, plane_state);
+		if (handoff_mask & (1 << drm_plane_index(plane))) {
+			drm_atomic_set_fb_for_plane(plane_state, NULL);
+			ret = drm_atomic_set_crtc_for_plane(plane_state, NULL);
+			if (ret)
+				return ret;
+			force_handoff = true;
+		} else {
+			force_handoff = false;
+		}
+		ret = shp_plane_validate(shp_plane, plane_state, force_handoff);
 		if (ret)
 			return ret;
 	}

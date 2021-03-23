@@ -57,6 +57,7 @@ struct shd_display_base {
 struct shd_display {
 	struct dsi_display dsi_base;
 	struct drm_device *drm_dev;
+	struct device_node *handoff_node[MAX_CONNECTORS];
 	const char *name;
 	const char *display_type;
 
@@ -74,6 +75,9 @@ struct shd_display {
 	struct list_head head;
 	struct notifier_block notifier;
 	struct drm_crtc *crtc;
+
+	int handoff_count;
+	int handoff_mask;
 };
 
 /* drm internal header */
@@ -88,5 +92,5 @@ void *sde_encoder_phys_shd_init(enum sde_intf_type type,
 u32 shd_get_shared_crtc_mask(struct drm_crtc *crtc);
 void shd_skip_shared_plane_update(struct drm_plane *plane,
 			struct drm_crtc *crtc);
-
+u32 shd_get_handoff_crtc_mask(struct drm_crtc *crtc);
 #endif /* _SHD_DRM_H_ */
