@@ -2704,6 +2704,9 @@ int dsi_display_phy_pll_toggle(void *priv, bool prepare)
 		return -EINVAL;
 	}
 
+	if (is_skip_op_required(display))
+		return 0;
+
 	rc = dsi_display_set_clk_src(display, !prepare);
 
 	m_ctrl = &display->ctrl[display->clk_master_idx];
@@ -2729,6 +2732,9 @@ int dsi_display_phy_configure(void *priv, bool commit)
 		DSI_ERR("invalid arguments\n");
 		return -EINVAL;
 	}
+
+	if (is_skip_op_required(display))
+		return 0;
 
 	m_ctrl = &display->ctrl[display->clk_master_idx];
 	if ((!m_ctrl->phy) || (!m_ctrl->ctrl)) {
