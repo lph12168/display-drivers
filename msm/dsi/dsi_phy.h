@@ -107,6 +107,16 @@ struct msm_dsi_phy {
 };
 
 /**
+ * dsi_phy_check_resource() - check if DSI PHY is probed
+ * @of_node:    of_node of the DSI PHY.
+ *
+ * Checks if the DSI PHY has been probed and is available.
+ *
+ * Return: status of DSI PHY
+ */
+bool dsi_phy_check_resource(struct device_node *of_node);
+
+/**
  * dsi_phy_get() - get a dsi phy handle from device node
  * @of_node:           device node for dsi phy controller
  *
@@ -402,4 +412,10 @@ int dsi_phy_pll_toggle(struct msm_dsi_phy *dsi_phy, bool prepare);
  * Return: error code.
  */
 int dsi_phy_dynclk_configure(struct msm_dsi_phy *phy);
+
+/**
+ * dsi_phy_pll_parse_dfps_data() - parse dfps data for PLL
+ * @phy:	DSI PHY handle
+ */
+void dsi_phy_pll_parse_dfps_data(struct msm_dsi_phy *phy);
 #endif /* _DSI_PHY_H_ */

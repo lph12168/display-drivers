@@ -24,8 +24,8 @@
 })
 
 #define dp_pll_write(x, offset, data) ({ \
-		DP_DEBUG(#offset", addr=0x%x, val=0x%x\n", \
-				(dp_pll_get_base(x)) + (offset), (data)); \
+		DP_DEBUG(#offset", addr=0x%llx, val=0x%x\n", \
+				((u64)(dp_pll_get_base(x)) + (offset)), (data)); \
 		SDE_EVT32_VERBOSE((dp_pll_get_base(x)) + (offset), (data)); \
 		writel_relaxed((data), (dp_pll_get_base(x)) + (offset)); \
 })
@@ -80,6 +80,7 @@ struct dp_pll {
 	struct dp_aux *aux;
 	struct dp_pll_io io;
 	struct clk_onecell_data *clk_data;
+	u32 dp_core_revision;
 
 	int (*pll_cfg)(struct dp_pll *pll, unsigned long rate);
 	int (*pll_prepare)(struct dp_pll *pll);
@@ -128,8 +129,10 @@ struct dp_pll_in {
 	struct platform_device *pdev;
 	struct dp_aux *aux;
 	struct dp_parser *parser;
+	u32 dp_core_revision;
 };
 
+int dp_pll_clock_register_helper(struct dp_pll *pll, struct dp_pll_vco_clk *clks, int num_clks);
 struct dp_pll *dp_pll_get(struct dp_pll_in *in);
 void dp_pll_put(struct dp_pll *pll);
 #endif /* __DP_PLL_H */

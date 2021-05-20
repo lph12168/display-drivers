@@ -443,14 +443,20 @@ struct dsi_mode_info {
 
 /**
  * struct dsi_split_link_config - Split Link Configuration
- * @split_link_enabled:  Split Link Enabled.
+ * @enabled:  Split Link Enabled.
+ * @sublink_swap: Split link left right sublinks swap.
  * @num_sublinks:     Number of sublinks.
  * @lanes_per_sublink:   Number of lanes per sublink.
+ * @panel_mode: Specifies cmd or video mode.
+ * @lanes_enabled: Specifies what all lanes are enabled.
  */
 struct dsi_split_link_config {
-	bool split_link_enabled;
+	bool enabled;
+	bool sublink_swap;
 	u32 num_sublinks;
 	u32 lanes_per_sublink;
+	u8 lanes_enabled;
+	enum dsi_op_mode panel_mode;
 };
 
 /**
@@ -588,6 +594,16 @@ struct dsi_host_config {
 };
 
 /**
+ * struct dyn_clk_list - list of dynamic clock rates.
+ * @rates: list of supported clock rates
+ * @count: number of supported clock rates
+ */
+struct dyn_clk_list {
+	u32 *rates;
+	u32 count;
+};
+
+/**
  * struct dsi_display_mode_priv_info - private mode info that will be attached
  *                             with each drm mode
  * @cmd_sets:		  Command sets of the mode
@@ -600,6 +616,7 @@ struct dsi_host_config {
  * @dsi_transfer_time_us: Specifies the dsi transfer time for cmd panels.
  * @clk_rate_hz:          DSI bit clock per lane in hz.
  * @min_dsi_clk_hz:       Min dsi clk per lane to transfer frame in vsync time.
+ * @bit_clk_list:         List of dynamic bit clock rates supported.
  * @topology:             Topology selected for the panel
  * @dsc:                  DSC compression info
  * @vdc:                  VDC compression info
@@ -623,6 +640,7 @@ struct dsi_display_mode_priv_info {
 	u32 dsi_transfer_time_us;
 	u64 clk_rate_hz;
 	u64 min_dsi_clk_hz;
+	struct dyn_clk_list bit_clk_list;
 
 	struct msm_display_topology topology;
 	struct msm_display_dsc_info dsc;
@@ -642,6 +660,7 @@ struct dsi_display_mode_priv_info {
  * @dsi_mode_flags: Flags to signal other drm components via private flags
  * @panel_mode_caps: panel mode capabilities.
  * @is_preferred:   Is mode preferred
+ * @mode_idx:       Mode index as defined by devicetree.
  * @priv_info:      Mode private info
  */
 struct dsi_display_mode {
@@ -650,6 +669,7 @@ struct dsi_display_mode {
 	u32 dsi_mode_flags;
 	u32 panel_mode_caps;
 	bool is_preferred;
+	u32 mode_idx;
 	struct dsi_display_mode_priv_info *priv_info;
 };
 

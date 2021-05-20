@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _SDE_HW_UTIL_H
@@ -12,7 +12,9 @@
 #include "sde_hw_catalog.h"
 
 #define REG_MASK(n)                     ((BIT(n)) - 1)
-#define REG_MASK_SHIFT(n, shift) ((REG_MASK(n)) << (shift))
+#define REG_MASK_SHIFT(n, shift)        ((REG_MASK(n)) << (shift))
+#define REG_MASK_ULL(n)                 ((BIT_ULL(n)) - 1)
+#define REG_MASK_SHIFT_ULL(n, shift)    ((REG_MASK_ULL(n)) << (shift))
 #define LP_DDR4_TYPE			0x7
 
 struct sde_format_extended;
@@ -211,9 +213,6 @@ uint32_t sde_copy_formats(
 		uint32_t dst_list_pos,
 		const struct sde_format_extended *src_list,
 		uint32_t src_list_size);
-
-uint32_t sde_get_linetime(struct drm_display_mode *mode,
-		int src_bpp, int target_bpp);
 
 static inline bool is_qseed3_rev_qseed3lite(struct sde_mdss_cfg *sde_cfg)
 {

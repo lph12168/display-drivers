@@ -161,6 +161,12 @@ enum sde_sspp_type {
 	SSPP_TYPE_MAX
 };
 
+enum sde_sspp_rect {
+	R0,
+	R1,
+	R_MAX
+};
+
 enum sde_lm {
 	LM_0 = 1,
 	LM_1,
@@ -576,6 +582,12 @@ struct sde_mdss_color {
  * @dspp[DSPP_MAX]: array of hw_dspp pointers associated with crtc.
  * @broadcast_disabled: flag indicating if broadcast should be avoided when
  *			using LUTDMA
+ * @panel_height: height of display panel in pixels.
+ * @panel_width: width of display panel in pixels.
+ * @valid_skip_blend_plane: true if skip plane params are valid
+ * @skip_blend_plane: plane which has been skipped staging into layer mixer
+ * @skip_blend_plane_w: skip plane width
+ * @skip_blend_plane_h: skip plane height
  */
 struct sde_hw_cp_cfg {
 	void *payload;
@@ -588,6 +600,12 @@ struct sde_hw_cp_cfg {
 	u32 displayh;
 	struct sde_hw_dspp *dspp[DSPP_MAX];
 	bool broadcast_disabled;
+	u32 panel_height;
+	u32 panel_width;
+	bool valid_skip_blend_plane;
+	enum sde_sspp skip_blend_plane;
+	u32 skip_blend_plane_w;
+	u32 skip_blend_plane_h;
 };
 
 /**
@@ -635,7 +653,8 @@ struct sde_sspp_index_info {
  * used in continuous splash on a specific display.
  * @cont_splash_enabled:  Stores the cont_splash status (enabled/disabled)
  * @encoder:	Pointer to the drm encoder object used for this display
- * @splash:     Pointer to struct sde_splash_mem used for this display
+ * @splash:	Pointer to struct sde_splash_mem used for this display
+ * @demura:	Pointer to struct sde_splash_mem used for demura cont splash
  * @ctl_ids:	Stores the valid MDSS ctl block ids for the current mode
  * @lm_ids:	Stores the valid MDSS layer mixer block ids for the current mode
  * @dsc_ids:	Stores the valid MDSS DSC block ids for the current mode
@@ -651,11 +670,12 @@ struct sde_splash_display {
 	bool cont_splash_enabled;
 	struct drm_encoder *encoder;
 	struct sde_splash_mem *splash;
+	struct sde_splash_mem *demura;
 	u8 ctl_ids[MAX_DATA_PATH_PER_DSIPLAY];
 	u8 lm_ids[MAX_DATA_PATH_PER_DSIPLAY];
 	u8 dsc_ids[MAX_DATA_PATH_PER_DSIPLAY];
 	u8 vdc_ids[MAX_DATA_PATH_PER_DSIPLAY];
-	struct sde_sspp_index_info pipes[MAX_DATA_PATH_PER_DSIPLAY];
+	struct sde_sspp_index_info pipes[SSPP_MAX];
 	u8 ctl_cnt;
 	u8 lm_cnt;
 	u8 dsc_cnt;
@@ -675,6 +695,7 @@ enum sde_handoff_type {
  * @num_splash_regions:  Indicates number of splash memory regions from dtsi
  * @num_splash_displays: Indicates count of active displays in continuous splash
  * @splash_mem:          Array of all struct sde_splash_mem listed from dtsi
+ * @demura_mem:          Array of all demura memory regions listed from dtsi
  * @splash_display:      Array of all struct sde_splash_display
  */
 struct sde_splash_data {
@@ -682,6 +703,7 @@ struct sde_splash_data {
 	u32 num_splash_regions;
 	u32 num_splash_displays;
 	struct sde_splash_mem splash_mem[MAX_DSI_DISPLAYS];
+	struct sde_splash_mem demura_mem[MAX_DSI_DISPLAYS];
 	struct sde_splash_display splash_display[MAX_DSI_DISPLAYS];
 };
 
@@ -749,16 +771,16 @@ struct sde_hw_pp_vsync_info {
 /**
  * struct sde_hw_noise_layer_cfg: Payload to enable/disable noise blend
  * @flags: operation control flags, for future use
- * @zposn: zorder required for noise
- * @zposattn: zorder required for noise
+ * @noise_blend_stage: blend stage required for noise layer
+ * @attn_blend_stage: blend stage required for attn layer
  * @attn_factor: factor in range of 1 to 255
  * @stength: strength in range of 0 to 6
  * @alpha_noise: factor in range of 1 to 255
 */
 struct sde_hw_noise_layer_cfg {
 	u64 flags;
-	u32 zposn;
-	u32 zposattn;
+	u32 noise_blend_stage;
+	u32 attn_blend_stage;
 	u32 attn_factor;
 	u32 strength;
 	u32 alpha_noise;

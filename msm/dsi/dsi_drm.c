@@ -130,10 +130,9 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 		drm_mode->flags |= DRM_MODE_FLAG_PVSYNC;
 
 	/* set mode name */
-	snprintf(drm_mode->name, DRM_DISPLAY_MODE_LEN, "%dx%dx%dx%u%s",
+	snprintf(drm_mode->name, DRM_DISPLAY_MODE_LEN, "%dx%dx%d%s",
 			drm_mode->hdisplay, drm_mode->vdisplay,
-			drm_mode_vrefresh(drm_mode), dsi_mode->pixel_clk_khz,
-			panel_caps);
+			drm_mode_vrefresh(drm_mode), panel_caps);
 }
 
 static void dsi_convert_to_msm_mode(const struct dsi_display_mode *dsi_mode,
@@ -342,12 +341,26 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 				const struct drm_display_mode *mode,
 				const struct drm_display_mode *adjusted_mode)
 {
-	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+	int rc = 0;
+	struct dsi_bridge *c_bridge = NULL;
+	struct dsi_display *display;
 	struct drm_connector *conn;
 	struct sde_connector_state *conn_state;
 
 	if (!bridge || !mode || !adjusted_mode) {
 		DSI_ERR("Invalid params\n");
+		return;
+	}
+
+	c_bridge = to_dsi_bridge(bridge);
+	if (!c_bridge) {
+		DSI_ERR("invalid dsi bridge\n");
+		return;
+	}
+
+	display = c_bridge->display;
+	if (!display || !display->drm_conn || !display->drm_conn->state) {
+		DSI_ERR("invalid display\n");
 		return;
 	}
 
@@ -366,9 +379,11 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 	msm_parse_mode_priv_info(&conn_state->msm_mode,
 					&(c_bridge->dsi_mode));
 
-	/* restore bit_clk_rate also for dynamic clk use cases */
-	c_bridge->dsi_mode.timing.clk_rate_hz =
-		dsi_drm_find_bit_clk_rate(c_bridge->display, adjusted_mode);
+	rc = dsi_display_restore_bit_clk(display, &c_bridge->dsi_mode);
+	if (rc) {
+		DSI_ERR("[%s] bit clk rate cannot be restored\n", display->name);
+		return;
+	}
 
 	DSI_DEBUG("clk_rate: %llu\n", c_bridge->dsi_mode.timing.clk_rate_hz);
 }
@@ -435,6 +450,18 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	dsi_mode.panel_mode_caps = panel_dsi_mode->panel_mode_caps;
 	dsi_mode.timing.dsc_enabled = dsi_mode.priv_info->dsc_enabled;
 	dsi_mode.timing.dsc = &dsi_mode.priv_info->dsc;
+
+	rc = dsi_display_restore_bit_clk(display, &dsi_mode);
+	if (rc) {
+		DSI_ERR("[%s] bit clk rate cannot be restored\n", display->name);
+		return false;
+	}
+
+	rc = dsi_display_update_dyn_bit_clk(display, &dsi_mode);
+	if (rc) {
+		DSI_ERR("[%s] failed to update bit clock\n", display->name);
+		return false;
+	}
 
 	rc = dsi_display_validate_mode(c_bridge->display, &dsi_mode,
 			DSI_VALIDATE_FLAG_ALLOW_ADJUST);
@@ -517,33 +544,6 @@ u32 dsi_drm_get_dfps_maxfps(void *display)
 	return dfps_maxfps;
 }
 
-u64 dsi_drm_find_bit_clk_rate(void *display,
-			      const struct drm_display_mode *drm_mode)
-{
-	int i = 0, count = 0;
-	struct dsi_display *dsi_display = display;
-	struct dsi_display_mode *dsi_mode;
-	u64 bit_clk_rate = 0;
-
-	if (!dsi_display || !drm_mode)
-		return 0;
-
-	dsi_display_get_mode_count(dsi_display, &count);
-
-	for (i = 0; i < count; i++) {
-		dsi_mode = &dsi_display->modes[i];
-		if ((dsi_mode->timing.v_active == drm_mode->vdisplay) &&
-		    (dsi_mode->timing.h_active == drm_mode->hdisplay) &&
-		    (dsi_mode->pixel_clk_khz == drm_mode->clock) &&
-		    (dsi_mode->timing.refresh_rate == drm_mode_vrefresh(drm_mode))) {
-			bit_clk_rate = dsi_mode->timing.clk_rate_hz;
-			break;
-		}
-	}
-
-	return bit_clk_rate;
-}
-
 int dsi_conn_get_mode_info(struct drm_connector *connector,
 		const struct drm_display_mode *drm_mode,
 		struct msm_mode_info *mode_info,
@@ -577,6 +577,13 @@ int dsi_conn_get_mode_info(struct drm_connector *connector,
 
 	memcpy(&mode_info->topology, &dsi_mode->priv_info->topology,
 			sizeof(struct msm_display_topology));
+
+	if (dsi_mode->priv_info->bit_clk_list.count) {
+		mode_info->bit_clk_rates =
+				dsi_mode->priv_info->bit_clk_list.rates;
+		mode_info->bit_clk_count =
+				dsi_mode->priv_info->bit_clk_list.count;
+	}
 
 	if (dsi_mode->priv_info->dsc_enabled) {
 		mode_info->comp_info.comp_type = MSM_DISPLAY_COMPRESSION_DSC;
@@ -618,6 +625,28 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 	.post_disable = dsi_bridge_post_disable,
 	.mode_set     = dsi_bridge_mode_set,
 };
+
+int dsi_conn_set_avr_step_info(struct dsi_panel *panel, void *info)
+{
+	u32 i;
+	int idx = 0;
+	size_t buff_sz = PAGE_SIZE;
+	char *buff;
+
+	buff = kzalloc(buff_sz, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	for (i = 0; i < panel->avr_caps.avr_step_fps_list_len && (idx < (buff_sz - 1)); i++)
+		idx += scnprintf(&buff[idx], buff_sz - idx, "%u@%u ",
+				 panel->avr_caps.avr_step_fps_list[i],
+				 panel->dfps_caps.dfps_list[i]);
+
+	sde_kms_info_add_keystr(info, "avr step requirement", buff);
+	kfree(buff);
+
+	return 0;
+}
 
 int dsi_conn_set_info_blob(struct drm_connector *connector,
 		void *info, void *display, struct msm_mode_info *mode_info)
@@ -667,22 +696,26 @@ int dsi_conn_set_info_blob(struct drm_connector *connector,
 	switch (panel->panel_mode) {
 	case DSI_OP_VIDEO_MODE:
 		sde_kms_info_add_keystr(info, "panel mode", "video");
-		sde_kms_info_add_keystr(info, "qsync support",
-				panel->qsync_caps.qsync_min_fps ?
-				"true" : "false");
+		if (panel->avr_caps.avr_step_fps_list_len)
+			dsi_conn_set_avr_step_info(panel, info);
 		break;
 	case DSI_OP_CMD_MODE:
 		sde_kms_info_add_keystr(info, "panel mode", "command");
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 				mode_info->mdp_transfer_time_us);
-		sde_kms_info_add_keystr(info, "qsync support",
-				panel->qsync_caps.qsync_min_fps ?
-				"true" : "false");
 		break;
 	default:
 		DSI_DEBUG("invalid panel type:%d\n", panel->panel_mode);
 		break;
 	}
+
+	sde_kms_info_add_keystr(info, "qsync support",
+		panel->qsync_caps.qsync_min_fps ?
+			"true" : "false");
+	if (panel->qsync_caps.qsync_min_fps)
+		sde_kms_info_add_keyint(info, "qsync_fps",
+			panel->qsync_caps.qsync_min_fps);
+
 	sde_kms_info_add_keystr(info, "dfps support",
 			panel->dfps_caps.dfps_support ? "true" : "false");
 
@@ -963,8 +996,8 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 			/* get the preferred mode from dsi display mode */
 			if (modes[i].is_preferred)
 				m->type |= DRM_MODE_TYPE_PREFERRED;
-		} else if (i == 0) {
-			/* set the first mode in list as preferred */
+		} else if (modes[i].mode_idx == 0) {
+			/* set the first mode in device tree list as preferred */
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 		}
 		drm_mode_probed_add(connector, m);
@@ -1114,14 +1147,25 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 			return -EINVAL;
 		}
 
+		/*
+		 * When both DFPS and dynamic clock switch with constant
+		 * fps features are enabled, wait for dynamic refresh done
+		 * only in case of clock switch.
+		 * In case where only fps changes, clock remains same.
+		 * So, wait for dynamic refresh done is not required.
+		 */
 		if ((ctrl_version >= DSI_CTRL_VERSION_2_5) &&
-				(dyn_clk_caps->maintain_const_fps)) {
+			(dyn_clk_caps->maintain_const_fps) &&
+			(adj_mode.dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)) {
 			display_for_each_ctrl(i, display) {
 				ctrl = &display->ctrl[i];
 				rc = dsi_ctrl_wait4dynamic_refresh_done(
 						ctrl->ctrl);
 				if (rc)
 					DSI_ERR("wait4dfps refresh failed\n");
+
+				dsi_phy_dynamic_refresh_clear(ctrl->phy);
+				dsi_clk_disable_unprepare(&display->clock_info.pll_clks);
 			}
 		}
 
@@ -1150,9 +1194,6 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 		display_for_each_ctrl(i, display)
 			dsi_ctrl_setup_avr(display->ctrl[i].ctrl, enable);
 	}
-
-	if (display->drm_conn)
-		sde_connector_helper_post_kickoff(display->drm_conn);
 
 	return 0;
 }
@@ -1290,4 +1331,26 @@ void dsi_conn_set_allowed_mode_switch(struct drm_connector *connector,
 		}
 		mode_idx++;
 	}
+}
+
+int dsi_conn_set_dyn_bit_clk(struct drm_connector *connector, uint64_t value)
+{
+	struct sde_connector *c_conn = NULL;
+	struct dsi_display *display;
+
+	if (!connector) {
+		DSI_ERR("invalid connector\n");
+		return -EINVAL;
+	}
+
+	c_conn = to_sde_connector(connector);
+	display = (struct dsi_display *) c_conn->display;
+
+	display->dyn_bit_clk = value;
+	display->dyn_bit_clk_pending = true;
+
+	SDE_EVT32(display->dyn_bit_clk);
+	DSI_DEBUG("update dynamic bit clock rate to %llu\n", display->dyn_bit_clk);
+
+	return 0;
 }

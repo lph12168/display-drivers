@@ -46,6 +46,7 @@
 #define SDE_HW_VER_660	SDE_HW_VER(6, 6, 0) /* holi */
 #define SDE_HW_VER_670	SDE_HW_VER(6, 7, 0) /* shima */
 #define SDE_HW_VER_700	SDE_HW_VER(7, 0, 0) /* lahaina */
+#define SDE_HW_VER_720	SDE_HW_VER(7, 2, 0) /* yupik */
 #define SDE_HW_VER_810	SDE_HW_VER(8, 1, 0) /* waipio */
 
 /* Avoid using below IS_XXX macros outside catalog, use feature bit instead */
@@ -71,6 +72,7 @@
 #define IS_HOLI_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_660)
 #define IS_SHIMA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_670)
 #define IS_LAHAINA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_700)
+#define IS_YUPIK_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_720)
 #define IS_WAIPIO_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_810)
 
 #define SDE_HW_BLK_NAME_LEN	16
@@ -113,11 +115,14 @@
  */
 #define SDE_INLINE_ROT_VERSION_1_0_0	0x100
 #define SDE_INLINE_ROT_VERSION_2_0_0	0x200
+#define SDE_INLINE_ROT_VERSION_2_0_1	0x201
 
 #define IS_SDE_INLINE_ROT_REV_100(rev) \
 	((rev) == SDE_INLINE_ROT_VERSION_1_0_0)
 #define IS_SDE_INLINE_ROT_REV_200(rev) \
 	((rev) == SDE_INLINE_ROT_VERSION_2_0_0)
+#define IS_SDE_INLINE_ROT_REV_201(rev) \
+	((rev) == SDE_INLINE_ROT_VERSION_2_0_1)
 
 
 /*
@@ -125,11 +130,14 @@
  */
 #define SDE_UIDLE_VERSION_1_0_0		0x100
 #define SDE_UIDLE_VERSION_1_0_1		0x101
+#define SDE_UIDLE_VERSION_1_0_2		0x102
 
 #define IS_SDE_UIDLE_REV_100(rev) \
 	((rev) == SDE_UIDLE_VERSION_1_0_0)
 #define IS_SDE_UIDLE_REV_101(rev) \
 	((rev) == SDE_UIDLE_VERSION_1_0_1)
+#define IS_SDE_UIDLE_REV_102(rev) \
+	((rev) == SDE_UIDLE_VERSION_1_0_2)
 
 #define SDE_UIDLE_MAJOR(rev)		((rev) >> 8)
 
@@ -165,14 +173,14 @@ enum {
 
 /**
  * sde_sys_cache_type: Types of system cache supported
- * SDE_SYS_CACHE_ROT: Rotator system cache
  * SDE_SYS_CACHE_DISP: Static img system cache
+ * SDE_SYS_CACHE_MAX:  Maximum number of sys cache users
+ * SDE_SYS_CACHE_NONE: Sys cache not used
  */
 enum sde_sys_cache_type {
-	SDE_SYS_CACHE_ROT,
 	SDE_SYS_CACHE_DISP,
 	SDE_SYS_CACHE_MAX,
-	SDE_SYS_CACHE_NONE
+	SDE_SYS_CACHE_NONE = SDE_SYS_CACHE_MAX
 };
 
 /**
@@ -267,6 +275,7 @@ enum {
  * @SDE_SSPP_FP16_GC         FP16 GC color processing block support
  * @SDE_SSPP_FP16_CSC        FP16 CSC color processing block support
  * @SDE_SSPP_FP16_UNMULT     FP16 alpha unmult color processing block support
+ * @SDE_SSPP_UBWC_STATS:     Support for ubwc stats
  * @SDE_SSPP_MAX             maximum value
  */
 enum {
@@ -303,6 +312,7 @@ enum {
 	SDE_SSPP_FP16_GC,
 	SDE_SSPP_FP16_CSC,
 	SDE_SSPP_FP16_UNMULT,
+	SDE_SSPP_UBWC_STATS,
 	SDE_SSPP_MAX
 };
 
@@ -421,6 +431,7 @@ enum {
  * @SDE_PINGPONG_DITHER_LUMA,    Dither sub-blocks and features
  * @SDE_PINGPONG_MERGE_3D,  Separate MERGE_3D block exists
  * @SDE_PINGPONG_CWB,           PP block supports CWB
+ * @SDE_PINGPONG_CWB_DITHER,    PP block supports CWB dither
  * @SDE_PINGPONG_MAX
  */
 enum {
@@ -433,6 +444,7 @@ enum {
 	SDE_PINGPONG_DITHER_LUMA,
 	SDE_PINGPONG_MERGE_3D,
 	SDE_PINGPONG_CWB,
+	SDE_PINGPONG_CWB_DITHER,
 	SDE_PINGPONG_MAX
 };
 
@@ -498,6 +510,9 @@ enum {
  * @SDE_INTF_TE_ALIGN_VSYNC     INTF block has POMS Align vsync support
  * @SDE_INTF_WD_TIMER          INTF block has WD Timer support
  * @SDE_INTF_STATUS             INTF block has INTF_STATUS register
+ * @SDE_INTF_RESET_COUNTER      INTF block has frame/line counter reset support
+ * @SDE_INTF_VSYNC_TIMESTAMP    INTF block has vsync timestamp logged
+ * @SDE_INTF_AVR_STATUS         INTF block has AVR_STATUS field in AVR_CONTROL register
  * @SDE_INTF_MAX
  */
 enum {
@@ -506,6 +521,9 @@ enum {
 	SDE_INTF_TE_ALIGN_VSYNC,
 	SDE_INTF_WD_TIMER,
 	SDE_INTF_STATUS,
+	SDE_INTF_RESET_COUNTER,
+	SDE_INTF_VSYNC_TIMESTAMP,
+	SDE_INTF_AVR_STATUS,
 	SDE_INTF_MAX
 };
 
@@ -535,6 +553,7 @@ enum {
  * @SDE_WB_CROP             CWB supports cropping
  * @SDE_WB_CWB_CTRL         Separate CWB control is available for configuring
  * @SDE_WB_DCWB_CTRL        Separate DCWB control is available for configuring
+ * @SDE_WB_CWB_DITHER_CTRL  CWB dither is available for configuring
  * @SDE_WB_MAX              maximum value
  */
 enum {
@@ -559,6 +578,7 @@ enum {
 	SDE_WB_CROP,
 	SDE_WB_CWB_CTRL,
 	SDE_WB_DCWB_CTRL,
+	SDE_WB_CWB_DITHER_CTRL,
 	SDE_WB_MAX
 };
 
@@ -705,9 +725,20 @@ enum sde_qos_lut_usage {
 	SDE_QOS_LUT_USAGE_MACROTILE,
 	SDE_QOS_LUT_USAGE_NRT,
 	SDE_QOS_LUT_USAGE_CWB,
-	SDE_QOS_LUT_USAGE_MACROTILE_QSEED,
-	SDE_QOS_LUT_USAGE_LINEAR_QSEED,
+	SDE_QOS_LUT_USAGE_CWB_TILE,
+	SDE_QOS_LUT_USAGE_INLINE,
+	SDE_QOS_LUT_USAGE_INLINE_RESTRICTED_FMTS,
 	SDE_QOS_LUT_USAGE_MAX,
+};
+
+/**
+ * enum sde_creq_lut_types - define creq LUT types possible for all use cases
+ * This is second dimension to sde_qos_lut_usage enum.
+ */
+enum sde_creq_lut_types {
+	SDE_CREQ_LUT_TYPE_NOQSEED,
+	SDE_CREQ_LUT_TYPE_QSEED,
+	SDE_CREQ_LUT_TYPE_MAX,
 };
 
 /**
@@ -960,10 +991,12 @@ struct sde_mdp_cfg {
  * @fal10_target_idle_time: fal10 targeted time in uS
  * @fal1_target_idle_time:  fal1 targeted time in uS
  * @fal10_threshold:        fal10 threshold value
+ * @fal1_max_threshold      fal1 maximum allowed threshold value
  * @max_downscale:          maximum downscaling ratio x1000.
  *	                    This ratio is multiplied x1000 to allow
  *	                    3 decimal precision digits.
  * @max_fps:                maximum fps to allow micro idle
+ * @max_fal1_fps:           maximum fps to allow micro idle FAL1 only
  * @uidle_rev:              uidle revision supported by the target,
  *                          zero if no support
  * @debugfs_perf:           enable/disable performance counters and status
@@ -981,8 +1014,10 @@ struct sde_uidle_cfg {
 	u32 fal10_target_idle_time;
 	u32 fal1_target_idle_time;
 	u32 fal10_threshold;
+	u32 fal1_max_threshold;
 	u32 max_dwnscale;
 	u32 max_fps;
+	u32 max_fal1_fps;
 	u32 uidle_rev;
 	u32 debugfs_perf;
 	bool debugfs_ctrl;
@@ -1458,10 +1493,12 @@ struct sde_perf_cfg {
  * @has_cwb_crop       CWB cropping is supported
  * @has_cwb_support    indicates if device supports primary capture through CWB
  * @has_dedicated_cwb_support    indicates if device supports dedicated path for CWB capture
+ * @has_cwb_dither     indicates if device supports cwb dither feature
  * @cwb_blk_off        CWB offset address
  * @cwb_blk_stride     offset between each CWB blk
  * @ubwc_version       UBWC feature version (0x0 for not supported)
  * @ubwc_bw_calc_version indicate how UBWC BW has to be calculated
+ * @skip_inline_rot_thresh    Skip inline rotation threshold
  * @has_idle_pc        indicate if idle power collapse feature is supported
  * @wakeup_with_touch  indicate early wake up display with input touch event
  * @has_hdr            HDR feature support
@@ -1482,6 +1519,7 @@ struct sde_perf_cfg {
  * @has_3d_merge_reset Supports 3D merge reset
  * @has_decimation     Supports decimation
  * @has_trusted_vm_support	     Supported HW sharing with trusted VM
+ * @has_avr_step       Supports AVR with vsync alignment to a set step rate
  * @rc_lm_flush_override        Support Rounded Corner using layer mixer flush
  * @has_mixer_combined_alpha     Mixer has single register for FG & BG alpha
  * @vbif_disable_inner_outer_shareable     VBIF requires disabling shareables
@@ -1507,6 +1545,8 @@ struct sde_perf_cfg {
  * @has_cursor    indicates if hardware cursor is supported
  * @has_vig_p010  indicates if vig pipe supports p010 format
  * @has_fp16      indicates if FP16 format is supported on SSPP pipes
+ * @has_precise_vsync_ts  indicates if HW has vsyc timestamp logging capability
+ * @has_ubwc_stats: indicates if ubwc stats feature is supported
  * @mdss_hw_block_size  Max offset of MDSS_HW block (0 offset), used for debug
  * @inline_rot_formats formats supported by the inline rotator feature
  * @irq_offset_list     list of sde_intr_irq_offsets to initialize irq table
@@ -1543,10 +1583,12 @@ struct sde_mdss_cfg {
 	bool has_cwb_crop;
 	bool has_cwb_support;
 	bool has_dedicated_cwb_support;
+	bool has_cwb_dither;
 	u32 cwb_blk_off;
 	u32 cwb_blk_stride;
 	u32 ubwc_version;
 	u32 ubwc_bw_calc_version;
+	bool skip_inline_rot_threshold;
 	bool has_idle_pc;
 	bool wakeup_with_touch;
 	u32 vbif_qos_nlvl;
@@ -1566,6 +1608,7 @@ struct sde_mdss_cfg {
 	bool has_base_layer;
 	bool has_demura;
 	bool has_trusted_vm_support;
+	bool has_avr_step;
 	bool rc_lm_flush_override;
 	u32 demura_supported[SSPP_MAX][2];
 	u32 qseed_sw_lib_rev;
@@ -1588,6 +1631,9 @@ struct sde_mdss_cfg {
 	bool has_cursor;
 	bool has_vig_p010;
 	bool has_fp16;
+	bool has_precise_vsync_ts;
+	bool has_ubwc_stats;
+
 	u32 mdss_hw_block_size;
 	u32 mdss_count;
 	struct sde_mdss_base_cfg mdss[MAX_BLOCKS];
@@ -1662,6 +1708,7 @@ struct sde_mdss_cfg {
 	struct sde_format_extended *wb_formats;
 	struct sde_format_extended *virt_vig_formats;
 	struct sde_format_extended *inline_rot_formats;
+	struct sde_format_extended *inline_rot_restricted_formats;
 
 	struct list_head irq_offset_list;
 };

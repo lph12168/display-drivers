@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
+#include <linux/qcom-dma-mapping.h>
 #include <linux/msm_dma_iommu_mapping.h>
 #include <linux/dma-mapping.h>
 
@@ -426,11 +427,10 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 		int flags, void *token)
 {
 	struct msm_smmu_client *client;
-	int rc = -EINVAL;
 
 	if (!token) {
 		DRM_ERROR("Error: token is NULL\n");
-		return -EINVAL;
+		return -ENOSYS;
 	}
 
 	client = (struct msm_smmu_client *)token;
@@ -444,7 +444,7 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 	 * return -ENOSYS to allow smmu driver to dump out useful
 	 * debug info.
 	 */
-	return rc;
+	return -ENOSYS;
 }
 
 /**

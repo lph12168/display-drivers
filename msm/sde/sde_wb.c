@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -16,6 +16,21 @@
 /* maximum display mode resolution if not available from catalog */
 #define SDE_WB_MODE_MAX_WIDTH	5120
 #define SDE_WB_MODE_MAX_HEIGHT	5120
+
+static const struct drm_display_mode sde_custom_wb_modes[] = {
+/* 5120x2160@60Hz */
+{ DRM_MODE("5120x2160", DRM_MODE_TYPE_DRIVER, 693264, 5120, 5128,
+		5160, 5200, 0, 2160, 2208, 2216, 2222, 0,
+		DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+
+{ DRM_MODE("2160x5120", DRM_MODE_TYPE_DRIVER, 693264, 2160, 2208,
+		2216, 2222, 0, 5120, 5128, 5160, 5200, 0,
+		DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+
+{ DRM_MODE("5120x2560", DRM_MODE_TYPE_DRIVER, 818064, 5120, 5128,
+		5160, 5200, 0, 2560, 2608, 2616, 2622, 0,
+		DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+};
 
 /* Serialization lock for sde_wb_list */
 static DEFINE_MUTEX(sde_wb_list_lock);
@@ -62,6 +77,37 @@ sde_wb_connector_detect(struct drm_connector *connector,
 	return rc;
 }
 
+static int sde_wb_connector_add_custom_modes(struct drm_connector *connector,
+		u32 hdisplay, u32 vdisplay)
+{
+	int i, num_modes = 0;
+	struct drm_display_mode *mode;
+	struct drm_device *dev = connector->dev;
+
+	if (!hdisplay || !vdisplay)
+		return 0;
+
+	if (hdisplay > SDE_WB_MODE_MAX_WIDTH)
+		hdisplay = SDE_WB_MODE_MAX_WIDTH;
+	if (vdisplay > SDE_WB_MODE_MAX_HEIGHT)
+		vdisplay = SDE_WB_MODE_MAX_HEIGHT;
+
+	for (i = 0; i < ARRAY_SIZE(sde_custom_wb_modes); i++) {
+		const struct drm_display_mode *ptr = &sde_custom_wb_modes[i];
+
+		if (ptr->hdisplay > hdisplay || ptr->vdisplay > vdisplay)
+			continue;
+
+		mode = drm_mode_duplicate(dev, ptr);
+		if (mode) {
+			drm_mode_probed_add(connector, mode);
+			num_modes++;
+		}
+	}
+
+	return num_modes;
+}
+
 int sde_wb_connector_get_modes(struct drm_connector *connector, void *display,
 		const struct msm_resource_caps_info *avail_res)
 {
@@ -104,6 +150,9 @@ int sde_wb_connector_get_modes(struct drm_connector *connector, void *display,
 				wb_dev->wb_cfg->sblk->maxlinewidth_linear);
 
 		num_modes = drm_add_modes_noedid(connector, max_width,
+				SDE_WB_MODE_MAX_HEIGHT);
+
+		num_modes += sde_wb_connector_add_custom_modes(connector, max_width,
 				SDE_WB_MODE_MAX_HEIGHT);
 	}
 	mutex_unlock(&wb_dev->wb_lock);
@@ -366,6 +415,8 @@ int sde_wb_connector_set_info_blob(struct drm_connector *connector,
 {
 	struct sde_wb_device *wb_dev = display;
 	const struct sde_format_extended *format_list;
+	struct msm_drm_private *priv = NULL;
+	struct sde_kms *sde_kms = NULL;
 
 	if (!connector || !info || !display || !wb_dev->wb_cfg) {
 		SDE_ERROR("invalid params\n");
@@ -405,7 +456,72 @@ int sde_wb_connector_set_info_blob(struct drm_connector *connector,
 		sde_kms_info_append(info, "wb_ubwc");
 	sde_kms_info_stop(info);
 
+	if (wb_dev->drm_dev && wb_dev->drm_dev->dev_private) {
+		priv = wb_dev->drm_dev->dev_private;
+		if (!priv->kms) {
+			SDE_ERROR("invalid kms reference\n");
+			return -EINVAL;
+		}
+
+		sde_kms = to_sde_kms(priv->kms);
+		sde_kms_info_add_keyint(info, "has_cwb_dither", sde_kms->catalog->has_cwb_dither);
+	} else {
+		SDE_ERROR("invalid params %pK\n", wb_dev->drm_dev);
+		return -EINVAL;
+	}
+
 	return 0;
+}
+
+static void sde_wb_connector_install_dither_property(struct sde_wb_device *wb_dev,
+					struct sde_connector *c_conn)
+{
+	char prop_name[DRM_PROP_NAME_LEN];
+	struct sde_kms *sde_kms = NULL;
+	struct msm_drm_private *priv = NULL;
+	struct sde_mdss_cfg *catalog = NULL;
+	u32 version = 0;
+
+	if (!wb_dev || !c_conn) {
+		SDE_ERROR("invalid args (s), wb_dev %pK, c_conn %pK\n", wb_dev, c_conn);
+		return;
+	}
+
+	if (!wb_dev->drm_dev) {
+		SDE_ERROR("invalid drm_dev is null\n");
+		return;
+	}
+
+	if (!wb_dev->drm_dev->dev_private) {
+		SDE_ERROR("invalid dev_private is null\n");
+		return;
+	}
+
+	priv = wb_dev->drm_dev->dev_private;
+	if (!priv->kms) {
+		SDE_ERROR("invalid kms reference is null\n");
+		return;
+	}
+
+	sde_kms = to_sde_kms(priv->kms);
+	catalog = sde_kms->catalog;
+
+	if (!catalog->has_cwb_dither)
+		return;
+
+	version = SDE_COLOR_PROCESS_MAJOR(
+			catalog->pingpong[0].sblk->dither.version);
+	snprintf(prop_name, ARRAY_SIZE(prop_name), "%s%d",
+			"SDE_PP_CWB_DITHER_V", version);
+	switch (version) {
+	case 2:
+		msm_property_install_blob(&c_conn->property_info, prop_name,
+			DRM_MODE_PROP_BLOB, CONNECTOR_PROP_PP_CWB_DITHER);
+		break;
+	default:
+		SDE_ERROR("unsupported cwb dither version %d\n", version);
+		return;
+	}
 }
 
 int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
@@ -445,6 +561,8 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 			0, e_fb_translation_mode,
 			ARRAY_SIZE(e_fb_translation_mode), 0,
 			CONNECTOR_PROP_FB_TRANSLATION_MODE);
+
+	sde_wb_connector_install_dither_property(wb_dev, c_conn);
 
 	return 0;
 }

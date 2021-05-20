@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -28,6 +28,7 @@ struct dp_altmode_private {
 	struct dp_altmode dp_altmode;
 	struct altmode_client *amclient;
 	bool connected;
+	u32 lanes;
 };
 
 enum dp_altmode_pin_assignment {
@@ -40,7 +41,7 @@ enum dp_altmode_pin_assignment {
 	DPAM_HPD_F,
 };
 
-static int dp_altmode_release_ss_lanes(struct dp_altmode_private *altmode)
+static int dp_altmode_set_usb_dp_mode(struct dp_altmode_private *altmode)
 {
 	int rc;
 	struct device_node *np;
@@ -69,7 +70,7 @@ static int dp_altmode_release_ss_lanes(struct dp_altmode_private *altmode)
 	}
 
 	while (timeout) {
-		rc = dwc3_msm_release_ss_lane(&usb_pdev->dev);
+		rc = dwc3_msm_set_dp_mode(&usb_pdev->dev, altmode->connected, altmode->lanes);
 		if (rc != -EBUSY)
 			break;
 
@@ -127,7 +128,7 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 	altmode->dp_altmode.base.hpd_high = !!hpd_state;
 	altmode->dp_altmode.base.hpd_irq = !!hpd_irq;
 	altmode->dp_altmode.base.multi_func = force_multi_func ? true :
-		!(pin == DPAM_HPD_C || pin == DPAM_HPD_E);
+		!(pin == DPAM_HPD_C || pin == DPAM_HPD_E || pin == DPAM_HPD_OUT);
 
 	DP_DEBUG("payload=0x%x\n", dp_data);
 	DP_DEBUG("port_index=%d, orientation=%d, pin=%d, hpd_state=%d\n",
@@ -150,6 +151,10 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 			altmode->dp_altmode.base.orientation = ORIENTATION_NONE;
 			if (altmode->dp_cb && altmode->dp_cb->disconnect)
 				altmode->dp_cb->disconnect(altmode->dev);
+
+			rc = dp_altmode_set_usb_dp_mode(altmode);
+			if (rc)
+				DP_ERR("failed to clear usb dp mode, rc: %d\n", rc);
 		}
 		goto ack;
 	}
@@ -159,6 +164,12 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 		altmode->connected = true;
 		altmode->dp_altmode.base.alt_mode_cfg_done = true;
 		altmode->forced_disconnect = false;
+		altmode->lanes = 4;
+
+		if (altmode->dp_altmode.base.multi_func)
+			altmode->lanes = 2;
+
+		DP_DEBUG("Connected=%d, lanes=%d\n",altmode->connected,altmode->lanes);
 
 		switch (orientation) {
 		case 0:
@@ -177,11 +188,9 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 
 		altmode->dp_altmode.base.orientation = orientation;
 
-		if (!altmode->dp_altmode.base.multi_func) {
-			rc = dp_altmode_release_ss_lanes(altmode);
-			if (rc)
-				goto ack;
-		}
+		rc = dp_altmode_set_usb_dp_mode(altmode);
+		if (rc)
+			goto ack;
 
 		if (altmode->dp_cb && altmode->dp_cb->configure)
 			altmode->dp_cb->configure(altmode->dev);
@@ -212,7 +221,7 @@ static void dp_altmode_register(void *priv)
 
 	altmode->amclient = altmode_register_client(altmode->dev, &cd);
 	if (IS_ERR_OR_NULL(altmode->amclient))
-		DP_ERR("failed to register as client: %d\n",
+		DP_ERR("failed to register as client: %ld\n",
 				PTR_ERR(altmode->amclient));
 	else
 		DP_DEBUG("success\n");

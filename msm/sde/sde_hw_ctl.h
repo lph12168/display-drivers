@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _SDE_HW_CTL_H
@@ -381,14 +381,6 @@ struct sde_hw_ctl_ops {
 			enum ctl_hw_flush_type type, u32 blk_idx, bool enable);
 
 	/**
-	 * read CTL_TOP register value and return
-	 * the data.
-	 * @ctx		: ctl path ctx pointer
-	 * @return	: CTL top register value
-	 */
-	u32 (*read_ctl_top)(struct sde_hw_ctl *ctx);
-
-	/**
 	 * get interfaces for the active CTL .
 	 * @ctx		: ctl path ctx pointer
 	 * @return	: bit mask with the active interfaces for the CTL
@@ -466,6 +458,13 @@ struct sde_hw_ctl_ops {
 	 */
 	void (*set_active_pipes)(struct sde_hw_ctl *ctx,
 			unsigned long *fetch_active);
+
+	/**
+	 * Get all the sspp marked for fetching on the control path.
+	 * @ctx       : ctl path ctx pointer
+	 * @Return: bitmap of enum sde_sspp pipes found
+	 */
+	u32 (*get_active_pipes)(struct sde_hw_ctl *ctx);
 };
 
 /**

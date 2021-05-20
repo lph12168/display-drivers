@@ -367,21 +367,20 @@ static void _sde_encoder_phys_vid_setup_avr(
 static void _sde_encoder_phys_vid_avr_ctrl(struct sde_encoder_phys *phys_enc)
 {
 	struct intf_avr_params avr_params;
-	struct sde_encoder_phys_vid *vid_enc =
-			to_sde_encoder_phys_vid(phys_enc);
+	struct sde_encoder_phys_vid *vid_enc = to_sde_encoder_phys_vid(phys_enc);
+	u32 avr_step_fps = sde_connector_get_avr_step(phys_enc->connector);
 
-	avr_params.avr_mode = sde_connector_get_qsync_mode(
-			phys_enc->connector);
+	memset(&avr_params, 0, sizeof(avr_params));
+	avr_params.avr_mode = sde_connector_get_qsync_mode(phys_enc->connector);
+	if (avr_step_fps)
+		avr_params.avr_step_lines = mult_frac(phys_enc->cached_mode.vtotal,
+				vid_enc->timing_params.vrefresh, avr_step_fps);
 
-	if (vid_enc->base.hw_intf->ops.avr_ctrl) {
-		vid_enc->base.hw_intf->ops.avr_ctrl(
-				vid_enc->base.hw_intf,
-				&avr_params);
-	}
+	if (vid_enc->base.hw_intf->ops.avr_ctrl)
+		vid_enc->base.hw_intf->ops.avr_ctrl(vid_enc->base.hw_intf, &avr_params);
 
-	SDE_EVT32(DRMID(phys_enc->parent),
-		phys_enc->hw_intf->idx - INTF_0,
-		avr_params.avr_mode);
+	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0,
+			avr_params.avr_mode, avr_params.avr_step_lines, avr_step_fps);
 }
 
 static void sde_encoder_phys_vid_setup_timing_engine(
@@ -971,7 +970,7 @@ static int sde_encoder_phys_vid_prepare_for_kickoff(
 				sde_encoder_helper_unregister_irq(
 					phys_enc, INTR_IDX_VSYNC);
 
-			SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus");
+			SDE_DBG_DUMP(SDE_DBG_BUILT_IN_ALL);
 
 			if (irq_enable)
 				sde_encoder_helper_register_irq(
@@ -988,7 +987,7 @@ static int sde_encoder_phys_vid_prepare_for_kickoff(
 			sde_connector_event_notify(conn, DRM_EVENT_SDE_HW_RECOVERY,
 					sizeof(uint8_t), SDE_RECOVERY_CAPTURE);
 		else
-			SDE_DBG_DUMP("panic");
+			SDE_DBG_DUMP(0x0, "panic");
 
 		/* request a ctl reset before the next flush */
 		phys_enc->enable_state = SDE_ENC_ERR_NEEDS_HW_RESET;
@@ -1084,6 +1083,9 @@ static void sde_encoder_phys_vid_disable(struct sde_encoder_phys *phys_enc)
 	phys_enc->hw_intf->ops.enable_timing(phys_enc->hw_intf, 0);
 	sde_encoder_phys_inc_pending(phys_enc);
 	spin_unlock_irqrestore(phys_enc->enc_spinlock, lock_flags);
+
+	if (phys_enc->hw_intf->ops.reset_counter)
+		phys_enc->hw_intf->ops.reset_counter(phys_enc->hw_intf);
 
 	sde_encoder_phys_vid_single_vblank_wait(phys_enc);
 	if (phys_enc->hw_intf->ops.get_status)
@@ -1310,7 +1312,6 @@ static void sde_encoder_phys_vid_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->trigger_flush = sde_encoder_helper_trigger_flush;
 	ops->hw_reset = sde_encoder_helper_hw_reset;
 	ops->get_line_count = sde_encoder_phys_vid_get_line_count;
-	ops->get_wr_line_count = sde_encoder_phys_vid_get_line_count;
 	ops->wait_dma_trigger = sde_encoder_phys_vid_wait_dma_trigger;
 	ops->wait_for_active = sde_encoder_phys_vid_wait_for_active;
 	ops->prepare_commit = sde_encoder_phys_vid_prepare_for_commit;

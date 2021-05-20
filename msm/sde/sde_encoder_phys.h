@@ -128,7 +128,6 @@ struct sde_encoder_virt_ops {
  * @is_autorefresh_enabled:	provides the autorefresh current
  *                              enable/disable state.
  * @get_line_count:		Obtain current internal vertical line count
- * @get_wr_line_count:		Obtain current output vertical line count
  * @wait_dma_trigger:		Returns true if lut dma has to trigger and wait
  *                              unitl transaction is complete.
  * @wait_for_active:		Wait for display scan line to be in active area
@@ -182,7 +181,6 @@ struct sde_encoder_phys_ops {
 	void (*restore)(struct sde_encoder_phys *phys);
 	bool (*is_autorefresh_enabled)(struct sde_encoder_phys *phys);
 	int (*get_line_count)(struct sde_encoder_phys *phys);
-	int (*get_wr_line_count)(struct sde_encoder_phys *phys);
 	bool (*wait_dma_trigger)(struct sde_encoder_phys *phys);
 	int (*wait_for_active)(struct sde_encoder_phys *phys);
 	void (*setup_vsync_source)(struct sde_encoder_phys *phys, u32 vsync_source);
@@ -276,9 +274,9 @@ struct sde_encoder_irq {
  * @enc_spinlock:	Virtual-Encoder-Wide Spin Lock for IRQ purposes
  * @enable_state:	Enable state tracking
  * @vblank_refcount:	Reference count of vblank request
- * @vblank_cached_refcount:	Reference count of vblank cached request
  * @wbirq_refcount:	Reference count of wb irq request
  * @vsync_cnt:		Vsync count for the physical encoder
+ * @last_vsync_timestamp:	store last vsync timestamp
  * @underrun_cnt:	Underrun count for the physical encoder
  * @pending_kickoff_cnt:	Atomic counter tracking the number of kickoffs
  *				vs. the number of done/vblank irqs. Should hover
@@ -326,9 +324,9 @@ struct sde_encoder_phys {
 	enum sde_enc_enable_state enable_state;
 	struct mutex *vblank_ctl_lock;
 	atomic_t vblank_refcount;
-	atomic_t vblank_cached_refcount;
 	atomic_t wbirq_refcount;
 	atomic_t vsync_cnt;
+	ktime_t last_vsync_timestamp;
 	atomic_t underrun_cnt;
 	atomic_t pending_kickoff_cnt;
 	atomic_t pending_retire_fence_cnt;
@@ -541,14 +539,6 @@ void sde_encoder_helper_get_pp_line_count(struct drm_encoder *drm_enc,
 		struct sde_hw_pp_vsync_info *info);
 
 /**
- * sde_encoder_helper_get_transfer_time - get the mdp transfer time in usecs
- * @drm_enc: Pointer to drm encoder structure
- * @transfer_time_us: Pointer to store the output value
- */
-void sde_encoder_helper_get_transfer_time(struct drm_encoder *drm_enc,
-		u32 *transfer_time_us);
-
-/**
  * sde_encoder_helper_trigger_flush - control flush helper function
  *	This helper function may be optionally specified by physical
  *	encoders if they require ctl_flush triggering.
@@ -624,6 +614,9 @@ static inline enum sde_3d_blend_mode sde_encoder_helper_get_3d_blend_mode(
 	ret = sde_connector_state_get_topology
 			(phys_enc->connector->state, &def);
 	if (ret)
+		return BLEND_3D_NONE;
+
+	if (phys_enc->hw_intf && phys_enc->hw_intf->cfg.split_link_en)
 		return BLEND_3D_NONE;
 
 	num_lm = def.num_lm;

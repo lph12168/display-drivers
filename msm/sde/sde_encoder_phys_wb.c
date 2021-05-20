@@ -30,7 +30,11 @@
 
 static const u32 cwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, INTR_IDX_PP1_OVFL,
 	INTR_IDX_PP2_OVFL, INTR_IDX_PP3_OVFL, INTR_IDX_PP4_OVFL,
-	INTR_IDX_PP5_OVFL, INTR_IDX_PP_CWB_OVFL, SDE_NONE};
+	INTR_IDX_PP5_OVFL, SDE_NONE, SDE_NONE};
+
+static const u32 dcwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, SDE_NONE,
+	SDE_NONE, SDE_NONE, SDE_NONE, SDE_NONE,
+	INTR_IDX_PP_CWB_OVFL, SDE_NONE};
 
 /**
  * sde_rgb2yuv_601l - rgb to yuv color space conversion matrix
@@ -177,15 +181,18 @@ static void sde_encoder_phys_wb_set_qos(struct sde_encoder_phys *phys_enc)
 
 	qos_cfg.danger_safe_en = true;
 
-	if (phys_enc->in_clone_mode)
+	if (phys_enc->in_clone_mode && (SDE_FORMAT_IS_TILE(wb_enc->wb_fmt) ||
+				SDE_FORMAT_IS_UBWC(wb_enc->wb_fmt)))
+		lut_index = SDE_QOS_LUT_USAGE_CWB_TILE;
+	else if (phys_enc->in_clone_mode)
 		lut_index = SDE_QOS_LUT_USAGE_CWB;
 	else
 		lut_index = SDE_QOS_LUT_USAGE_NRT;
-	index = (fps_index * SDE_QOS_LUT_USAGE_MAX) + lut_index;
 
+	index = (fps_index * SDE_QOS_LUT_USAGE_MAX) + lut_index;
 	qos_cfg.danger_lut = perf->danger_lut[index];
 	qos_cfg.safe_lut = (u32) perf->safe_lut[index];
-	qos_cfg.creq_lut = perf->creq_lut[index];
+	qos_cfg.creq_lut = perf->creq_lut[index * SDE_CREQ_LUT_TYPE_MAX];
 
 	SDE_DEBUG("wb_enc:%d hw idx:%d fps:%d mode:%d luts[0x%x,0x%x 0x%llx]\n",
 		DRMID(phys_enc->parent), hw_wb->idx - WB_0,
@@ -386,7 +393,7 @@ static void sde_encoder_phys_wb_setup_fb(struct sde_encoder_phys *phys_enc,
 	wb_cfg->dest.height = fb->height;
 	wb_cfg->dest.num_planes = wb_cfg->dest.format->num_planes;
 
-	if (hw_wb->ops.setup_crop) {
+	if (hw_wb->ops.setup_crop && phys_enc->in_clone_mode) {
 		wb_cfg->crop.x = wb_cfg->roi.x;
 		wb_cfg->crop.y = wb_cfg->roi.y;
 
@@ -915,6 +922,10 @@ static void _sde_encoder_phys_wb_update_cwb_flush(
 	enum sde_cwb src_pp_idx = 0;
 	bool dspp_out = false;
 	bool need_merge = false;
+	struct sde_connector *c_conn = NULL;
+	struct sde_connector_state *c_state = NULL;
+	void *dither_cfg = NULL;
+	size_t dither_sz = 0;
 
 	if (!phys_enc->in_clone_mode) {
 		SDE_DEBUG("not in CWB mode. early return\n");
@@ -969,11 +980,30 @@ static void _sde_encoder_phys_wb_update_cwb_flush(
 
 	if (test_bit(SDE_WB_CWB_CTRL, &hw_wb->caps->features) ||
 			test_bit(SDE_WB_DCWB_CTRL, &hw_wb->caps->features)) {
+		if (test_bit(SDE_WB_CWB_DITHER_CTRL, &hw_wb->caps->features)) {
+			if (cwb_capture_mode) {
+				c_conn = to_sde_connector(phys_enc->connector);
+				c_state = to_sde_connector_state(phys_enc->connector->state);
+				dither_cfg = msm_property_get_blob(&c_conn->property_info,
+						&c_state->property_state, &dither_sz,
+						CONNECTOR_PROP_PP_CWB_DITHER);
+				SDE_DEBUG("Read cwb dither setting from blob %pK\n", dither_cfg);
+			} else {
+				/* disable case: tap is lm */
+				dither_cfg = NULL;
+			}
+		}
+
 		for (i = 0; i < crtc->num_mixers; i++) {
 			src_pp_idx = (enum sde_cwb) (src_pp_idx + i);
 
 			if (test_bit(SDE_WB_DCWB_CTRL, &hw_wb->caps->features)) {
 				dcwb_idx = (enum sde_dcwb) ((hw_pp->idx % 2) + i);
+				if (test_bit(SDE_WB_CWB_DITHER_CTRL, &hw_wb->caps->features)) {
+					if (hw_wb->ops.program_cwb_dither_ctrl)
+						hw_wb->ops.program_cwb_dither_ctrl(hw_wb,
+							dcwb_idx, dither_cfg, dither_sz, enable);
+				}
 				if (hw_wb->ops.program_dcwb_ctrl)
 					hw_wb->ops.program_dcwb_ctrl(hw_wb, dcwb_idx,
 						src_pp_idx, cwb_capture_mode,
@@ -1208,6 +1238,7 @@ static void sde_encoder_phys_wb_irq_ctrl(
 	int index = 0, refcount;
 	int ret = 0, pp = 0;
 	u32 max_num_of_irqs = 0;
+	const u32 *irq_table = NULL;
 
 	if (!wb_enc)
 		return;
@@ -1228,8 +1259,13 @@ static void sde_encoder_phys_wb_irq_ctrl(
 	 * when D-CWB is enabled.
 	 */
 	wb_cfg = wb_enc->hw_wb->caps;
-	max_num_of_irqs = (wb_cfg->features & BIT(SDE_WB_HAS_DCWB)) ?
-					1 : CRTC_DUAL_MIXERS_ONLY;
+	if (wb_cfg->features & BIT(SDE_WB_HAS_DCWB)) {
+		max_num_of_irqs = 1;
+		irq_table = dcwb_irq_tbl;
+	} else {
+		max_num_of_irqs = CRTC_DUAL_MIXERS_ONLY;
+		irq_table = cwb_irq_tbl;
+	}
 
 	if (enable && atomic_inc_return(&phys->wbirq_refcount) == 1) {
 		sde_encoder_helper_register_irq(phys, INTR_IDX_WB_DONE);
@@ -1237,9 +1273,9 @@ static void sde_encoder_phys_wb_irq_ctrl(
 			atomic_dec_return(&phys->wbirq_refcount);
 
 		for (index = 0; index < max_num_of_irqs; index++)
-			if (cwb_irq_tbl[index + pp] != SDE_NONE)
+			if (irq_table[index + pp] != SDE_NONE)
 				sde_encoder_helper_register_irq(phys,
-					cwb_irq_tbl[index + pp]);
+					irq_table[index + pp]);
 	} else if (!enable &&
 			atomic_dec_return(&phys->wbirq_refcount) == 0) {
 		sde_encoder_helper_unregister_irq(phys, INTR_IDX_WB_DONE);
@@ -1247,9 +1283,9 @@ static void sde_encoder_phys_wb_irq_ctrl(
 			atomic_inc_return(&phys->wbirq_refcount);
 
 		for (index = 0; index < max_num_of_irqs; index++)
-			if (cwb_irq_tbl[index + pp] != SDE_NONE)
+			if (irq_table[index + pp] != SDE_NONE)
 				sde_encoder_helper_unregister_irq(phys,
-					cwb_irq_tbl[index + pp]);
+					irq_table[index + pp]);
 	}
 }
 
@@ -1408,6 +1444,9 @@ static int _sde_encoder_phys_wb_wait_for_commit_done(
 		SDE_DEBUG("no output framebuffer\n");
 		_sde_encoder_phys_wb_frame_done_helper(wb_enc, false);
 	}
+
+	if (atomic_read(&phys_enc->pending_retire_fence_cnt) > 1)
+		wait_info.count_check = 1;
 
 	wait_info.wq = &phys_enc->pending_kickoff_wq;
 	wait_info.atomic_cnt = &phys_enc->pending_retire_fence_cnt;

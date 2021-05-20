@@ -28,9 +28,7 @@
 #include "sde_kms.h"
 #include "sde_core_perf.h"
 #include "sde_hw_ds.h"
-
-#define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
-#define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
+#include "sde_color_processing.h"
 
 #define SDE_CRTC_NAME_SIZE	12
 
@@ -221,27 +219,34 @@ struct sde_crtc_misr_info {
 	u32 misr_frame_count;
 };
 
-struct plane_state {
-	struct sde_plane_state *sde_pstate;
-	const struct drm_plane_state *drm_pstate;
-	int stage;
-	u32 pipe_id;
-};
-
-/**
- * struct sde_multirect_plane_states: Defines multirect pair of drm plane states
- * @r0: drm plane configured on rect 0
- * @r1: drm plane configured on rect 1
- */
-struct sde_multirect_plane_states {
-	const struct drm_plane_state *r0;
-	const struct drm_plane_state *r1;
-};
-
 /*
  * Maximum number of free event structures to cache
  */
 #define SDE_CRTC_MAX_EVENT_COUNT	16
+
+/**
+ * struct sde_frame_data_buffer - defines frame data buffer structure
+ * @fd: framebuffer id associated with this buffer
+ * @fb: drm framebuffer for the buffer
+ * @gem: drm gem handle for he buffer
+ */
+struct sde_frame_data_buffer {
+	u32 fd;
+	struct drm_framebuffer *fb;
+	struct drm_gem_object *gem;
+};
+
+/**
+ * struct sde_frame_data - defines sde frame data structure
+ * @idx : currently used frame data buffe
+ * @cnt : rnumber of available frame data buffers
+ * @buf : list of frame data buffers
+ */
+struct sde_frame_data {
+	u32 idx;
+	u32 cnt;
+	struct sde_frame_data_buffer *buf[SDE_FRAME_DATA_BUFFER_MAX];
+};
 
 /**
  * struct sde_crtc - virtualized CRTC data structure
@@ -273,19 +278,17 @@ struct sde_multirect_plane_states {
  * @enabled       : whether the SDE CRTC is currently enabled. updated in the
  *                  commit-thread, not state-swap time which is earlier, so
  *                  safe to make decisions on during VBLANK on/off work
- * @feature_list  : list of color processing features supported on a crtc
- * @active_list   : list of color processing features are active
- * @dirty_list    : list of color processing features are dirty
+ * @cp_feature_list  : list of color processing features supported on a crtc
+ * @cp_active_list   : list of color processing features are active
+ * @cp_dirty_list    : list of color processing features are dirty
  * @ad_dirty      : list containing ad properties that are dirty
  * @ad_active     : list containing ad properties that are active
  * @crtc_lock     : crtc lock around create, destroy and access.
- * @pstates       : array of plane states
- * @num_pstates   : Number of plane states
- * @multirect     : array of multirect plane states
  * @frame_pending : Whether or not an update is pending
  * @frame_events  : static allocation of in-flight frame events
  * @frame_event_list : available frame event list
- * @spin_lock     : spin lock for frame event, transaction status, etc...
+ * @spin_lock     : spin lock for transaction status, etc...
+ * @fevent_spin_lock     : spin lock for frame event
  * @event_thread  : Pointer to event handler thread
  * @event_worker  : Event worker queue
  * @event_cache   : Local cache of event worker structures
@@ -312,12 +315,19 @@ struct sde_multirect_plane_states {
  * @ltm_buffer_lock : muttx to protect ltm_buffers allcation and free
  * @ltm_lock        : Spinlock to protect ltm buffer_cnt, hist_en and ltm lists
  * @needs_hw_reset  : Initiate a hw ctl reset
+ * @hist_irq_idx    : hist interrupt irq idx
  * @src_bpp         : source bpp used to calculate compression ratio
  * @target_bpp      : target bpp used to calculate compression ratio
  * @static_cache_read_work: delayed worker to transition cache state to read
  * @cache_state     : Current static image cache state
  * @dspp_blob_info  : blob containing dspp hw capability information
  * @cached_encoder_mask : cached encoder_mask for vblank work
+ * @valid_skip_blend_plane: flag to indicate if skip blend plane is valid
+ * @skip_blend_plane: enabled plane that has skip blending
+ * @skip_blend_plane_w: skip blend plane width
+ * @skip_blend_plane_h: skip blend plane height
+ * @line_time_in_ns : current mode line time in nano sec is needed for QOS update
+ * @frame_data      : Framedata data structure
  */
 struct sde_crtc {
 	struct drm_crtc base;
@@ -353,9 +363,9 @@ struct sde_crtc {
 	struct kernfs_node *retire_frame_event_sf;
 	bool enabled;
 
-	struct list_head feature_list;
-	struct list_head active_list;
-	struct list_head dirty_list;
+	struct list_head cp_feature_list;
+	struct list_head cp_active_list;
+	struct list_head cp_dirty_list;
 	struct list_head ad_dirty;
 	struct list_head ad_active;
 	struct list_head user_event_list;
@@ -363,14 +373,11 @@ struct sde_crtc {
 	struct mutex crtc_lock;
 	struct mutex crtc_cp_lock;
 
-	struct plane_state pstates[SDE_PSTATES_MAX];
-	uint32_t num_pstates;
-	struct sde_multirect_plane_states multirect[SDE_MULTIRECT_PLANE_MAX];
-
 	atomic_t frame_pending;
 	struct sde_crtc_frame_event frame_events[SDE_CRTC_FRAME_EVENT_SIZE];
 	struct list_head frame_event_list;
 	spinlock_t spin_lock;
+	spinlock_t fevent_spin_lock;
 
 	/* for handling internal event thread */
 	struct sde_crtc_event event_cache[SDE_CRTC_MAX_EVENT_COUNT];
@@ -404,6 +411,7 @@ struct sde_crtc {
 	struct mutex ltm_buffer_lock;
 	spinlock_t ltm_lock;
 	bool needs_hw_reset;
+	int hist_irq_idx;
 
 	int src_bpp;
 	int target_bpp;
@@ -413,6 +421,14 @@ struct sde_crtc {
 
 	struct drm_property_blob *dspp_blob_info;
 	u32 cached_encoder_mask;
+
+	bool valid_skip_blend_plane;
+	enum sde_sspp skip_blend_plane;
+	u32 skip_blend_plane_w;
+	u32 skip_blend_plane_h;
+	u32 line_time_in_ns;
+
+	struct sde_frame_data frame_data;
 };
 
 enum sde_crtc_dirty_flags {
@@ -453,6 +469,11 @@ enum sde_crtc_dirty_flags {
  * @new_perf: new performance state being requested
  * @noise_layer_en: flag to indicate if noise layer cfg is valid
  * @drm_msm_noise_layer_cfg: noise layer configuration
+ * @cp_prop_cnt: number of dirty color processing features
+ * @cp_prop_values: array of cp property values
+ * @cp_dirty_list: array tracking features that are dirty
+ * @cp_range_payload: array storing state user_data passed via range props
+ * @cont_splash_populated: State was populated as part of cont. splash
  */
 struct sde_crtc_state {
 	struct drm_crtc_state base;
@@ -484,6 +505,13 @@ struct sde_crtc_state {
 	struct sde_core_perf_params new_perf;
 	bool noise_layer_en;
 	struct drm_msm_noise_layer_cfg layer_cfg;
+	uint32_t cp_prop_cnt;
+	struct sde_cp_crtc_property_state
+		cp_prop_values[SDE_CP_CRTC_MAX_FEATURES];
+	uint32_t cp_dirty_list[SDE_CP_CRTC_MAX_FEATURES];
+	struct sde_cp_crtc_range_prop_payload
+		cp_range_payload[SDE_CP_CRTC_MAX_FEATURES];
+	bool cont_splash_populated;
 };
 
 enum sde_crtc_irq_state {
@@ -745,6 +773,16 @@ static inline bool sde_crtc_is_enabled(struct drm_crtc *crtc)
 	return crtc ? crtc->enabled : false;
 }
 
+static inline u32 sde_crtc_get_line_time(struct drm_crtc *crtc)
+{
+	struct sde_crtc *sde_crtc;
+
+	if (!crtc)
+		return 0;
+	sde_crtc = to_sde_crtc(crtc);
+	return sde_crtc->line_time_in_ns;
+}
+
 /**
  * sde_crtc_is_reset_required - validate the reset request based on the
  *	pm_suspend and crtc's active status. crtc's are left active
@@ -967,5 +1005,13 @@ int sde_crtc_get_num_datapath(struct drm_crtc *crtc,
  * @crtc: Pointer to DRM crtc object
  */
 void sde_crtc_reset_sw_state(struct drm_crtc *crtc);
+
+/**
+ * sde_crtc_disable_cp_features - api to disable cp features that depend on planes being active.
+ *	Encoder disables the planes during suspend and calls this api for the crtc to disable
+ *	any features that require planes to be active
+ * @crtc: Pointer to DRM crtc object
+*/
+void sde_crtc_disable_cp_features(struct drm_crtc *crtc);
 
 #endif /* _SDE_CRTC_H_ */

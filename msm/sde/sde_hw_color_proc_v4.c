@@ -5,6 +5,7 @@
 #include <drm/msm_drm_pp.h>
 #include "sde_hw_color_proc_common_v4.h"
 #include "sde_hw_color_proc_v4.h"
+#include "sde_dbg.h"
 
 static int sde_write_3d_gamut(struct sde_hw_blk_reg_map *hw,
 		struct drm_msm_3d_gamut *payload, u32 base,
@@ -398,20 +399,20 @@ void sde_ltm_read_intr_status(struct sde_hw_dspp *ctx, u32 *status)
 	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->ltm.base + 0x58, clear);
 }
 
-void sde_demura_backlight_cfg(struct sde_hw_dspp *dspp, u64 val)
+void sde_demura_backlight_cfg(struct sde_hw_dspp *ctx, u64 val)
 {
 	u32 demura_base;
 	u32 backlight;
 
-	if (!dspp) {
-		DRM_ERROR("invalid parameter ctx %pK", dspp);
+	if (!ctx) {
+		DRM_ERROR("invalid parameter ctx %pK", ctx);
 		return;
 	}
-	demura_base = dspp->cap->sblk->demura.base;
-	backlight = (val & REG_MASK(11));
-	backlight |= ((val & REG_MASK_SHIFT(11, 32)) >> 16);
-	SDE_REG_WRITE(&dspp->hw, dspp->cap->sblk->demura.base + 0x8,
-			backlight);
+
+	demura_base = ctx->cap->sblk->demura.base;
+	backlight = (val & REG_MASK_ULL(11));
+	backlight |= ((val & REG_MASK_SHIFT_ULL(11, 32)) >> 16);
+	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->demura.base + 0x8, backlight);
 }
 
 void sde_setup_fp16_cscv1(struct sde_hw_pipe *ctx,
@@ -607,4 +608,61 @@ void sde_setup_fp16_unmultv1(struct sde_hw_pipe *ctx,
 		unmult &= ~BIT(0);
 
 	SDE_REG_WRITE(&ctx->hw, unmult_base, unmult);
+}
+
+void sde_demura_read_plane_status(struct sde_hw_dspp *ctx, u32 *status)
+{
+	u32 demura_base;
+	u32 value;
+
+	if (!ctx) {
+		DRM_ERROR("invalid parameter ctx %pK", ctx);
+		return;
+	}
+
+	demura_base = ctx->cap->sblk->demura.base;
+	value = SDE_REG_READ(&ctx->hw, demura_base + 0x4);
+	if (!(value & 0x4)) {
+		*status = DEM_FETCH_DMA_INVALID;
+	} else if (ctx->idx == DSPP_0) {
+		if (value & 0x80000000)
+			*status = DEM_FETCH_DMA1_RECT0;
+		else
+			*status = DEM_FETCH_DMA3_RECT0;
+	} else {
+		if (value & 0x80000000)
+			*status = DEM_FETCH_DMA1_RECT1;
+		else
+			*status = DEM_FETCH_DMA3_RECT1;
+	}
+}
+
+void sde_demura_pu_cfg(struct sde_hw_dspp *dspp, void *cfg)
+{
+	u32 demura_base;
+	struct sde_hw_cp_cfg *hw_cfg = cfg;
+	struct msm_roi_list *roi_list = NULL;
+	u32 temp;
+
+	if (!dspp) {
+		DRM_ERROR("invalid parameter ctx %pK", dspp);
+		return;
+	}
+	demura_base = dspp->cap->sblk->demura.base;
+	if (!cfg || !hw_cfg->payload) {
+		temp = 0;
+	} else {
+		roi_list = hw_cfg->payload;
+		if (hw_cfg->panel_width < hw_cfg->panel_height)
+			temp = (16 * (1 << 21)) / hw_cfg->panel_height;
+		else
+			temp = (8 * (1 << 21)) / hw_cfg->panel_height;
+		temp = temp * (roi_list->roi[0].y1);
+	}
+	SDE_REG_WRITE(&dspp->hw, dspp->cap->sblk->demura.base + 0x60,
+			temp);
+
+	SDE_EVT32(0x60, temp, dspp->idx, ((roi_list) ? roi_list->roi[0].y1 : -1),
+			((roi_list) ? roi_list->roi[0].y2 : -1),
+			((hw_cfg) ? hw_cfg->panel_height : -1));
 }
