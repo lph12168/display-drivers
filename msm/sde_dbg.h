@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef SDE_DBG_H_
@@ -28,6 +28,28 @@
 #define SDE_EVTLOG_FATAL	0xbad
 #define SDE_EVTLOG_ERROR	0xebad
 
+/* flags to enable the HW block dumping */
+#define SDE_DBG_SDE		BIT(0)
+#define SDE_DBG_RSC		BIT(1)
+#define SDE_DBG_SID		BIT(2)
+#define SDE_DBG_LUTDMA		BIT(3)
+#define SDE_DBG_VBIF_RT		BIT(4)
+#define SDE_DBG_DSI		BIT(5)
+
+/* flags to enable the HW block debugbus dumping */
+#define SDE_DBG_SDE_DBGBUS	BIT(12)
+#define SDE_DBG_RSC_DBGBUS	BIT(13)
+#define SDE_DBG_LUTDMA_DBGBUS	BIT(14)
+#define SDE_DBG_VBIF_RT_DBGBUS	BIT(15)
+#define SDE_DBG_DSI_DBGBUS	BIT(16)
+
+/* mask to enable all the built-in register blocks */
+#define SDE_DBG_BUILT_IN_ALL	0xffffff
+
+/* keeping DP separate as DP specific clks needs to be enabled for accessing */
+#define SDE_DBG_DP		BIT(24)
+#define SDE_DBG_DP_DBGBUS	BIT(25)
+
 #define SDE_DBG_DUMP_DATA_LIMITER (NULL)
 
 enum sde_dbg_evtlog_flag {
@@ -41,6 +63,7 @@ enum sde_dbg_evtlog_flag {
 enum sde_dbg_dump_flag {
 	SDE_DBG_DUMP_IN_LOG = BIT(0),
 	SDE_DBG_DUMP_IN_MEM = BIT(1),
+	SDE_DBG_DUMP_IN_LOG_LIMITED = BIT(2),
 };
 
 enum sde_dbg_dump_context {
@@ -49,8 +72,38 @@ enum sde_dbg_dump_context {
 	SDE_DBG_DUMP_CLK_ENABLED_CTX,
 };
 
-#define SDE_EVTLOG_DEFAULT_ENABLE (SDE_EVTLOG_CRITICAL | SDE_EVTLOG_IRQ | \
-		SDE_EVTLOG_EXTERNAL)
+/* default dump mode for eventlogs, reg-dump & debugbus-dump */
+#define SDE_DBG_DEFAULT_DUMP_MODE	SDE_DBG_DUMP_IN_MEM
+
+/*
+ * Define blocks for register write logging.
+ */
+#define SDE_REG_LOG_DEFAULT  0
+#define SDE_REG_LOG_NONE     1
+#define SDE_REG_LOG_CDM      2
+#define SDE_REG_LOG_DSPP     3
+#define SDE_REG_LOG_INTF     4
+#define SDE_REG_LOG_LM       5
+#define SDE_REG_LOG_CTL      6
+#define SDE_REG_LOG_PINGPONG 7
+#define SDE_REG_LOG_SSPP     8
+#define SDE_REG_LOG_WB       9
+#define SDE_REG_LOG_TOP     10
+#define SDE_REG_LOG_VBIF    11
+#define SDE_REG_LOG_DSC     12
+#define SDE_REG_LOG_ROT     13
+#define SDE_REG_LOG_DS      14
+#define SDE_REG_LOG_REGDMA  15
+#define SDE_REG_LOG_UIDLE   16
+#define SDE_REG_LOG_SID     16
+#define SDE_REG_LOG_QDSS    17
+/*
+ * 0-32 are reserved for sde_reg_write due to log masks
+ * Additional blocks are assigned from 33 to avoid conflict
+ */
+#define SDE_REG_LOG_RSCC    33
+
+#define SDE_EVTLOG_DEFAULT_ENABLE (SDE_EVTLOG_CRITICAL | SDE_EVTLOG_IRQ | SDE_EVTLOG_EXTERNAL)
 
 /*
  * evtlog will print this number of entries when it is called through
@@ -97,11 +150,50 @@ struct sde_dbg_evtlog {
 	u32 curr;
 	u32 next;
 	u32 enable;
+	u32 dump_mode;
 	spinlock_t spin_lock;
 	struct list_head filter_list;
 };
 
 extern struct sde_dbg_evtlog *sde_dbg_base_evtlog;
+
+/*
+ * reglog keeps this number of entries in memory for debug purpose. This
+ * number must be greater than number of possible writes in at least one
+ * single commit.
+ */
+#define SDE_REGLOG_ENTRY 1024
+
+struct sde_dbg_reglog_log {
+	s64 time;
+	u32 pid;
+	u32 addr;
+	u32 val;
+	u8 blk_id;
+};
+
+/**
+ * @last_dump: Index of last entry to be output during reglog dumps
+ * @filter_list: Linked list of currently active filter strings
+ */
+struct sde_dbg_reglog {
+	struct sde_dbg_reglog_log logs[SDE_REGLOG_ENTRY];
+	u32 first;
+	u32 last;
+	u32 last_dump;
+	u32 curr;
+	u32 next;
+	u32 enable;
+	u32 enable_mask;
+	spinlock_t spin_lock;
+};
+
+extern struct sde_dbg_reglog *sde_dbg_base_reglog;
+
+/**
+ * SDE_REG_LOG - Write register write to the register log
+ */
+#define SDE_REG_LOG(blk_id, val, addr) sde_reglog_log(blk_id, val, addr)
 
 /**
  * SDE_EVT32 - Write a list of 32bit values to the event log, default area
@@ -137,36 +229,39 @@ extern struct sde_dbg_evtlog *sde_dbg_base_evtlog;
 
 /**
  * SDE_DBG_DUMP - trigger dumping of all sde_dbg facilities
+ * @dump_blk_mask: mask of all the hw blk-ids that has to be dumped
  * @va_args:	list of named register dump ranges and regions to dump, as
  *		registered previously through sde_dbg_reg_register_base and
  *		sde_dbg_reg_register_dump_range.
  *		Including the special name "panic" will trigger a panic after
  *		the dumping work has completed.
  */
-#define SDE_DBG_DUMP(...) sde_dbg_dump(SDE_DBG_DUMP_PROC_CTX, __func__, \
-		##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
+#define SDE_DBG_DUMP(dump_blk_mask, ...) sde_dbg_dump(SDE_DBG_DUMP_PROC_CTX, __func__, \
+		dump_blk_mask, ##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
 
 /**
  * SDE_DBG_DUMP_WQ - trigger dumping of all sde_dbg facilities, queuing the work
+ * @dump_blk_mask: mask of all the hw blk-ids that has to be dumped
  * @va_args:	list of named register dump ranges and regions to dump, as
  *		registered previously through sde_dbg_reg_register_base and
  *		sde_dbg_reg_register_dump_range.
  *		Including the special name "panic" will trigger a panic after
  *		the dumping work has completed.
  */
-#define SDE_DBG_DUMP_WQ(...) sde_dbg_dump(SDE_DBG_DUMP_IRQ_CTX, __func__, \
-		##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
+#define SDE_DBG_DUMP_WQ(dump_blk_mask, ...) sde_dbg_dump(SDE_DBG_DUMP_IRQ_CTX, __func__, \
+		dump_blk_mask, ##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
 
 /**
  * SDE_DBG_DUMP_CLK_EN - trigger dumping of all sde_dbg facilities, without clk
+ * @dump_blk_mask: mask of all the hw blk-ids that has to be dumped
  * @va_args:	list of named register dump ranges and regions to dump, as
  *		registered previously through sde_dbg_reg_register_base and
  *		sde_dbg_reg_register_dump_range.
  *		Including the special name "panic" will trigger a panic after
  *		the dumping work has completed.
  */
-#define SDE_DBG_DUMP_CLK_EN(...) sde_dbg_dump(SDE_DBG_DUMP_CLK_ENABLED_CTX, \
-		__func__, ##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
+#define SDE_DBG_DUMP_CLK_EN(dump_blk_mask, ...) sde_dbg_dump(SDE_DBG_DUMP_CLK_ENABLED_CTX, \
+		__func__, dump_blk_mask, ##__VA_ARGS__, SDE_DBG_DUMP_DATA_LIMITER)
 
 /**
  * SDE_DBG_EVT_CTRL - trigger a different driver events
@@ -182,11 +277,24 @@ extern struct sde_dbg_evtlog *sde_dbg_base_evtlog;
 struct sde_dbg_evtlog *sde_evtlog_init(void);
 
 /**
+ * sde_reglog_init - allocate a new reg log object
+ * Returns:	reglog or -ERROR
+ */
+struct sde_dbg_reglog *sde_reglog_init(void);
+
+/**
  * sde_evtlog_destroy - destroy previously allocated event log
  * @evtlog:	pointer to evtlog
  * Returns:	none
  */
 void sde_evtlog_destroy(struct sde_dbg_evtlog *evtlog);
+
+/**
+ * sde_reglog_destroy - destroy previously allocated reg log
+ * @reglog:	pointer to reglog
+ * Returns:	none
+ */
+void sde_reglog_destroy(struct sde_dbg_reglog *reglog);
 
 /**
  * sde_evtlog_log - log an entry into the event log.
@@ -200,6 +308,15 @@ void sde_evtlog_destroy(struct sde_dbg_evtlog *evtlog);
  */
 void sde_evtlog_log(struct sde_dbg_evtlog *evtlog, const char *name, int line,
 		int flag, ...);
+
+/**
+ * sde_reglog_log - log an entry into the reg log.
+ *      log collection may be enabled/disabled entirely via debugfs
+ *      log area collection may be filtered by user provided flags via debugfs.
+ * @reglog:     pointer to evtlog
+ * Returns:     none
+ */
+void sde_reglog_log(u8 blk_id, u32 val, u32 addr);
 
 /**
  * sde_evtlog_dump_all - print all entries in event log to kernel log
@@ -260,6 +377,7 @@ void sde_dbg_destroy(void);
  * sde_dbg_dump - trigger dumping of all sde_dbg facilities
  * @queue_work:	whether to queue the dumping work to the work_struct
  * @name:	string indicating origin of dump
+ * @dump_blk_mask: mask of all the hw blk-ids that has to be dumped
  * @va_args:	list of named register dump ranges and regions to dump, as
  *		registered previously through sde_dbg_reg_register_base and
  *		sde_dbg_reg_register_dump_range.
@@ -267,7 +385,7 @@ void sde_dbg_destroy(void);
  *		the dumping work has completed.
  * Returns:	none
  */
-void sde_dbg_dump(enum sde_dbg_dump_context mode, const char *name, ...);
+void sde_dbg_dump(enum sde_dbg_dump_context mode, const char *name, u64 dump_blk_mask, ...);
 
 /**
  * sde_dbg_ctrl - trigger specific actions for the driver with debugging
@@ -285,10 +403,12 @@ void sde_dbg_ctrl(const char *name, ...);
  * @name:	name of base region
  * @base:	base pointer of region
  * @max_offset:	length of region
+ * @phys_addr:	physical address of region
+ * @blk_id:	hw block id
  * Returns:	0 or -ERROR
  */
 int sde_dbg_reg_register_base(const char *name, void __iomem *base,
-		size_t max_offset);
+		size_t max_offset, unsigned long phys_addr, u64 blk_id);
 
 /**
  * sde_dbg_reg_register_cb - register a hw register callback for later
@@ -339,6 +459,12 @@ int sde_dbg_dsi_ctrl_register(void __iomem *base, const char *name);
  * @blk_off: offset from mdss base of the top block
  */
 void sde_dbg_set_sde_top_offset(u32 blk_off);
+
+/**
+ * sde_dbg_set_hw_ownership_status - set the VM HW ownership status
+ * @enable:	flag to control HW ownership status
+ */
+void sde_dbg_set_hw_ownership_status(bool enable);
 
 /**
  * sde_evtlog_set_filter - update evtlog filtering

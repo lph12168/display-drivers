@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -56,7 +56,7 @@ static void dsi_split_link_setup(struct dsi_ctrl_hw *ctrl,
 {
 	u32 reg;
 
-	if (!cfg->split_link.split_link_enabled)
+	if (!cfg->split_link.enabled)
 		return;
 
 	reg = DSI_R32(ctrl, DSI_SPLIT_LINK);
@@ -68,6 +68,14 @@ static void dsi_split_link_setup(struct dsi_ctrl_hw *ctrl,
 	/* MDP0_LINK_SEL */
 	reg &= ~(0x7 << 20);
 	reg |= DSI_CTRL_MDP0_LINK_SEL;
+
+	/* COMMAND_INPUT_SWAP|VIDEO_INPUT_SWAP */
+	if (cfg->split_link.sublink_swap) {
+		if (cfg->split_link.panel_mode == DSI_OP_CMD_MODE)
+			reg |= BIT(8);
+		else
+			reg |= BIT(4);
+	}
 
 	/* EN */
 	reg |= 0x1;
@@ -324,7 +332,7 @@ void dsi_ctrl_hw_cmn_set_video_timing(struct dsi_ctrl_hw *ctrl,
 	u32 reg = 0;
 	u32 hs_start = 0;
 	u32 hs_end, active_h_start, active_h_end, h_total, width = 0;
-	u32 bytes_per_pkt, pkt_per_line, eol_byte_num;
+	u32 bytes_per_pkt = 0, pkt_per_line = 0, eol_byte_num = 0;
 	u32 vs_start = 0, vs_end = 0;
 	u32 vpos_start = 0, vpos_end, active_v_start, active_v_end, v_total;
 
@@ -1325,7 +1333,7 @@ void dsi_ctrl_hw_cmn_enable_error_interrupts(struct dsi_ctrl_hw *ctrl,
 	DSI_W32(ctrl, DSI_ERR_INT_MASK0, int_mask0);
 
 	DSI_CTRL_HW_DBG(ctrl, "[DSI_%d] enable errors = 0x%llx, int_mask0=0x%x\n",
-		 errors, int_mask0);
+		 ctrl->index, errors, int_mask0);
 }
 
 /**

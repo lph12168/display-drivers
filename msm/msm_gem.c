@@ -16,6 +16,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <linux/qcom-dma-mapping.h>
 #include <linux/spinlock.h>
 #include <linux/shmem_fs.h>
 #include <linux/dma-buf.h>
@@ -26,6 +27,9 @@
 #include "msm_gem.h"
 #include "msm_mmu.h"
 #include "sde_dbg.h"
+
+#define GUARD_BYTES (BIT(8) - 1)
+#define ALIGNED_OFFSET (U32_MAX & ~(GUARD_BYTES))
 
 static void msm_gem_vunmap_locked(struct drm_gem_object *obj);
 
@@ -1007,11 +1011,15 @@ void msm_gem_describe_objects(struct list_head *list, struct seq_file *m)
 void msm_gem_free_object(struct drm_gem_object *obj)
 {
 	struct msm_gem_object *msm_obj = to_msm_bo(obj);
+	struct drm_device *dev = obj->dev;
+	struct msm_drm_private *priv = dev->dev_private;
 
 	/* object should not be on active list: */
 	WARN_ON(is_active(msm_obj));
 
+	mutex_lock(&priv->mm_lock);
 	list_del(&msm_obj->mm_list);
+	mutex_unlock(&priv->mm_lock);
 
 	mutex_lock(&msm_obj->lock);
 
@@ -1118,14 +1126,9 @@ static int msm_gem_new_impl(struct drm_device *dev,
 	msm_obj->in_active_list = false;
 	msm_obj->obj_dirty = false;
 
-	if (struct_mutex_locked) {
-		WARN_ON(!mutex_is_locked(&dev->struct_mutex));
-		list_add_tail(&msm_obj->mm_list, &priv->inactive_list);
-	} else {
-		mutex_lock(&dev->struct_mutex);
-		list_add_tail(&msm_obj->mm_list, &priv->inactive_list);
-		mutex_unlock(&dev->struct_mutex);
-	}
+	mutex_lock(&priv->mm_lock);
+	list_add_tail(&msm_obj->mm_list, &priv->inactive_list);
+	mutex_unlock(&priv->mm_lock);
 
 	*obj = &msm_obj->base;
 
@@ -1394,4 +1397,73 @@ void msm_gem_object_set_name(struct drm_gem_object *bo, const char *fmt, ...)
 	va_start(ap, fmt);
 	vsnprintf(msm_obj->name, sizeof(msm_obj->name), fmt, ap);
 	va_end(ap);
+}
+
+void msm_gem_put_buffer(struct drm_gem_object *gem)
+{
+	struct msm_gem_object *msm_gem;
+
+	if (!gem)
+		return;
+
+	msm_gem = to_msm_bo(gem);
+
+	msm_gem_put_iova(gem, msm_gem->aspace);
+	msm_gem_put_vaddr(gem);
+}
+
+int msm_gem_get_buffer(struct drm_gem_object *gem,
+		struct drm_device *dev, struct drm_framebuffer *fb,
+		uint32_t align_size)
+{
+	struct msm_gem_object *msm_gem;
+	uint32_t size;
+	uint64_t iova_aligned;
+	int ret = -EINVAL;
+
+	if (!gem) {
+		DRM_ERROR("invalid drm gem");
+		return ret;
+	}
+
+	msm_gem = to_msm_bo(gem);
+
+	size = PAGE_ALIGN(gem->size);
+	if (size < (align_size + GUARD_BYTES)) {
+		DRM_ERROR("invalid gem size");
+		goto exit;
+	}
+
+	msm_gem_smmu_address_space_get(dev, MSM_SMMU_DOMAIN_UNSECURE);
+
+	if (PTR_ERR(msm_gem->aspace) == -ENODEV) {
+		DRM_DEBUG("IOMMU not present, relying on VRAM.");
+	} else if (IS_ERR_OR_NULL(msm_gem->aspace)) {
+		ret = PTR_ERR(msm_gem->aspace);
+		DRM_ERROR("failed to get aspace");
+		goto exit;
+	}
+
+	ret = msm_gem_get_iova(gem, msm_gem->aspace, &msm_gem->iova);
+	if (ret) {
+		DRM_ERROR("failed to get the iova ret %d", ret);
+		goto exit;
+	}
+
+	msm_gem_get_vaddr(gem);
+	if (IS_ERR_OR_NULL(msm_gem->vaddr)) {
+		DRM_ERROR("failed to get vaddr");
+		goto exit;
+	}
+
+	iova_aligned = (msm_gem->iova + GUARD_BYTES) & ALIGNED_OFFSET;
+	msm_gem->offset = iova_aligned - msm_gem->iova;
+	msm_gem->iova = msm_gem->iova + msm_gem->offset;
+
+	return 0;
+
+exit:
+	msm_gem_put_buffer(gem);
+
+	return ret;
 }

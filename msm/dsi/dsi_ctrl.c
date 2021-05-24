@@ -271,7 +271,6 @@ static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
 {
 	int rc = 0;
 	struct dentry *dir, *state_file, *reg_dump, *cmd_dma_logs;
-	char dbg_name[DSI_DEBUG_NAME_LEN];
 
 	if (!dsi_ctrl || !parent) {
 		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
@@ -334,10 +333,6 @@ static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
 
 	dsi_ctrl->debugfs_root = dir;
 
-	snprintf(dbg_name, DSI_DEBUG_NAME_LEN, "dsi%d_ctrl",
-						dsi_ctrl->cell_index);
-	sde_dbg_reg_register_base(dbg_name, dsi_ctrl->hw.base,
-				msm_iomap_size(dsi_ctrl->pdev, "dsi_ctrl"));
 error_remove_dir:
 	debugfs_remove(dir);
 error:
@@ -350,16 +345,8 @@ static int dsi_ctrl_debugfs_deinit(struct dsi_ctrl *dsi_ctrl)
 	return 0;
 }
 #else
-static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
-				 struct dentry *parent)
+static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl, struct dentry *parent)
 {
-	char dbg_name[DSI_DEBUG_NAME_LEN];
-
-	snprintf(dbg_name, DSI_DEBUG_NAME_LEN, "dsi%d_ctrl",
-						dsi_ctrl->cell_index);
-	sde_dbg_reg_register_base(dbg_name,
-				dsi_ctrl->hw.base,
-				msm_iomap_size(dsi_ctrl->pdev, "dsi_ctrl"));
 	return 0;
 }
 static int dsi_ctrl_debugfs_deinit(struct dsi_ctrl *dsi_ctrl)
@@ -997,7 +984,7 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	if (host_cfg->data_lanes & DSI_DATA_LANE_3)
 		num_of_lanes++;
 
-	if (split_link->split_link_enabled)
+	if (split_link->enabled)
 		num_of_lanes = split_link->lanes_per_sublink;
 
 	config->common_config.num_data_lanes = num_of_lanes;
@@ -1360,6 +1347,9 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 {
 	u32 hw_flags = 0;
 	struct dsi_ctrl_hw_ops dsi_hw_ops = dsi_ctrl->hw.ops;
+	struct dsi_split_link_config *split_link;
+
+	split_link = &(dsi_ctrl->host_config.common_config.split_link);
 
 	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY, flags,
 		msg->flags);
@@ -1367,6 +1357,10 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 	if (dsi_ctrl->hw.reset_trig_ctrl)
 		dsi_hw_ops.reset_trig_ctrl(&dsi_ctrl->hw,
 				&dsi_ctrl->host_config.common_config);
+
+	if (dsi_hw_ops.splitlink_cmd_setup && split_link->enabled)
+		dsi_hw_ops.splitlink_cmd_setup(&dsi_ctrl->hw,
+				&dsi_ctrl->host_config.common_config, flags);
 
 	/*
 	 * Always enable DMA scheduling for video mode panel.
@@ -2201,6 +2195,37 @@ int dsi_ctrl_get_io_resources(struct msm_io_res *io_res)
 }
 
 /**
+ * dsi_ctrl_check_resource() - check if DSI controller is probed
+ * @of_node:    of_node of the DSI controller.
+ *
+ * Checks if the DSI controller has been probed and is available.
+ *
+ * Return: status of DSI controller
+ */
+bool dsi_ctrl_check_resource(struct device_node *of_node)
+{
+	struct list_head *pos, *tmp;
+	struct dsi_ctrl *ctrl = NULL;
+
+	mutex_lock(&dsi_ctrl_list_lock);
+	list_for_each_safe(pos, tmp, &dsi_ctrl_list) {
+		struct dsi_ctrl_list_item *n;
+
+		n = list_entry(pos, struct dsi_ctrl_list_item, list);
+		if (!n->ctrl || !n->ctrl->pdev)
+			break;
+
+		if (n->ctrl->pdev->dev.of_node == of_node) {
+			ctrl = n->ctrl;
+			break;
+		}
+	}
+	mutex_unlock(&dsi_ctrl_list_lock);
+
+	return ctrl ? true : false;
+}
+
+/**
  * dsi_ctrl_get() - get a dsi_ctrl handle from an of_node
  * @of_node:    of_node of the DSI controller.
  *
@@ -2278,6 +2303,7 @@ void dsi_ctrl_put(struct dsi_ctrl *dsi_ctrl)
  */
 int dsi_ctrl_drv_init(struct dsi_ctrl *dsi_ctrl, struct dentry *parent)
 {
+	char dbg_name[DSI_DEBUG_NAME_LEN];
 	int rc = 0;
 
 	if (!dsi_ctrl) {
@@ -2298,6 +2324,11 @@ int dsi_ctrl_drv_init(struct dsi_ctrl *dsi_ctrl, struct dentry *parent)
 		DSI_CTRL_ERR(dsi_ctrl, "failed to init debug fs, rc=%d\n", rc);
 		goto error;
 	}
+
+	snprintf(dbg_name, DSI_DEBUG_NAME_LEN, "dsi%d_ctrl", dsi_ctrl->cell_index);
+	sde_dbg_reg_register_base(dbg_name, dsi_ctrl->hw.base,
+			msm_iomap_size(dsi_ctrl->pdev, "dsi_ctrl"),
+			msm_get_phys_addr(dsi_ctrl->pdev, "dsi_ctrl"), SDE_DBG_DSI);
 
 error:
 	mutex_unlock(&dsi_ctrl->ctrl_lock);

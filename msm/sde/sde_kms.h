@@ -128,11 +128,6 @@
 /* ESD status check interval in miliseconds */
 #define STATUS_CHECK_INTERVAL_MS 5000
 
-/* A hardware display blank change occurred */
-#define DRM_PANEL_EVENT_BLANK          0x01
-/* A hardware display blank early change occurred */
-#define DRM_PANEL_EARLY_EVENT_BLANK    0x02
-
 /**
  * enum sde_kms_smmu_state:	smmu state
  * @ATTACHED:	 all the context banks are attached.
@@ -189,19 +184,6 @@ enum frame_trigger_mode_type {
 	FRAME_DONE_WAIT_DEFAULT,
 	FRAME_DONE_WAIT_SERIALIZE,
 	FRAME_DONE_WAIT_POSTED_START,
-};
-
-/*
- * @DRM_PANEL_BLANK_UNBLANK: power on
- * @DRM_PANEL_BLANK_POWERDOWN: power off
- * @DRM_PANEL_BLANK_LP: low power mode
- * @DRM_PANEL_BLANK_FPS_CHANGE: fps change
- */
-enum {
-	DRM_PANEL_BLANK_UNBLANK,
-	DRM_PANEL_BLANK_POWERDOWN,
-	DRM_PANEL_BLANK_LP,
-	DRM_PANEL_BLANK_FPS_CHANGE,
 };
 
 /**
@@ -610,6 +592,16 @@ void sde_kms_info_append_format(struct sde_kms_info *info,
  * @info: Pointer to sde_kms_info structure
  */
 void sde_kms_info_stop(struct sde_kms_info *info);
+
+/**
+ * sde_kms_info_add_list - add a space separated list to 'sde_kms_info'
+ * @info: Pointer to sde_kms_info structure
+ * @key: Pointer to key string
+ * @item: Pointer to array of integer values
+ * @size: Number of integers to parse
+ */
+void sde_kms_info_add_list(struct sde_kms_info *info,
+		const char *key, uint32_t *item, size_t size);
 
 /**
  * sde_kms_rect_intersect - intersect two rectangles

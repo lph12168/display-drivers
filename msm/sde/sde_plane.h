@@ -110,6 +110,8 @@ enum sde_plane_sclcheck_state {
  * @rotation:		rotation cache state
  * @static_cache_state:	plane cache state for static image
  * @cdp_cfg:	CDP configuration
+ * @cont_splash_populated: State was populated as part of cont. splash
+ * @ubwc_stats_roi: cached roi for ubwc stats
  */
 struct sde_plane_state {
 	struct drm_plane_state base;
@@ -141,6 +143,20 @@ struct sde_plane_state {
 	uint32_t static_cache_state;
 
 	struct sde_hw_pipe_cdp_cfg cdp_cfg;
+
+	bool cont_splash_populated;
+
+	struct sde_drm_ubwc_stats_roi ubwc_stats_roi;
+};
+
+/**
+ * struct sde_multirect_plane_states: Defines multirect pair of drm plane states
+ * @r0: drm plane configured on rect 0
+ * @r1: drm plane configured on rect 1
+ */
+struct sde_multirect_plane_states {
+	const struct drm_plane_state *r0;
+	const struct drm_plane_state *r1;
 };
 
 #define to_sde_plane_state(x) \
@@ -191,15 +207,6 @@ void sde_plane_ctl_flush(struct drm_plane *plane, struct sde_hw_ctl *ctl,
  */
 void sde_plane_restore(struct drm_plane *plane);
 
-/**
- * _sde_plane_set_qos_lut - set danger, safe and creq LUT of the given plane
- * @plane:		Pointer to drm plane
- * @crtc:		Pointer to drm crtc to find refresh rate on mode
- * @fb:			Pointer to framebuffer associated with the given plane
- */
-void _sde_plane_set_qos_lut(struct drm_plane *plane,
-		struct drm_crtc *crtc,
-		struct drm_framebuffer *fb);
 /**
  * sde_plane_flush - final plane operations before commit flush
  * @plane: Pointer to drm plane structure
@@ -310,30 +317,13 @@ bool sde_plane_is_sec_ui_allowed(struct drm_plane *plane);
  */
 void sde_plane_secure_ctrl_xin_client(struct drm_plane *plane,
 		struct drm_crtc *crtc);
-
 /*
- * sde_plane_get_ubwc_error - gets the ubwc error code
+ * sde_plane_get_frame_data - gets the plane frame data
  * @plane: Pointer to DRM plane object
+ * @frame_data: Pointer to plane frame data structure
  */
-u32 sde_plane_get_ubwc_error(struct drm_plane *plane);
-
-/*
- * sde_plane_clear_ubwc_error - clears the ubwc error code
- * @plane: Pointer to DRM plane object
- */
-void sde_plane_clear_ubwc_error(struct drm_plane *plane);
-
-/*
- * sde_plane_get_meta_error - gets the meta error code
- * @plane: Pointer to DRM plane object
- */
-u32 sde_plane_get_meta_error(struct drm_plane *plane);
-
-/*
- * sde_plane_clear_meta_error - clears the meta error code
- * @plane: Pointer to DRM plane object
- */
-void sde_plane_clear_meta_error(struct drm_plane *plane);
+void sde_plane_get_frame_data(struct drm_plane *plane,
+		struct sde_drm_plane_frame_data *frame_data);
 
 /*
  * sde_plane_setup_src_split_order - enable/disable pipe's src_split_order

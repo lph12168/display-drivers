@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/iopoll.h>
@@ -32,11 +32,6 @@
 #define PP_DSC_MODE                     0x0a0
 #define PP_DCE_DATA_IN_SWAP             0x0ac
 #define PP_DCE_DATA_OUT_SWAP            0x0c8
-
-#define DITHER_DEPTH_MAP_INDEX 9
-static u32 dither_depth_map[DITHER_DEPTH_MAP_INDEX] = {
-	0, 0, 0, 0, 0, 1, 2, 3, 3
-};
 
 #define DITHER_VER_MAJOR_1 1
 /* supports LUMA Dither */
@@ -273,17 +268,6 @@ static void sde_hw_pp_dsc_enable(struct sde_hw_pingpong *pp)
 	SDE_REG_WRITE(c, PP_DSC_MODE, 1);
 }
 
-static u32 sde_hw_pp_get_dsc_status(struct sde_hw_pingpong *pp)
-{
-	struct sde_hw_blk_reg_map *c;
-
-	if (!pp)
-		return 0;
-
-	c = &pp->hw;
-	return SDE_REG_READ(c, PP_DSC_MODE);
-}
-
 static void sde_hw_pp_dsc_disable(struct sde_hw_pingpong *pp)
 {
 	struct sde_hw_blk_reg_map *c;
@@ -495,7 +479,6 @@ static void _setup_pingpong_ops(struct sde_hw_pingpong_ops *ops,
 		ops->setup_dsc = sde_hw_pp_setup_dsc;
 		ops->enable_dsc = sde_hw_pp_dsc_enable;
 		ops->disable_dsc = sde_hw_pp_dsc_disable;
-		ops->get_dsc_status = sde_hw_pp_get_dsc_status;
 	}
 
 	version = SDE_COLOR_PROCESS_MAJOR(hw_cap->sblk->dither.version);

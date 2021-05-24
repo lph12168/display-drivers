@@ -3,8 +3,13 @@
 KDIR := $(TOP)/kernel_platform/common
 
 ifeq ($(CONFIG_ARCH_WAIPIO), y)
+ifeq ($(CONFIG_ARCH_QTI_VM), y)
+	include $(DISPLAY_ROOT)/config/gki_waipiodisptui.conf
+	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_waipiodisptuiconf.h
+else
 	include $(DISPLAY_ROOT)/config/gki_waipiodisp.conf
 	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_waipiodispconf.h
+endif
 endif
 
 LINUX_INC +=	-Iinclude/linux \
@@ -198,6 +203,8 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o
 
+msm_drm-$(CONFIG_THERMAL_OF) += msm_cooling_device.o
+
 msm_drm-$(CONFIG_DRM_MSM) += msm_atomic.o \
 			     msm_fb.o \
 			     msm_iommu.o \
@@ -206,7 +213,6 @@ msm_drm-$(CONFIG_DRM_MSM) += msm_atomic.o \
 			     msm_gem_prime.o \
 			     msm_gem_vma.o \
 			     msm_smmu.o \
-			     msm_cooling_device.o \
 			     msm_prop.o
 
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

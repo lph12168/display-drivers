@@ -18,6 +18,7 @@
 #include "dp_pll.h"
 #include "dp_hpd.h"
 #include "dp_mst_sim.h"
+#include "dp_mst_drm.h"
 
 #define DEBUG_NAME "drm_dp"
 
@@ -54,11 +55,18 @@ struct dp_debug_private {
 static int dp_debug_sim_hpd_cb(void *arg, bool hpd, bool hpd_irq)
 {
 	struct dp_debug_private *debug = arg;
+	int vdo = 0;
 
-	if (hpd_irq)
-		return debug->hpd->simulate_attention(debug->hpd, 0);
-	else
+	if (hpd_irq) {
+		vdo |= BIT(7);
+
+		if (hpd)
+			vdo |= BIT(8);
+
+		return debug->hpd->simulate_attention(debug->hpd, vdo);
+	} else {
 		return debug->hpd->simulate_connect(debug->hpd, hpd);
+	}
 }
 
 static int dp_debug_attach_sim_bridge(struct dp_debug_private *debug)
@@ -171,6 +179,7 @@ static ssize_t dp_debug_write_edid(struct file *file,
 	}
 
 	dp_debug_enable_sim_mode(debug, DP_SIM_MODE_EDID);
+	dp_mst_clear_edid_cache(debug->display);
 	dp_sim_update_port_edid(debug->sim_bridge, debug->mst_edid_idx,
 			edid, edid_size);
 bail:
@@ -304,15 +313,23 @@ static ssize_t dp_debug_read_dpcd(struct file *file,
 	if (!dpcd)
 		goto bail;
 
-	dp_sim_read_dpcd_reg(debug->sim_bridge, dpcd,
-			debug->dpcd_size, debug->dpcd_offset);
-
-	len += snprintf(buf, buf_size, "0x%x", debug->dpcd_offset);
-
-	while (offset < debug->dpcd_size) {
-		len += snprintf(buf + len, buf_size - len, "0x%x",
-			dpcd[debug->dpcd_offset + offset++]);
+	/*
+	 * In simulation mode, this function returns the last written DPCD node.
+	 * For a real monitor plug in, it always dumps the first 16 DPCD registers.
+	 */
+	if (debug->dp_debug.sim_mode) {
+		dp_sim_read_dpcd_reg(debug->sim_bridge, dpcd, debug->dpcd_size, debug->dpcd_offset);
+	} else {
+		debug->dpcd_size = sizeof(debug->panel->dpcd);
+		debug->dpcd_offset = 0;
+		memcpy(dpcd, debug->panel->dpcd, debug->dpcd_size);
 	}
+
+	len += scnprintf(buf, buf_size, "%04x: ", debug->dpcd_offset);
+
+	while (offset < debug->dpcd_size)
+		len += scnprintf(buf + len, buf_size - len, "%02x ",
+				dpcd[debug->dpcd_offset + offset++]);
 
 	kfree(dpcd);
 
@@ -633,13 +650,16 @@ static ssize_t dp_debug_mmrm_clk_cb_write(struct file *file,
 	size_t len = 0;
 	struct dss_clk_mmrm_cb mmrm_cb_data;
 	struct mmrm_client_notifier_data notifier_data;
-	struct dp_display *dp_display = debug->display;
+	struct dp_display *dp_display;
 	int cb_type;
 
 	if (!debug)
 		return -ENODEV;
 	if (*ppos)
 		return 0;
+
+	dp_display = debug->display;
+
 	len = min_t(size_t, count, SZ_8 - 1);
 	if (copy_from_user(buf, user_buff, len))
 		return 0;

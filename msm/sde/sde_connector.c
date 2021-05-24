@@ -240,7 +240,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	c_conn->cdev = backlight_cdev_register(dev->dev, c_conn->bl_device,
 							&c_conn->n);
 	if (IS_ERR_OR_NULL(c_conn->cdev)) {
-		SDE_ERROR("Failed to register backlight cdev: %ld\n",
+		SDE_INFO("Failed to register backlight cdev: %ld\n",
 				    PTR_ERR(c_conn->cdev));
 		c_conn->cdev = NULL;
 	}
@@ -484,23 +484,21 @@ static int sde_connector_handle_panel_id(uint32_t event_idx,
 	struct sde_connector *c_conn = usr;
 	int i;
 	u64 panel_id;
-	u8 arr[8], shift;
-	u64 mask = 0xff;
+	u8 msb_arr[8];
 
 	if (!c_conn)
 		return -EINVAL;
 
-	panel_id = (((u64)data0) << 31) | data1;
+	panel_id = (((u64)data0) << 32) | data1;
 	if (panel_id == ~0x0)
 		return 0;
 
-	for (i = 0; i < 8; i++) {
-		shift = 8 * i;
-		arr[7 - i] = (u8)((panel_id & (mask << shift)) >> shift);
-	}
+	for (i = 0; i < 8; i++)
+		msb_arr[i] = (panel_id >> (8 * (7 - i)));
+
 	/* update the panel id */
 	msm_property_set_blob(&c_conn->property_info,
-		  &c_conn->blob_panel_id, arr, sizeof(arr),
+		  &c_conn->blob_panel_id, &msb_arr,  sizeof(msb_arr),
 		  CONNECTOR_PROP_DEMURA_PANEL_ID);
 	sde_connector_register_event(&c_conn->base,
 			SDE_CONN_EVENT_PANEL_ID, NULL, c_conn);
@@ -670,8 +668,7 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 
 	bl_config->bl_scale = c_conn->bl_scale > MAX_BL_SCALE_LEVEL ?
 			MAX_BL_SCALE_LEVEL : c_conn->bl_scale;
-	bl_config->bl_scale_sv = c_conn->bl_scale_sv > MAX_SV_BL_SCALE_LEVEL ?
-			MAX_SV_BL_SCALE_LEVEL : c_conn->bl_scale_sv;
+	bl_config->bl_scale_sv = c_conn->bl_scale_sv;
 
 	SDE_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_level = %u\n",
 		bl_config->bl_scale, bl_config->bl_scale_sv,
@@ -700,7 +697,7 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
-	u32 qsync_propval = 0;
+	u32 qsync_propval = 0, step_val = 0;
 	bool prop_dirty;
 
 	if (!connector)
@@ -721,6 +718,17 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 					c_conn->qsync_mode, qsync_propval);
 			c_conn->qsync_updated = true;
 			c_conn->qsync_mode = qsync_propval;
+		}
+	}
+
+	prop_dirty = msm_property_is_dirty(&c_conn->property_info, &c_state->property_state,
+					CONNECTOR_PROP_AVR_STEP);
+	if (prop_dirty) {
+		step_val = sde_connector_get_property(c_conn->base.state, CONNECTOR_PROP_AVR_STEP);
+		if (step_val != c_conn->avr_step) {
+			SDE_DEBUG("updated avr step %d -> %d\n", c_conn->avr_step, step_val);
+			c_conn->qsync_updated = true;
+			c_conn->avr_step = step_val;
 		}
 	}
 }
@@ -852,16 +860,16 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 		return -EINVAL;
 	}
 
+	display = (struct dsi_display *)c_conn->display;
+
 	/*
 	 * During pre kickoff DCS commands have to have an
 	 * asynchronous wait to avoid an unnecessary stall
 	 * in pre-kickoff. This flag must be reset at the
 	 * end of display pre-kickoff.
 	 */
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		display = (struct dsi_display *)c_conn->display;
+	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI)
 		display->queue_cmd_waits = true;
-	}
 
 	rc = _sde_connector_update_dirty_properties(connector);
 	if (rc) {
@@ -965,17 +973,6 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn = NULL;
-
-	if (!connector)
-		return;
-
-	c_conn = to_sde_connector(connector);
-	c_conn->panel_dead = false;
-}
-
-void sde_connector_helper_post_kickoff(struct drm_connector *connector)
-{
-	struct sde_connector *c_conn = NULL;
 	struct dsi_display *display;
 	struct sde_kms *sde_kms;
 
@@ -1005,6 +1002,7 @@ void sde_connector_helper_post_kickoff(struct drm_connector *connector)
 		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
 		backlight_update_status(c_conn->bl_device);
 	}
+	c_conn->panel_dead = false;
 }
 
 int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
@@ -1177,6 +1175,11 @@ sde_connector_atomic_duplicate_state(struct drm_connector *connector)
 
 	c_conn = to_sde_connector(connector);
 	c_oldstate = to_sde_connector_state(connector->state);
+	if (c_oldstate->cont_splash_populated) {
+		connector->state->crtc = NULL;
+		c_oldstate->cont_splash_populated = false;
+	}
+
 	c_state = msm_property_alloc_state(&c_conn->property_info);
 	if (!c_state) {
 		SDE_ERROR("state alloc failed\n");
@@ -1439,6 +1442,92 @@ end:
 	return rc;
 }
 
+static int _sde_connector_set_prop_out_fb(struct drm_connector *connector,
+		struct drm_connector_state *state,
+		uint64_t val)
+{
+	int rc = 0;
+	struct sde_connector *c_conn;
+	struct sde_connector_state *c_state;
+
+	c_conn = to_sde_connector(connector);
+	c_state = to_sde_connector_state(state);
+
+	/* clear old fb, if present */
+	if (c_state->out_fb)
+		_sde_connector_destroy_fb(c_conn, c_state);
+
+	/* convert fb val to drm framebuffer and prepare it */
+	c_state->out_fb =
+		drm_framebuffer_lookup(connector->dev, NULL, val);
+	if (!c_state->out_fb && val) {
+		SDE_ERROR("failed to look up fb %lld\n", val);
+		rc = -EFAULT;
+	} else if (!c_state->out_fb && !val) {
+		SDE_DEBUG("cleared fb_id\n");
+		rc = 0;
+	}
+
+	return rc;
+}
+
+static int _sde_connector_set_prop_retire_fence(struct drm_connector *connector,
+		struct drm_connector_state *state,
+		uint64_t val)
+{
+	int rc = 0;
+	struct sde_connector *c_conn;
+	uint64_t fence_user_fd;
+	uint64_t __user prev_user_fd;
+
+	c_conn = to_sde_connector(connector);
+
+	rc = copy_from_user(&prev_user_fd, (void __user *)val,
+			sizeof(uint64_t));
+	if (rc) {
+		SDE_ERROR("copy from user failed rc:%d\n", rc);
+		rc = -EFAULT;
+		goto end;
+	}
+
+	/*
+	 * client is expected to reset the property to -1 before
+	 * requesting for the retire fence
+	 */
+	if (prev_user_fd == -1) {
+		uint32_t offset;
+
+		offset = sde_connector_get_property(state,
+				CONN_PROP_RETIRE_FENCE_OFFSET);
+		/*
+		 * update the offset to a timeline for
+		 * commit completion
+		 */
+		offset++;
+		rc = sde_fence_create(c_conn->retire_fence,
+					&fence_user_fd, offset);
+		if (rc) {
+			SDE_ERROR("fence create failed rc:%d\n", rc);
+			goto end;
+		}
+
+		rc = copy_to_user((uint64_t __user *)(uintptr_t)val,
+				&fence_user_fd, sizeof(uint64_t));
+		if (rc) {
+			SDE_ERROR("copy to user failed rc:%d\n", rc);
+			/*
+			 * fence will be released with timeline
+			 * update
+			 */
+			put_unused_fd(fence_user_fd);
+			rc = -EFAULT;
+			goto end;
+		}
+	}
+end:
+	return rc;
+}
+
 static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		struct drm_connector_state *state,
 		struct drm_property *property,
@@ -1447,8 +1536,6 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
 	int idx, rc;
-	uint64_t fence_user_fd;
-	uint64_t __user prev_user_fd;
 
 	if (!connector || !state || !property) {
 		SDE_ERROR("invalid argument(s), conn %pK, state %pK, prp %pK\n",
@@ -1469,62 +1556,13 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 	idx = msm_property_index(&c_conn->property_info, property);
 	switch (idx) {
 	case CONNECTOR_PROP_OUT_FB:
-		/* clear old fb, if present */
-		if (c_state->out_fb)
-			_sde_connector_destroy_fb(c_conn, c_state);
-
-		/* convert fb val to drm framebuffer and prepare it */
-		c_state->out_fb =
-			drm_framebuffer_lookup(connector->dev, NULL, val);
-		if (!c_state->out_fb && val) {
-			SDE_ERROR("failed to look up fb %lld\n", val);
-			rc = -EFAULT;
-		} else if (!c_state->out_fb && !val) {
-			SDE_DEBUG("cleared fb_id\n");
-			rc = 0;
-		}
+		rc = _sde_connector_set_prop_out_fb(connector, state, val);
 		break;
 	case CONNECTOR_PROP_RETIRE_FENCE:
 		if (!val)
 			goto end;
 
-		rc = copy_from_user(&prev_user_fd, (void __user *)val,
-				sizeof(uint64_t));
-		if (rc) {
-			SDE_ERROR("copy from user failed rc:%d\n", rc);
-			rc = -EFAULT;
-			goto end;
-		}
-
-		/*
-		 * client is expected to reset the property to -1 before
-		 * requesting for the retire fence
-		 */
-		if (prev_user_fd == -1) {
-			/*
-			 * update the offset to a timeline for
-			 * commit completion
-			 */
-			rc = sde_fence_create(c_conn->retire_fence,
-						&fence_user_fd, 1);
-			if (rc) {
-				SDE_ERROR("fence create failed rc:%d\n", rc);
-				goto end;
-			}
-
-			rc = copy_to_user((uint64_t __user *)(uintptr_t)val,
-					&fence_user_fd, sizeof(uint64_t));
-			if (rc) {
-				SDE_ERROR("copy to user failed rc:%d\n", rc);
-				/*
-				 * fence will be released with timeline
-				 * update
-				 */
-				put_unused_fd(fence_user_fd);
-				rc = -EFAULT;
-				goto end;
-			}
-		}
+		rc = _sde_connector_set_prop_retire_fence(connector, state, val);
 		break;
 	case CONNECTOR_PROP_ROI_V1:
 		rc = _sde_connector_set_roi_v1(c_conn, c_state,
@@ -1562,6 +1600,15 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		else if (val == DRM_MODE_FLAG_CMD_MODE_PANEL)
 			c_conn->expected_panel_mode =
 				MSM_DISPLAY_CMD_MODE;
+		break;
+	case CONNECTOR_PROP_DYN_BIT_CLK:
+		if (!c_conn->ops.set_dyn_bit_clk)
+			break;
+
+		rc = c_conn->ops.set_dyn_bit_clk(connector, val);
+		if (rc)
+			SDE_ERROR_CONN(c_conn, "dynamic bit clock set failed, rc: %d", rc);
+
 		break;
 	default:
 		break;
@@ -1937,6 +1984,8 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 {
 	struct drm_connector *connector = file->private_data;
 	struct sde_connector *c_conn = NULL;
+	struct sde_vm_ops *vm_ops;
+	struct sde_kms *sde_kms;
 	char *input, *token, *input_copy, *input_dup = NULL;
 	const char *delim = " ";
 	char buffer[MAX_CMD_PAYLOAD_SIZE] = {0};
@@ -1947,8 +1996,13 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 		SDE_ERROR("invalid argument(s), conn %d\n", connector != NULL);
 		return -EINVAL;
 	}
-
 	c_conn = to_sde_connector(connector);
+
+	sde_kms = _sde_connector_get_kms(&c_conn->base);
+	if (!sde_kms) {
+		SDE_ERROR("invalid kms\n");
+		return -EINVAL;
+	}
 
 	if (!c_conn->ops.cmd_transfer) {
 		SDE_ERROR("no cmd transfer support for connector name %s\n",
@@ -1959,6 +2013,14 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 	input = kzalloc(count + 1, GFP_KERNEL);
 	if (!input)
 		return -ENOMEM;
+
+	vm_ops = sde_vm_get_ops(sde_kms);
+	sde_vm_lock(sde_kms);
+	if (vm_ops && vm_ops->vm_owns_hw && !vm_ops->vm_owns_hw(sde_kms)) {
+		SDE_DEBUG("op not supported due to HW unavailablity\n");
+		rc = -EOPNOTSUPP;
+		goto end;
+	}
 
 	if (copy_from_user(input, p, count)) {
 		SDE_ERROR("copy from user failed\n");
@@ -2009,6 +2071,7 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 end1:
 	kfree(input_dup);
 end:
+	sde_vm_unlock(sde_kms);
 	kfree(input);
 	return rc;
 }
@@ -2431,10 +2494,10 @@ static void _sde_connector_report_panel_dead(struct sde_connector *conn,
 		return;
 
 	SDE_EVT32(SDE_EVTLOG_ERROR);
+	conn->panel_dead = true;
 	sde_encoder_display_failure_notification(conn->encoder,
 		skip_pre_kickoff);
 
-	conn->panel_dead = true;
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&conn->base.base,
@@ -2581,6 +2644,12 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 
 		sde_kms_info_add_keyint(info, "bit_clk_rate",
 					mode_info.clk_rate);
+
+		if (mode_info.bit_clk_count > 0)
+			sde_kms_info_add_list(info, "dyn_bitclk_list",
+					mode_info.bit_clk_rates,
+					mode_info.bit_clk_count);
+
 
 		topology_idx = (int)sde_rm_get_topology_name(&sde_kms->rm,
 					mode_info.topology);
@@ -2756,6 +2825,12 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 				CONNECTOR_PROP_HDR_INFO);
 		}
 
+		if (dsi_display && dsi_display->panel &&
+				dsi_display->panel->dyn_clk_caps.dyn_clk_support)
+			msm_property_install_range(&c_conn->property_info, "dyn_bit_clk",
+					0x0, 0, ~0, 0, CONNECTOR_PROP_DYN_BIT_CLK);
+
+
 		mutex_lock(&c_conn->base.dev->mode_config.mutex);
 		sde_connector_fill_modes(&c_conn->base,
 						dev->mode_config.max_width,
@@ -2797,16 +2872,25 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	msm_property_install_volatile_range(&c_conn->property_info,
 		"RETIRE_FENCE", 0x0, 0, ~0, 0, CONNECTOR_PROP_RETIRE_FENCE);
 
+	msm_property_install_volatile_range(&c_conn->property_info,
+		"RETIRE_FENCE_OFFSET", 0x0, 0, ~0, 0,
+		 CONN_PROP_RETIRE_FENCE_OFFSET);
+
 	msm_property_install_range(&c_conn->property_info, "autorefresh",
 			0x0, 0, AUTOREFRESH_MAX_FRAME_CNT, 0,
 			CONNECTOR_PROP_AUTOREFRESH);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
-		if (sde_kms->catalog->has_qsync && display_info->qsync_min_fps)
+		if (sde_kms->catalog->has_qsync && display_info->qsync_min_fps) {
 			msm_property_install_enum(&c_conn->property_info,
 					"qsync_mode", 0, 0, e_qsync_mode,
 					ARRAY_SIZE(e_qsync_mode), 0,
 					CONNECTOR_PROP_QSYNC_MODE);
+			if (sde_kms->catalog->has_avr_step)
+				msm_property_install_range(&c_conn->property_info,
+						"avr_step", 0x0, 0, U32_MAX, 0,
+						CONNECTOR_PROP_AVR_STEP);
+		}
 
 		if (display_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
 			msm_property_install_enum(&c_conn->property_info,
@@ -2840,7 +2924,7 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 		CONNECTOR_PROP_BL_SCALE);
 
 	msm_property_install_range(&c_conn->property_info, "sv_bl_scale",
-		0x0, 0, MAX_SV_BL_SCALE_LEVEL, MAX_SV_BL_SCALE_LEVEL,
+		0x0, 0, U32_MAX, MAX_SV_BL_SCALE_LEVEL,
 		CONNECTOR_PROP_SV_BL_SCALE);
 
 	c_conn->bl_scale_dirty = false;

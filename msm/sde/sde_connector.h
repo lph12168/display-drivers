@@ -375,12 +375,28 @@ struct sde_connector_ops {
 			void *display);
 
 	/**
+	 * set_dyn_bit_clk - set target dynamic clock rate
+	 * @connector: Pointer to drm connector structure
+	 * @value: Target dynamic clock rate
+	 * Returns: Zero on success
+	 */
+	int (*set_dyn_bit_clk)(struct drm_connector *connector, uint64_t value);
+
+	/**
 	 * get_qsync_min_fps - Get qsync min fps from qsync-min-fps-list
 	 * @display: Pointer to private display structure
 	 * @mode_fps: Fps value in dfps list
 	 * Returns: Qsync min fps value on success
 	 */
 	int (*get_qsync_min_fps)(void *display, u32 mode_fps);
+
+	/**
+	 * get_avr_step_req - Get the required avr_step for given fps rate
+	 * @display: Pointer to private display structure
+	 * @mode_fps: Fps value in dfps list
+	 * Returns: AVR step fps value on success
+	 */
+	int (*get_avr_step_req)(void *display, u32 mode_fps);
 };
 
 /**
@@ -476,6 +492,7 @@ struct sde_connector_dyn_hdr_metadata {
  * @allow_bl_update: Flag to indicate if BL update is allowed currently or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
  * @qsync_updated: Qsync settings were updated
+ * @avr_step: fps rate for fixed steps in AVR mode; 0 means step is disabled
  * @colorspace_updated: Colorspace property was updated
  * @last_cmd_tx_sts: status of the last command transfer
  * @hdr_capable: external hdr support present
@@ -545,6 +562,7 @@ struct sde_connector {
 	u8 hdr_plus_app_ver;
 	u32 qsync_mode;
 	bool qsync_updated;
+	u32 avr_step;
 
 	bool colorspace_updated;
 
@@ -597,6 +615,13 @@ struct sde_connector {
 	((C) ? to_sde_connector((C))->qsync_mode : 0)
 
 /**
+ * sde_connector_get_avr_step - get sde connector's avr_step
+ * @C: Pointer to drm connector structure
+ * Returns: Current cached avr_step value for given connector
+ */
+#define sde_connector_get_avr_step(C) ((C) ? to_sde_connector((C))->avr_step : 0)
+
+/**
  * sde_connector_get_propinfo - get sde connector's property info pointer
  * @C: Pointer to drm connector structure
  * Returns: Pointer to associated private property info structure
@@ -618,6 +643,7 @@ struct sde_connector {
  * @msm_mode: struct containing drm_mode and downstream private variables
  * @old_topology_name: topology of previous atomic state. remove this in later
  *	kernel versions which provide drm_atomic_state old_state pointers
+ * @cont_splash_populated: State was populated as part of cont. splash
  */
 struct sde_connector_state {
 	struct drm_connector_state base;
@@ -632,6 +658,8 @@ struct sde_connector_state {
 	struct sde_connector_dyn_hdr_metadata dyn_hdr_meta;
 	struct msm_display_mode msm_mode;
 	enum sde_rm_topology_name old_topology_name;
+
+	bool cont_splash_populated;
 };
 
 /**
@@ -959,6 +987,14 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 int sde_connector_roi_v1_check_roi(struct drm_connector_state *conn_state);
 
 /**
+ * sde_connector_set_dyn_bit_clk - set dynamic bit clock
+ * @conn: Pointer to drm_connector struct
+ * @value: Property value
+ * Returns: Zero on success
+ */
+int sde_connector_set_dyn_bit_clk(struct drm_connector *conn, uint64_t value);
+
+/**
  * sde_connector_schedule_status_work - manage ESD thread
  * conn: Pointer to drm_connector struct
  * @en: flag to start/stop ESD thread
@@ -1098,11 +1134,5 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
  * @connector: Pointer to DRM connector object
  */
 int sde_connector_esd_status(struct drm_connector *connector);
-
-/**
- * sde_connector_helper_post_kickoff - helper function for drm connector post kickoff
- * @connector: Pointer to DRM connector object
- */
-void sde_connector_helper_post_kickoff(struct drm_connector *connector);
 
 #endif /* _SDE_CONNECTOR_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -301,6 +301,24 @@ unsigned long msm_iomap_size(struct platform_device *pdev, const char *name)
 	return resource_size(res);
 }
 
+unsigned long msm_get_phys_addr(struct platform_device *pdev, const char *name)
+{
+	struct resource *res;
+
+	if (!name) {
+		dev_err(&pdev->dev, "invalid block name\n");
+		return 0;
+	}
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
+	if (!res) {
+		dev_err(&pdev->dev, "failed to get memory resource: %s\n", name);
+		return 0;
+	}
+
+	return res->start;
+}
+
 void msm_iounmap(struct platform_device *pdev, void __iomem *addr)
 {
 	devm_iounmap(&pdev->dev, addr);
@@ -499,7 +517,7 @@ static int msm_init_vram(struct drm_device *dev)
 		ret = of_property_read_u32(dev->dev->of_node,
 					"qcom,vram-size", &vram_size);
 		size = (ret < 0) ? memparse(vram, NULL) : vram_size;
-		DRM_INFO("using 0x%x VRAM carveout\n", size);
+		DRM_INFO("using 0x%lx VRAM carveout\n", size);
 		ret = 0;
 	}
 
@@ -795,6 +813,7 @@ static int msm_drm_component_init(struct device *dev)
 	INIT_LIST_HEAD(&priv->client_event_list);
 	INIT_LIST_HEAD(&priv->inactive_list);
 	INIT_LIST_HEAD(&priv->vm_client_list);
+	mutex_init(&priv->mm_lock);
 
 	mutex_init(&priv->vm_client_lock);
 
@@ -845,12 +864,12 @@ static int msm_drm_component_init(struct device *dev)
 		}
 	}
 
+	drm_mode_config_reset(ddev);
+
 	ret = drm_dev_register(ddev, 0);
 	if (ret)
 		goto fail;
 	priv->registered = true;
-
-	drm_mode_config_reset(ddev);
 
 	if (kms && kms->funcs && kms->funcs->cont_splash_config) {
 		ret = kms->funcs->cont_splash_config(kms, NULL);
@@ -2163,6 +2182,9 @@ static void __exit msm_drm_unregister(void)
 module_init(msm_drm_register);
 module_exit(msm_drm_unregister);
 
+#if IS_ENABLED(CONFIG_MSM_MMRM)
+MODULE_SOFTDEP("pre: msm-mmrm");
+#endif
 MODULE_AUTHOR("Rob Clark <robdclark@gmail.com");
 MODULE_DESCRIPTION("MSM DRM Driver");
 MODULE_LICENSE("GPL");

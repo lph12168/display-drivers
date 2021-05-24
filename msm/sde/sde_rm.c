@@ -37,7 +37,7 @@
 #define IS_COMPATIBLE_PP_DSC(p, d) (p % 2 == d % 2)
 
 /* ~one vsync poll time for rsvp_nxt to cleared by modeset from commit thread */
-#define RM_NXT_CLEAR_POLL_TIMEOUT_US 16600
+#define RM_NXT_CLEAR_POLL_TIMEOUT_US 33000
 
 /**
  * toplogy information to be used when ctl path version does not
@@ -101,6 +101,22 @@ static const struct sde_rm_topology_def g_top_table_v1[SDE_RM_TOPOLOGY_MAX] = {
 			MSM_DISPLAY_COMPRESSION_DSC },
 };
 
+char sde_hw_blk_str[SDE_HW_BLK_MAX][SDE_HW_BLK_NAME_LEN] = {
+	"top",
+	"sspp",
+	"lm",
+	"dspp",
+	"ds",
+	"ctl",
+	"cdm",
+	"pingpong",
+	"intf",
+	"wb",
+	"dsc",
+	"vdc",
+	"merge_3d",
+	"qdss",
+};
 
 /**
  * struct sde_rm_requirements - Reservation requirements parameter bundle
@@ -126,13 +142,15 @@ struct sde_rm_requirements {
  * @enc_id:	Reservations are tracked by Encoder DRM object ID.
  *		CRTCs may be connected to multiple Encoders.
  *		An encoder or connector id identifies the display path.
- * @topology	DRM<->HW topology use case
+ * @topology:	DRM<->HW topology use case
+ * @pending:	True for pending rsvp-nxt, cleared when the rsvp is committed
  */
 struct sde_rm_rsvp {
 	struct list_head list;
 	uint32_t seq;
 	uint32_t enc_id;
 	enum sde_rm_topology_name topology;
+	bool pending;
 };
 
 /**
@@ -275,9 +293,9 @@ static void _sde_rm_print_rsvps(
 	SDE_DEBUG("%d\n", stage);
 
 	list_for_each_entry(rsvp, &rm->rsvps, list) {
-		SDE_DEBUG("%d rsvp[s%ue%u] topology %d\n", stage, rsvp->seq,
-				rsvp->enc_id, rsvp->topology);
-		SDE_EVT32(stage, rsvp->seq, rsvp->enc_id, rsvp->topology);
+		SDE_DEBUG("%d rsvp%s[s%ue%u] topology %d\n", stage, rsvp->pending ? "_nxt" : "",
+				rsvp->seq, rsvp->enc_id, rsvp->topology);
+		SDE_EVT32(stage, rsvp->seq, rsvp->enc_id, rsvp->topology, rsvp->pending);
 	}
 
 	for (type = 0; type < SDE_HW_BLK_MAX; type++) {
@@ -724,6 +742,54 @@ fail:
 	return rc;
 }
 
+#ifdef CONFIG_DEBUG_FS
+static int _sde_rm_status_show(struct seq_file *s, void *data)
+{
+	struct sde_rm *rm;
+	struct sde_rm_hw_blk *blk;
+	u32 type, allocated, unallocated;
+
+	if (!s || !s->private)
+		return -EINVAL;
+
+	rm = s->private;
+	for (type = SDE_HW_BLK_LM; type < SDE_HW_BLK_MAX; type++) {
+		allocated = 0;
+		unallocated = 0;
+		list_for_each_entry(blk, &rm->hw_blks[type], list) {
+			if (!blk->rsvp && !blk->rsvp_nxt)
+				unallocated++;
+			else
+				allocated++;
+		}
+		seq_printf(s, "type:%d blk:%s allocated:%d unallocated:%d\n",
+			type, sde_hw_blk_str[type], allocated, unallocated);
+	}
+
+	return 0;
+}
+
+static int _sde_rm_debugfs_status_open(struct inode *inode,
+		struct file *file)
+{
+	return single_open(file, _sde_rm_status_show, inode->i_private);
+}
+
+void sde_rm_debugfs_init(struct sde_rm *sde_rm, struct dentry *parent)
+{
+	static const struct file_operations debugfs_rm_status_fops = {
+		.open =		_sde_rm_debugfs_status_open,
+		.read =		seq_read,
+	};
+
+	debugfs_create_file("rm_status", 0400, parent, sde_rm, &debugfs_rm_status_fops);
+}
+#else
+void sde_rm_debugfs_init(struct sde_rm *rm, struct dentry *parent)
+{
+}
+#endif
+
 int sde_rm_init(struct sde_rm *rm,
 		struct sde_mdss_cfg *cat,
 		void __iomem *mmio,
@@ -1000,7 +1066,7 @@ static bool _sde_rm_check_lm_and_get_connected_blks(
 	is_conn_secondary = (reqs->hw_res.display_type ==
 				 SDE_CONNECTOR_SECONDARY) ? true : false;
 
-	SDE_DEBUG("check lm %d: dspp %d ds %d pp %d features %d disp type %d\n",
+	SDE_DEBUG("check lm %d: dspp %d ds %d pp %d features %ld disp type %d\n",
 		 lm_cfg->id, lm_cfg->dspp, lm_cfg->ds, lm_cfg->pingpong,
 		 lm_cfg->features, (int)reqs->hw_res.display_type);
 
@@ -1036,7 +1102,7 @@ static bool _sde_rm_check_lm_and_get_connected_blks(
 	} else if ((!is_conn_primary && lm_primary_pref) ||
 			(!is_conn_secondary && lm_secondary_pref)) {
 		SDE_DEBUG(
-			"display preference is not met. display_type: %d lm_features: %x\n",
+			"display preference is not met. display_type: %d lm_features: %lx\n",
 			(int)reqs->hw_res.display_type, lm_cfg->features);
 		return false;
 	}
@@ -1822,6 +1888,7 @@ static int _sde_rm_make_next_rsvp(struct sde_rm *rm, struct drm_encoder *enc,
 	rsvp->seq = ++rm->rsvp_next_seq;
 	rsvp->enc_id = enc->base.id;
 	rsvp->topology = reqs->topology->top_name;
+	rsvp->pending = true;
 	list_add_tail(&rsvp->list, &rm->rsvps);
 
 	ret = _sde_rm_make_lm_rsvp(rm, rsvp, reqs, splash_display);
@@ -1857,6 +1924,60 @@ static int _sde_rm_make_next_rsvp(struct sde_rm *rm, struct drm_encoder *enc,
 	return ret;
 }
 
+static int _sde_rm_update_pipe_cnt_from_active(
+		struct sde_splash_display *splash_display,
+		u32 active_pipes_mask)
+{
+	int i;
+	u32 sspp_present = 0, space_remain = 0;
+
+	if (!active_pipes_mask) {
+		return 0;
+	} else if (!splash_display) {
+		SDE_ERROR("invalid splash display provided\n");
+		return -EINVAL;
+	} else if (splash_display->pipe_cnt >=
+			ARRAY_SIZE(splash_display->pipes)) {
+		SDE_ERROR("no room to add active pipes to pipe array\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < splash_display->pipe_cnt; i++)
+		sspp_present |= BIT(splash_display->pipes[i].sspp);
+
+	space_remain = ARRAY_SIZE(splash_display->pipes)
+			- splash_display->pipe_cnt;
+
+	for (i = SSPP_VIG0; i < SSPP_MAX; i++) {
+		/* Skip planes already present in the array */
+		if (!(active_pipes_mask & BIT(i)) ||
+				(sspp_present & BIT(i)))
+			continue;
+
+		if (space_remain < R_MAX) {
+			SDE_ERROR("not enough room to add active pipe %d", i);
+			return -EINVAL;
+		}
+
+		/*
+		 * A plane in active but not sspp_present indicates a non-pixel
+		 * plane. Register both rectangles as we can't differentiate
+		 */
+		splash_display->pipes[splash_display->pipe_cnt].sspp = i;
+		splash_display->pipes[splash_display->pipe_cnt].is_virtual =
+				false;
+		splash_display->pipe_cnt++;
+		space_remain--;
+		splash_display->pipes[splash_display->pipe_cnt].sspp = i;
+		splash_display->pipes[splash_display->pipe_cnt].is_virtual =
+				true;
+		splash_display->pipe_cnt++;
+		space_remain--;
+	}
+
+	return 0;
+}
+
 /**
  * _sde_rm_get_hw_blk_for_cont_splash - retrieve the LM blocks on given CTL
  * and populate the connected HW blk ids in sde_splash_display
@@ -1869,9 +1990,10 @@ static int _sde_rm_get_hw_blk_for_cont_splash(struct sde_rm *rm,
 		struct sde_hw_ctl *ctl,
 		struct sde_splash_display *splash_display)
 {
-	u32 lm_reg;
+	u32 lm_reg, max_cnt, active_pipes_mask = 0;
 	struct sde_rm_hw_iter iter_lm, iter_dsc;
 	struct sde_kms *sde_kms;
+	size_t start_count;
 
 	if (!rm || !ctl || !splash_display) {
 		SDE_ERROR("invalid input parameters\n");
@@ -1879,6 +2001,7 @@ static int _sde_rm_get_hw_blk_for_cont_splash(struct sde_rm *rm,
 	}
 
 	sde_kms = container_of(rm, struct sde_kms, rm);
+	max_cnt = ARRAY_SIZE(splash_display->pipes);
 
 	sde_rm_init_hw_iter(&iter_lm, 0, SDE_HW_BLK_LM);
 	sde_rm_init_hw_iter(&iter_dsc, 0, SDE_HW_BLK_DSC);
@@ -1895,23 +2018,40 @@ static int _sde_rm_get_hw_blk_for_cont_splash(struct sde_rm *rm,
 		SDE_DEBUG("lm_cnt=%d lm_reg[%d]=0x%x\n", splash_display->lm_cnt,
 				iter_lm.blk->id - LM_0, lm_reg);
 
-		if (ctl->ops.get_staged_sspp &&
-				ctl->ops.get_staged_sspp(ctl, iter_lm.blk->id,
-					&splash_display->pipes[
-					splash_display->pipe_cnt], 1)) {
-			splash_display->pipe_cnt++;
-		} else if (sde_kms->splash_data.type == SDE_VM_HANDOFF) {
+		start_count = splash_display->pipe_cnt;
+		if (ctl->ops.get_staged_sspp) {
+			struct sde_sspp_index_info *start =
+				&splash_display->pipes[
+					splash_display->pipe_cnt];
+
+			splash_display->pipe_cnt += ctl->ops.get_staged_sspp(
+					ctl, iter_lm.blk->id, start,
+					max_cnt - splash_display->pipe_cnt);
+		}
+
+		if (sde_kms->splash_data.type == SDE_VM_HANDOFF) {
 			/* Allow VM handoff without any pipes, as it is a
 			 * valid case to have NULL commit before the
 			 * transition.
 			 */
 			SDE_DEBUG("VM handoff with no pipes staged\n");
-		} else {
-			SDE_ERROR("no pipe detected on LM-%d\n",
+		} else if (start_count == splash_display->pipe_cnt) {
+			SDE_ERROR("no pipes detected on LM-%d\n",
 					iter_lm.blk->id - LM_0);
+			return 0;
+		} else if (splash_display->pipe_cnt > max_cnt) {
+			SDE_ERROR("found %d pipes exceed max of %d\n",
+					splash_display->pipe_cnt, max_cnt);
 			return 0;
 		}
 	}
+
+	if (ctl->ops.get_active_pipes)
+		active_pipes_mask = ctl->ops.get_active_pipes(ctl);
+
+	if (_sde_rm_update_pipe_cnt_from_active(splash_display,
+			active_pipes_mask))
+		return 0;
 
 	while (_sde_rm_get_hw_locked(rm, &iter_dsc)) {
 		if (ctl->ops.read_active_status &&
@@ -2078,9 +2218,7 @@ static int _sde_rm_populate_requirements(
 	return 0;
 }
 
-static struct sde_rm_rsvp *_sde_rm_get_rsvp(
-		struct sde_rm *rm,
-		struct drm_encoder *enc)
+static struct sde_rm_rsvp *_sde_rm_get_rsvp(struct sde_rm *rm, struct drm_encoder *enc, bool nxt)
 {
 	struct sde_rm_rsvp *i;
 
@@ -2093,30 +2231,20 @@ static struct sde_rm_rsvp *_sde_rm_get_rsvp(
 		return NULL;
 
 	list_for_each_entry(i, &rm->rsvps, list)
-		if (i->enc_id == enc->base.id)
+		if (i->pending == nxt && i->enc_id == enc->base.id)
 			return i;
 
 	return NULL;
 }
 
-static struct sde_rm_rsvp *_sde_rm_get_rsvp_nxt(
-		struct sde_rm *rm,
-		struct drm_encoder *enc)
+static struct sde_rm_rsvp *_sde_rm_get_rsvp_nxt(struct sde_rm *rm, struct drm_encoder *enc)
 {
-	struct sde_rm_rsvp *i;
+        return _sde_rm_get_rsvp(rm, enc, true);
+}
 
-	if (list_empty(&rm->rsvps))
-		return NULL;
-
-	list_for_each_entry(i, &rm->rsvps, list)
-		if (i->enc_id == enc->base.id)
-			break;
-
-	list_for_each_entry_continue(i, &rm->rsvps, list)
-		if (i->enc_id == enc->base.id)
-			return i;
-
-	return NULL;
+static struct sde_rm_rsvp *_sde_rm_get_rsvp_cur(struct sde_rm *rm, struct drm_encoder *enc)
+{
+	return _sde_rm_get_rsvp(rm, enc, false);
 }
 
 static struct drm_connector *_sde_rm_get_connector(
@@ -2314,10 +2442,7 @@ void sde_rm_release(struct sde_rm *rm, struct drm_encoder *enc, bool nxt)
 
 	mutex_lock(&rm->rm_lock);
 
-	if (nxt)
-		rsvp = _sde_rm_get_rsvp_nxt(rm, enc);
-	else
-		rsvp = _sde_rm_get_rsvp(rm, enc);
+	rsvp = _sde_rm_get_rsvp(rm, enc, nxt);
 	if (!rsvp) {
 		SDE_DEBUG("failed to find rsvp for enc %d, nxt %d",
 				enc->base.id, nxt);
@@ -2355,14 +2480,11 @@ end:
 	mutex_unlock(&rm->rm_lock);
 }
 
-static int _sde_rm_commit_rsvp(
-		struct sde_rm *rm,
-		struct sde_rm_rsvp *rsvp,
+static void _sde_rm_commit_rsvp(struct sde_rm *rm, struct sde_rm_rsvp *rsvp,
 		struct drm_connector_state *conn_state)
 {
 	struct sde_rm_hw_blk *blk;
 	enum sde_hw_blk_type type;
-	int ret = 0;
 
 	/* Swap next rsvp to be the active */
 	for (type = 0; type < SDE_HW_BLK_MAX; type++) {
@@ -2377,13 +2499,9 @@ static int _sde_rm_commit_rsvp(
 		}
 	}
 
-	if (!ret) {
-		SDE_DEBUG("rsrv enc %d topology %d\n", rsvp->enc_id,
-				rsvp->topology);
-		SDE_EVT32(rsvp->enc_id, rsvp->topology);
-	}
-
-	return ret;
+	rsvp->pending = false;
+	SDE_DEBUG("rsrv enc %d topology %d\n", rsvp->enc_id, rsvp->topology);
+	SDE_EVT32(rsvp->enc_id, rsvp->topology);
 }
 
 /* call this only after rm_mutex held */
@@ -2422,7 +2540,7 @@ int sde_rm_reserve(
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
 	struct msm_compression_info *comp_info;
-	int ret;
+	int ret = 0;
 
 	if (!rm || !enc || !crtc_state || !conn_state) {
 		SDE_ERROR("invalid arguments\n");
@@ -2452,13 +2570,13 @@ int sde_rm_reserve(
 	SDE_DEBUG("reserving hw for conn %d enc %d crtc %d test_only %d\n",
 			conn_state->connector->base.id, enc->base.id,
 			crtc_state->crtc->base.id, test_only);
-	SDE_EVT32(enc->base.id, conn_state->connector->base.id);
+	SDE_EVT32(enc->base.id, conn_state->connector->base.id, test_only);
 
 	mutex_lock(&rm->rm_lock);
 
 	_sde_rm_print_rsvps(rm, SDE_RM_STAGE_BEGIN);
 
-	rsvp_cur = _sde_rm_get_rsvp(rm, enc);
+	rsvp_cur = _sde_rm_get_rsvp_cur(rm, enc);
 	rsvp_nxt = _sde_rm_get_rsvp_nxt(rm, enc);
 
 	/*
@@ -2472,9 +2590,10 @@ int sde_rm_reserve(
 	if (test_only && rsvp_cur && rsvp_nxt) {
 		rsvp_nxt = _sde_rm_poll_get_rsvp_nxt_locked(rm, enc);
 		if (rsvp_nxt) {
-			SDE_ERROR("poll timeout cur %d nxt %d enc %d\n",
+			pr_err("poll timeout cur %d nxt %d enc %d\n",
 				rsvp_cur->seq, rsvp_nxt->seq, enc->base.id);
-			ret = -EINVAL;
+			SDE_EVT32(enc->base.id, rsvp_cur->seq, rsvp_nxt->seq, SDE_EVTLOG_ERROR);
+			ret = -EAGAIN;
 			goto end;
 		}
 	}
@@ -2547,68 +2666,13 @@ int sde_rm_reserve(
 
 commit_rsvp:
 	_sde_rm_release_rsvp(rm, rsvp_cur, conn_state->connector);
-	ret = _sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
+	_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
 
 end:
 	kfree(comp_info);
 	_sde_rm_print_rsvps(rm, SDE_RM_STAGE_FINAL);
 	mutex_unlock(&rm->rm_lock);
 
-	return ret;
-}
-
-int sde_rm_ext_blk_create_reserve(struct sde_rm *rm,
-		struct sde_hw_blk *hw, struct drm_encoder *enc)
-{
-	struct sde_rm_hw_blk *blk;
-	struct sde_rm_rsvp *rsvp;
-	int ret = 0;
-
-	if (!rm || !hw || !enc) {
-		SDE_ERROR("invalid parameters\n");
-		return -EINVAL;
-	}
-
-	if (hw->type >= SDE_HW_BLK_MAX) {
-		SDE_ERROR("invalid HW type\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&rm->rm_lock);
-
-	rsvp = _sde_rm_get_rsvp(rm, enc);
-	if (!rsvp) {
-		rsvp = kzalloc(sizeof(*rsvp), GFP_KERNEL);
-		if (!rsvp) {
-			ret = -ENOMEM;
-			goto end;
-		}
-
-		rsvp->seq = ++rm->rsvp_next_seq;
-		rsvp->enc_id = enc->base.id;
-		list_add_tail(&rsvp->list, &rm->rsvps);
-
-		SDE_DEBUG("create rsvp %d for enc %d\n",
-					rsvp->seq, rsvp->enc_id);
-	}
-
-	blk = kzalloc(sizeof(*blk), GFP_KERNEL);
-	if (!blk) {
-		ret = -ENOMEM;
-		goto end;
-	}
-
-	blk->type = hw->type;
-	blk->id = hw->id;
-	blk->hw = hw;
-	blk->rsvp = rsvp;
-	list_add_tail(&blk->list, &rm->hw_blks[hw->type]);
-
-	SDE_DEBUG("create blk %d %d for rsvp %d enc %d\n", blk->type, blk->id,
-					rsvp->seq, rsvp->enc_id);
-
-end:
-	mutex_unlock(&rm->rm_lock);
 	return ret;
 }
 
@@ -2627,7 +2691,7 @@ int sde_rm_ext_blk_destroy(struct sde_rm *rm,
 
 	mutex_lock(&rm->rm_lock);
 
-	rsvp = _sde_rm_get_rsvp(rm, enc);
+	rsvp = _sde_rm_get_rsvp_cur(rm, enc);
 	if (!rsvp) {
 		ret = -ENOENT;
 		SDE_ERROR("failed to find rsvp for enc %d\n", enc->base.id);

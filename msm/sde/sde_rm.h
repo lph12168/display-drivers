@@ -215,6 +215,12 @@ struct sde_rm_hw_request {
 enum sde_rm_topology_name sde_rm_get_topology_name(struct sde_rm *rm,
 		struct msm_display_topology topology);
 
+/**
+ * sde_rm_debugfs_init - setup debugfs node for rm module
+ * @rm: SDE resource manager handle
+ * @parent: debugfs parent directory node
+ */
+void sde_rm_debugfs_init(struct sde_rm *rm, struct dentry *parent);
 
 /**
  * sde_rm_init - Read hardware catalog and create reservation tracking objects
@@ -390,18 +396,6 @@ static inline int sde_rm_topology_get_num_lm(struct sde_rm *rm,
 bool sde_rm_topology_is_group(struct sde_rm *rm,
 		struct drm_crtc_state *state,
 		enum sde_rm_topology_group group);
-
-/**
- * sde_rm_ext_blk_create_reserve - Create external HW blocks
- *	in resource manager and reserve for specific encoder.
- * @rm: SDE Resource Manager handle
- * @hw: external HW block
- * @drm_enc: DRM Encoder handle
- * @Return: 0 on Success otherwise -ERROR
- */
-int sde_rm_ext_blk_create_reserve(struct sde_rm *rm,
-				struct sde_hw_blk *hw,
-				struct drm_encoder *enc);
 
 /**
  * sde_rm_ext_blk_destroy - Given the encoder for the display chain, release

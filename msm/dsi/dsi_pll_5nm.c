@@ -107,10 +107,11 @@ static inline void dsi_pll_set_phy_post_div(struct dsi_pll_resource *pll, u32
 	reg_val &= ~0x0F;
 	reg_val |= phy_post_div;
 	DSI_PLL_REG_W(pll->phy_base, PHY_CMN_CLK_CFG0, reg_val);
+	/* For slave PLL, this divider always should be set to 1 */
 	if (pll->slave) {
-		reg_val = DSI_PLL_REG_R(pll->slave->phy_base, PHY_CMN_CLK_CFG0);
+		reg_val = DSI_PLL_REG_R(pll->phy_base, PHY_CMN_CLK_CFG0);
 		reg_val &= ~0x0F;
-		reg_val |= phy_post_div;
+		reg_val |= 0x1;
 		DSI_PLL_REG_W(pll->slave->phy_base, PHY_CMN_CLK_CFG0, reg_val);
 	}
 }
@@ -240,8 +241,6 @@ static void dsi_pll_setup_config(struct dsi_pll_5nm *pll,
 		if (rsc->ssc_ppm)
 			config->ssc_offset = rsc->ssc_ppm;
 	}
-
-	dsi_pll_config_slave(rsc);
 }
 
 static void dsi_pll_calc_dec_frac(struct dsi_pll_5nm *pll,
@@ -272,11 +271,11 @@ static void dsi_pll_calc_dec_frac(struct dsi_pll_5nm *pll,
 	switch (rsc->pll_revision) {
 	case DSI_PLL_5NM:
 	default:
-		if (pll_freq <= 1000000000)
+		if (pll_freq <= 1000000000ULL)
 			regs->pll_clock_inverters = 0xA0;
-		else if (pll_freq <= 2500000000)
+		else if (pll_freq <= 2500000000ULL)
 			regs->pll_clock_inverters = 0x20;
-		else if (pll_freq <= 3500000000)
+		else if (pll_freq <= 3500000000ULL)
 			regs->pll_clock_inverters = 0x00;
 		else
 			regs->pll_clock_inverters = 0x40;
@@ -371,16 +370,16 @@ static void dsi_pll_config_hzindep_reg(struct dsi_pll_5nm *pll,
 	switch (rsc->pll_revision) {
 	case DSI_PLL_5NM:
 	default:
-		if (vco_rate < 3100000000)
+		if (vco_rate < 3100000000ULL)
 			DSI_PLL_REG_W(pll_base,
 					PLL_ANALOG_CONTROLS_FIVE_1, 0x01);
 		else
 			DSI_PLL_REG_W(pll_base,
 					PLL_ANALOG_CONTROLS_FIVE_1, 0x03);
 
-		if (vco_rate < 1520000000)
+		if (vco_rate < 1520000000ULL)
 			DSI_PLL_REG_W(pll_base, PLL_VCO_CONFIG_1, 0x08);
-		else if (vco_rate < 2990000000)
+		else if (vco_rate < 2990000000ULL)
 			DSI_PLL_REG_W(pll_base, PLL_VCO_CONFIG_1, 0x00);
 		else
 			DSI_PLL_REG_W(pll_base, PLL_VCO_CONFIG_1, 0x01);
@@ -584,7 +583,7 @@ static void dsi_pll_commit(struct dsi_pll_5nm *pll,
 		       reg->frac_div_start_mid);
 	DSI_PLL_REG_W(pll_base, PLL_FRAC_DIV_START_HIGH_1,
 		       reg->frac_div_start_high);
-	DSI_PLL_REG_W(pll_base, PLL_PLL_LOCKDET_RATE_1, 0x40);
+	DSI_PLL_REG_W(pll_base, PLL_PLL_LOCKDET_RATE_1, reg->pll_lockdet_rate);
 	DSI_PLL_REG_W(pll_base, PLL_PLL_LOCK_DELAY, 0x06);
 	DSI_PLL_REG_W(pll_base, PLL_CMODE_1,
 			pll->cphy_enabled ? 0x00 : 0x10);
@@ -711,8 +710,17 @@ static unsigned long dsi_pll_vco_recalc_rate(struct dsi_pll_resource *pll)
 	u32 pll_post_div;
 	u64 pll_freq, tmp64;
 	u64 vco_rate;
+	struct dsi_pll_5nm *pll_5nm;
+	struct dsi_pll_config *config;
 
 	ref_clk = pll->vco_ref_clk_rate;
+	pll_5nm = pll->priv;
+	if (!pll_5nm) {
+		DSI_PLL_ERR(pll, "pll configuration not found\n");
+		return -EINVAL;
+	}
+
+	config = &pll_5nm->pll_configuration;
 
 	dec = DSI_PLL_REG_R(pll->pll_base, PLL_DECIMAL_DIV_START_1);
 	dec &= 0xFF;
@@ -723,7 +731,7 @@ static unsigned long dsi_pll_vco_recalc_rate(struct dsi_pll_resource *pll)
 	frac |= ((DSI_PLL_REG_R(pll->pll_base, PLL_FRAC_DIV_START_HIGH_1) & 0x3)
 					<< 16);
 
-	multiplier = 1 << 18;
+	multiplier = 1 << config->frac_bits;
 	pll_freq = dec * (ref_clk * 2);
 	tmp64 = (ref_clk * 2 * frac);
 	pll_freq += div_u64(tmp64, multiplier);
@@ -769,9 +777,9 @@ static unsigned long dsi_pll_byteclk_recalc_rate(struct clk_hw *hw,
 	byte_rate = div_u64(vco_rate, phy_post_div);
 
 	if (pll->type == DSI_PHY_TYPE_DPHY)
-		byte_rate = div_u64(vco_rate, 8);
+		byte_rate = div_u64(byte_rate, 8);
 	else
-		byte_rate = div_u64(vco_rate, 7);
+		byte_rate = div_u64(byte_rate, 7);
 
 	return byte_rate;
 }
@@ -908,6 +916,8 @@ int dsi_pll_clock_register_5nm(struct platform_device *pdev,
 	pll_res->vco_delay = VCO_DELAY_USEC;
 	pll_res->vco_min_rate = 600000000;
 	pll_res->vco_ref_clk_rate = 19200000UL;
+
+	dsi_pll_setup_config(pll_res->priv, pll_res);
 
 	clk_data = devm_kzalloc(&pdev->dev, sizeof(struct clk_onecell_data),
 					GFP_KERNEL);
@@ -1049,7 +1059,7 @@ static int dsi_pll_5nm_set_pclk_div(struct dsi_pll_resource *pll, bool commit)
 		pclk_src_rate = div_u64(pclk_src_rate, 7);
 	}
 
-	pclk_div = pclk_src_rate / pll->pclk_rate;
+	pclk_div = DIV_ROUND_CLOSEST(pclk_src_rate, pll->pclk_rate);
 
 	DSI_PLL_DBG(pll, "pclk rate: %llu, dsi_clk: %d, pclk_div: %d\n",
 			pll->pclk_rate, dsi_clk, pclk_div);
@@ -1067,9 +1077,6 @@ static int dsi_pll_5nm_vco_set_rate(struct dsi_pll_resource *pll_res)
 {
 	struct dsi_pll_5nm *pll;
 
-	if (pll_res->pll_on)
-		return 0;
-
 	pll = pll_res->priv;
 	if (!pll) {
 		DSI_PLL_ERR(pll_res, "pll configuration not found\n");
@@ -1081,8 +1088,6 @@ static int dsi_pll_5nm_vco_set_rate(struct dsi_pll_resource *pll_res)
 	pll_res->vco_current_rate = pll_res->vco_rate;
 
 	dsi_pll_detect_phy_mode(pll, pll_res);
-
-	dsi_pll_setup_config(pll, pll_res);
 
 	dsi_pll_calc_dec_frac(pll, pll_res);
 
@@ -1350,12 +1355,9 @@ static int dsi_pll_5nm_dynamic_clk_vco_set_rate(struct dsi_pll_resource *rsc)
 		DSI_PLL_ERR(rsc, "cannot find pll codes rate=%ld\n", rate);
 		return -EINVAL;
 	}
-	DSI_PLL_DBG(rsc, "ndx=%d, rate=%lu\n", rate);
 
-
+	DSI_PLL_DBG(rsc, "ndx=%d, rate=%lu\n", rsc->index, rate);
 	rsc->vco_current_rate = rate;
-
-	dsi_pll_setup_config(pll, rsc);
 
 	dsi_pll_calc_dec_frac(pll, rsc);
 
@@ -1385,8 +1387,6 @@ static int dsi_pll_5nm_enable(struct dsi_pll_resource *rsc)
 		goto error;
 	}
 
-	rsc->pll_on = true;
-
 	/*
 	 * assert power on reset for PHY digital in case the PLL is
 	 * enabled after CX of analog domain power collapse. This needs
@@ -1410,11 +1410,6 @@ static int dsi_pll_5nm_disable(struct dsi_pll_resource *rsc)
 {
 	int rc = 0;
 
-	if (!rsc->pll_on) {
-		DSI_PLL_ERR(rsc, "is not enabled\n");
-		return -EINVAL;
-	}
-
 	DSI_PLL_DBG(rsc, "stop PLL\n");
 
 	/*
@@ -1433,7 +1428,6 @@ static int dsi_pll_5nm_disable(struct dsi_pll_resource *rsc)
 	}
 	/* flush, ensure all register writes are done*/
 	wmb();
-	rsc->pll_on = false;
 
 	return rc;
 }
@@ -1443,6 +1437,8 @@ int dsi_pll_5nm_configure(void *pll, bool commit)
 
 	int rc = 0;
 	struct dsi_pll_resource *rsc = (struct dsi_pll_resource *)pll;
+
+	dsi_pll_config_slave(rsc);
 
 	/* PLL power needs to be enabled before accessing PLL registers */
 	dsi_pll_enable_pll_bias(rsc);

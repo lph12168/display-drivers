@@ -154,6 +154,8 @@ struct dsi_display_ext_bridge {
  *		      index into the ctrl[MAX_DSI_CTRLS_PER_DISPLAY] array.
  * @cmd_master_idx:   The master controller for sending DSI commands to panel.
  * @video_master_idx: The master controller for enabling video engine.
+ * @dyn_bit_clk:      The DSI bit clock rate dynamically set by user mode client.
+ * @dyn_bit_clk_pending: Flag indicating the pending DSI dynamic bit clock rate change.
  * @cached_clk_rate:  The cached DSI clock rate set dynamically by sysfs.
  * @clkrate_change_pending: Flag indicating the pending DSI clock re-enabling.
  * @clock_info:       Clock sourcing for DSI display.
@@ -185,6 +187,7 @@ struct dsi_display_ext_bridge {
  * @is_active:        status of the display
  * @trusted_vm_env:   Set to true, it the executing VM is Trusted VM.
  *                    Set to false, otherwise.
+ * @hw_ownership:     Indicates if VM owns the hardware resources.
  * @tx_cmd_buf_ndx:   Index to the DSI debugfs TX CMD buffer.
  * @cmd_set:	      Debugfs TX cmd set.
  * @enabled:	      Boolean to indicate display enabled.
@@ -225,7 +228,9 @@ struct dsi_display {
 	u32 video_master_idx;
 
 	/* dynamic DSI clock info*/
-	u32  cached_clk_rate;
+	u32 dyn_bit_clk;
+	bool dyn_bit_clk_pending;
+	u32 cached_clk_rate;
 	atomic_t clkrate_change_pending;
 
 	struct dsi_display_clk_info clock_info;
@@ -283,6 +288,7 @@ struct dsi_display {
 	bool is_active;
 
 	bool trusted_vm_env;
+	bool hw_ownership;
 
 	int tx_cmd_buf_ndx;
 	struct dsi_panel_cmd_set cmd_set;
@@ -413,10 +419,18 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm);
  * @display:            Handle to display.
  * @mode_fps:           Fps value of current mode
  *
- * Return: error code.
+ * Return: Qsync min fps rate or -ve error code.
  */
 int dsi_display_get_qsync_min_fps(void *dsi_display, u32 mode_fps);
 
+/**
+ * dsi_display_get_avr_step_req_fps() - get avr step rate for given fps
+ * @display:            Handle to display.
+ * @mode_fps:           Fps value of current mode
+ *
+ * Return: AVR step rate or -ve error code.
+ */
+int dsi_display_get_avr_step_req_fps(void *dsi_display, u32 mode_fps);
 
 /**
  * dsi_display_find_mode() - retrieve cached DSI mode given relevant params
@@ -775,5 +789,22 @@ int dsi_display_get_panel_vfp(void *display,
  * Return: Zero on Success
  */
 int dsi_display_dump_clks_state(struct dsi_display *display);
+
+/**
+ * dsi_display_update_dyn_bit_clk() - update mode timing to compensate for dynamic bit clock
+ * @display:         Handle to display
+ * @mode:            Mode to be updated
+ * Return: Zero on Success
+ */
+int dsi_display_update_dyn_bit_clk(struct dsi_display *display, struct dsi_display_mode *mode);
+
+/**
+ * dsi_display_restore_bit_clk() - restore mode bit clock rate value from dynamic bit clock
+ * @display:         Handle to display
+ * @mode:            Mode to be updated
+ * Return: Zero on Success
+ */
+int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_mode *mode);
+
 
 #endif /* _DSI_DISPLAY_H_ */

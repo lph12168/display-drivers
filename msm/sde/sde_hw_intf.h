@@ -50,6 +50,7 @@ struct intf_prog_fetch {
 
 struct intf_status {
 	u8 is_en;		/* interface timing engine is enabled or not */
+	bool is_prog_fetch_en;	/* interface prog fetch counter is enabled or not */
 	u32 frame_count;	/* frame count since timing engine enabled */
 	u32 line_count;		/* current line count including blanking */
 };
@@ -62,7 +63,8 @@ struct intf_tear_status {
 struct intf_avr_params {
 	u32 default_fps;
 	u32 min_fps;
-	u32 avr_mode; /* 0 - disable, 1 - continuous, 2 - one-shot */
+	u32 avr_mode; /* one of enum @sde_rm_qsync_modes */
+	u32 avr_step_lines; /* 0 or 1 means disabled */
 };
 
 /**
@@ -194,6 +196,13 @@ struct sde_hw_intf_ops {
 			const struct intf_avr_params *avr_params);
 
 	/**
+	 * Indicates the AVR armed status
+	 *
+	 * @return: false if a trigger is pending, else true while AVR is enabled
+	 */
+	u32 (*get_avr_status)(struct sde_hw_intf *intf);
+
+	/**
 	 * Enable/disable 64 bit compressed data input to interface block
 	 */
 	void (*enable_compressed_input)(struct sde_hw_intf *intf,
@@ -204,6 +213,16 @@ struct sde_hw_intf_ops {
 	 */
 	int (*check_and_reset_tearcheck)(struct sde_hw_intf *intf,
 			struct intf_tear_status *status);
+
+	/**
+	 * Reset the interface frame & line counter
+	 */
+	void (*reset_counter)(struct sde_hw_intf *intf);
+
+	/**
+	 * Get the HW vsync timestamp counter
+	 */
+	u64 (*get_vsync_timestamp)(struct sde_hw_intf *intf);
 
 	/**
 	 * Enable processing of 2 pixels per clock

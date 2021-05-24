@@ -150,11 +150,15 @@
 #define SDE_UIDLE_FAL10_DANGER 6
 #define SDE_UIDLE_FAL10_TARGET_IDLE 50
 #define SDE_UIDLE_FAL1_TARGET_IDLE 40
+#define SDE_UIDLE_FAL1_MAX_THRESHOLD 15
+#define SDE_UIDLE_REV102_FAL1_MAX_THRESHOLD 255
 #define SDE_UIDLE_FAL10_THRESHOLD_60 12
 #define SDE_UIDLE_FAL10_THRESHOLD_90 13
 #define SDE_UIDLE_MAX_DWNSCALE 1500
 #define SDE_UIDLE_MAX_FPS_60 60
 #define SDE_UIDLE_MAX_FPS_90 90
+#define SDE_UIDLE_MAX_FPS_120 120
+#define SDE_UIDLE_MAX_FPS_240 240
 
 #define SSPP_GET_REGDMA_BASE(blk_base, top_off) ((blk_base) >= (top_off) ?\
 		(blk_base) - (top_off) : (blk_base))
@@ -241,12 +245,7 @@ enum {
 	QOS_REFRESH_RATES,
 	QOS_DANGER_LUT,
 	QOS_SAFE_LUT,
-	QOS_CREQ_LUT_LINEAR,
-	QOS_CREQ_LUT_MACROTILE,
-	QOS_CREQ_LUT_NRT,
-	QOS_CREQ_LUT_CWB,
-	QOS_CREQ_LUT_MACROTILE_QSEED,
-	QOS_CREQ_LUT_LINEAR_QSEED,
+	QOS_CREQ_LUT,
 	QOS_PROP_MAX,
 };
 
@@ -329,6 +328,7 @@ enum {
 	DITHER_OFF,
 	DITHER_LEN,
 	DITHER_VER,
+	CWB_DITHER,
 	PP_MERGE_3D_ID,
 	PP_PROP_MAX,
 };
@@ -648,18 +648,7 @@ static struct sde_prop_type sde_qos_prop[] = {
 			PROP_TYPE_U32_ARRAY},
 	{QOS_DANGER_LUT, "qcom,sde-danger-lut", false, PROP_TYPE_U32_ARRAY},
 	{QOS_SAFE_LUT, "qcom,sde-safe-lut", false, PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_LINEAR, "qcom,sde-qos-lut-linear", false,
-			PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_MACROTILE, "qcom,sde-qos-lut-macrotile", false,
-			PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_NRT, "qcom,sde-qos-lut-nrt", false,
-			PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_CWB, "qcom,sde-qos-lut-cwb", false,
-			PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_MACROTILE_QSEED, "qcom,sde-qos-lut-macrotile-qseed",
-			false, PROP_TYPE_U32_ARRAY},
-	{QOS_CREQ_LUT_LINEAR_QSEED, "qcom,sde-qos-lut-linear-qseed",
-			false, PROP_TYPE_U32_ARRAY},
+	{QOS_CREQ_LUT, "qcom,sde-creq-lut", false, PROP_TYPE_U32_ARRAY},
 };
 
 static struct sde_prop_type sspp_prop[] = {
@@ -850,6 +839,7 @@ static struct sde_prop_type pp_prop[] = {
 	{DITHER_OFF, "qcom,sde-dither-off", false, PROP_TYPE_U32_ARRAY},
 	{DITHER_LEN, "qcom,sde-dither-size", false, PROP_TYPE_U32},
 	{DITHER_VER, "qcom,sde-dither-version", false, PROP_TYPE_U32},
+	{CWB_DITHER, "qcom,sde-cwb-dither", false, PROP_TYPE_U32_ARRAY},
 	{PP_MERGE_3D_ID, "qcom,sde-pp-merge-3d-id", false, PROP_TYPE_U32_ARRAY},
 };
 
@@ -1450,7 +1440,6 @@ static int _sde_sspp_setup_vigs(struct device_node *np,
 	struct sde_dt_props *props[SSPP_SUBBLK_COUNT_MAX] = {NULL, NULL};
 	struct sde_dt_props *props_tmp = NULL;
 	struct device_node *snp = NULL;
-	struct sde_sc_cfg *sc_cfg = sde_cfg->sc_cfg;
 	int vig_count = 0, vcm_count = 0;
 	const char *type;
 
@@ -1594,7 +1583,8 @@ static int _sde_sspp_setup_vigs(struct device_node *np,
 					MAX_PRE_ROT_HEIGHT_INLINE_ROT_DEFAULT;
 		}
 
-		if (IS_SDE_INLINE_ROT_REV_200(sde_cfg->true_inline_rot_rev)) {
+		if (IS_SDE_INLINE_ROT_REV_200(sde_cfg->true_inline_rot_rev) ||
+				IS_SDE_INLINE_ROT_REV_201(sde_cfg->true_inline_rot_rev)) {
 			set_bit(SDE_SSPP_PREDOWNSCALE, &sspp->features);
 			sblk->in_rot_maxdwnscale_rt_num =
 				MAX_DOWNSCALE_RATIO_INROT_PD_RT_NUMERATOR;
@@ -1614,14 +1604,6 @@ static int _sde_sspp_setup_vigs(struct device_node *np,
 				MAX_DOWNSCALE_RATIO_INROT_NOPD_RT_DENOMINATOR;
 			sblk->in_rot_maxdwnscale_nrt =
 					MAX_DOWNSCALE_RATIO_INROT_NRT_DEFAULT;
-		}
-
-		if (sc_cfg[SDE_SYS_CACHE_ROT].has_sys_cache) {
-			set_bit(SDE_PERF_SSPP_SYS_CACHE, &sspp->perf_features);
-			sblk->llcc_scid =
-				sc_cfg[SDE_SYS_CACHE_ROT].llcc_scid;
-			sblk->llcc_slice_size =
-				sc_cfg[SDE_SYS_CACHE_ROT].llcc_slice_size;
 		}
 
 		if (sde_cfg->inline_disable_const_clr)
@@ -1956,6 +1938,9 @@ static void sde_sspp_set_features(struct sde_mdss_cfg *sde_cfg,
 				SSPP_MAX_PER_PIPE_BW_HIGH, i);
 		else
 			sblk->max_per_pipe_bw_high = sblk->max_per_pipe_bw;
+
+		if (sde_cfg->has_ubwc_stats)
+			set_bit(SDE_SSPP_UBWC_STATS, &sspp->features);
 	}
 }
 
@@ -2447,8 +2432,12 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_TE_ALIGN_VSYNC, &intf->features);
 
 		if (SDE_HW_MAJOR(sde_cfg->hwversion) >=
-				SDE_HW_MAJOR(SDE_HW_VER_810))
+				SDE_HW_MAJOR(SDE_HW_VER_810)) {
 			set_bit(SDE_INTF_WD_TIMER, &intf->features);
+			set_bit(SDE_INTF_RESET_COUNTER, &intf->features);
+			set_bit(SDE_INTF_VSYNC_TIMESTAMP, &intf->features);
+			set_bit(SDE_INTF_AVR_STATUS, &intf->features);
+		}
 	}
 
 end:
@@ -2564,6 +2553,10 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 				sde_cfg->cwb_blk_off = 0x83000;
 				sde_cfg->cwb_blk_stride = 0x100;
 			}
+
+			if (sde_cfg->has_cwb_dither)
+				set_bit(SDE_WB_CWB_DITHER_CTRL, &wb->features);
+
 		} else if (sde_cfg->has_cwb_support) {
 			set_bit(SDE_WB_HAS_CWB, &wb->features);
 			if (IS_SDE_CTL_REV_100(sde_cfg->ctl_rev))
@@ -2888,7 +2881,7 @@ static int _sde_lm_noise_parse_dt(struct device_node *np,
 
 	if (!props->exists[NOISE_LAYER_OFF] ||
 		!props->exists[NOISE_LAYER_VERSION]) {
-		SDE_ERROR("noise: prop doesnt exist %d %d\n",
+		SDE_INFO("noise: prop doesnt exist %d %d\n",
 			props->exists[NOISE_LAYER_OFF],
 			props->exists[NOISE_LAYER_VERSION]);
 		goto exit;
@@ -3474,11 +3467,8 @@ static int sde_cache_parse_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg)
 {
 	struct llcc_slice_desc *slice;
-	struct platform_device *pdev;
-	struct of_phandle_args phargs;
 	struct sde_sc_cfg *sc_cfg = sde_cfg->sc_cfg;
 	struct device_node *llcc_node;
-	int rc = 0;
 
 	if (!sde_cfg) {
 		SDE_ERROR("invalid argument\n");
@@ -3489,75 +3479,26 @@ static int sde_cache_parse_dt(struct device_node *np,
 		return 0;
 
 	llcc_node = of_find_node_by_name(NULL, "cache-controller");
-	if (!llcc_node ||
-		(!of_device_is_compatible(llcc_node, "qcom,llcc-v2"))) {
+	if (!llcc_node) {
 		SDE_DEBUG("cache controller missing, will disable img cache\n");
 		return 0;
 	}
 
 	slice = llcc_slice_getd(LLCC_DISP);
 	if (IS_ERR_OR_NULL(slice)) {
-		SDE_ERROR("failed to get system cache %ld\n",
-				PTR_ERR(slice));
-	} else {
-		sc_cfg[SDE_SYS_CACHE_DISP].has_sys_cache = true;
-		sc_cfg[SDE_SYS_CACHE_DISP].llcc_scid = llcc_get_slice_id(slice);
-		sc_cfg[SDE_SYS_CACHE_DISP].llcc_slice_size =
-				llcc_get_slice_size(slice);
-		SDE_DEBUG("img cache scid:%d slice_size:%zu kb\n",
-				sc_cfg[SDE_SYS_CACHE_DISP].llcc_scid,
-				sc_cfg[SDE_SYS_CACHE_DISP].llcc_slice_size);
-		llcc_slice_putd(slice);
+		SDE_ERROR("failed to get system cache %ld\n", PTR_ERR(slice));
+		return -EINVAL;
 	}
 
-	/* Read inline rot node */
-	rc = of_parse_phandle_with_args(np,
-		"qcom,sde-inline-rotator", "#list-cells", 0, &phargs);
-	if (rc) {
-		/*
-		 * This is not a fatal error, system cache can be disabled
-		 * in device tree
-		 */
-		SDE_DEBUG("sys cache will be disabled rc:%d\n", rc);
-		rc = 0;
-		goto end;
-	}
-
-	if (!phargs.np || !phargs.args_count) {
-		SDE_ERROR("wrong phandle args %d %d\n",
-			!phargs.np, !phargs.args_count);
-		rc = -EINVAL;
-		goto end;
-	}
-
-	pdev = of_find_device_by_node(phargs.np);
-	if (!pdev) {
-		SDE_ERROR("invalid sde rotator node\n");
-		goto end;
-	}
-
-	slice = llcc_slice_getd(LLCC_ROTATOR);
-	if (IS_ERR_OR_NULL(slice))  {
-		SDE_ERROR("failed to get rotator slice!\n");
-		rc = -EINVAL;
-		goto cleanup;
-	}
-
-	sc_cfg[SDE_SYS_CACHE_ROT].llcc_scid = llcc_get_slice_id(slice);
-	sc_cfg[SDE_SYS_CACHE_ROT].llcc_slice_size =
-			llcc_get_slice_size(slice);
+	sc_cfg[SDE_SYS_CACHE_DISP].has_sys_cache = true;
+	sc_cfg[SDE_SYS_CACHE_DISP].llcc_scid = llcc_get_slice_id(slice);
+	sc_cfg[SDE_SYS_CACHE_DISP].llcc_slice_size = llcc_get_slice_size(slice);
+	SDE_DEBUG("img cache scid:%d slice_size:%zu kb\n",
+			sc_cfg[SDE_SYS_CACHE_DISP].llcc_scid,
+			sc_cfg[SDE_SYS_CACHE_DISP].llcc_slice_size);
 	llcc_slice_putd(slice);
 
-	sc_cfg[SDE_SYS_CACHE_ROT].has_sys_cache = true;
-
-	SDE_DEBUG("rotator llcc scid:%d slice_size:%zukb\n",
-			sc_cfg[SDE_SYS_CACHE_ROT].llcc_scid,
-			sc_cfg[SDE_SYS_CACHE_ROT].llcc_slice_size);
-
-cleanup:
-	of_node_put(phargs.np);
-end:
-	return rc;
+	return 0;
 }
 
 static int _sde_vbif_populate_ot_parsing(struct sde_vbif_cfg *vbif,
@@ -3910,6 +3851,11 @@ static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 		sblk->dither.version = PROP_VALUE_ACCESS(prop_value, DITHER_VER,
 								0);
 
+		if (sde_cfg->has_cwb_dither &&
+			PROP_VALUE_ACCESS(prop_value, CWB_DITHER, i)) {
+			set_bit(SDE_PINGPONG_CWB_DITHER, &pp->features);
+		}
+
 		if (sde_cfg->dither_luma_mode_support)
 			set_bit(SDE_PINGPONG_DITHER_LUMA, &pp->features);
 
@@ -4232,7 +4178,7 @@ static int _sde_qos_parse_dt_cfg(struct sde_mdss_cfg *cfg, int *prop_count,
 	struct sde_prop_value *prop_value, bool *prop_exists)
 {
 	int i, j;
-	u32 qos_count = 1, index;
+	u32 qos_count = 1;
 
 	if (prop_exists[QOS_REFRESH_RATES]) {
 		qos_count = prop_count[QOS_REFRESH_RATES];
@@ -4256,7 +4202,7 @@ static int _sde_qos_parse_dt_cfg(struct sde_mdss_cfg *cfg, int *prop_count,
 	cfg->perf.safe_lut = kcalloc(qos_count,
 		sizeof(u64) * SDE_QOS_LUT_USAGE_MAX, GFP_KERNEL);
 	cfg->perf.creq_lut = kcalloc(qos_count,
-		sizeof(u64) * SDE_QOS_LUT_USAGE_MAX, GFP_KERNEL);
+		sizeof(u64) * SDE_QOS_LUT_USAGE_MAX * SDE_CREQ_LUT_TYPE_MAX, GFP_KERNEL);
 	if (!cfg->perf.creq_lut || !cfg->perf.safe_lut || !cfg->perf.danger_lut)
 		goto end;
 
@@ -4266,7 +4212,7 @@ static int _sde_qos_parse_dt_cfg(struct sde_mdss_cfg *cfg, int *prop_count,
 			cfg->perf.danger_lut[i] =
 				PROP_VALUE_ACCESS(prop_value,
 						QOS_DANGER_LUT, i);
-			SDE_DEBUG("danger usage:%i lut:0x%x\n",
+			SDE_DEBUG("danger usage:%i lut:0x%llx\n",
 					i, cfg->perf.danger_lut[i]);
 		}
 	}
@@ -4277,42 +4223,21 @@ static int _sde_qos_parse_dt_cfg(struct sde_mdss_cfg *cfg, int *prop_count,
 			cfg->perf.safe_lut[i] =
 				PROP_VALUE_ACCESS(prop_value,
 					QOS_SAFE_LUT, i);
-			SDE_DEBUG("safe usage:%d lut:0x%x\n",
+			SDE_DEBUG("safe usage:%d lut:0x%llx\n",
 				i, cfg->perf.safe_lut[i]);
 		}
 	}
 
-	for (i = 0; i < SDE_QOS_LUT_USAGE_MAX; i++) {
-		static const u32 prop_key[SDE_QOS_LUT_USAGE_MAX] = {
-			[SDE_QOS_LUT_USAGE_LINEAR] =
-					QOS_CREQ_LUT_LINEAR,
-			[SDE_QOS_LUT_USAGE_MACROTILE] =
-					QOS_CREQ_LUT_MACROTILE,
-			[SDE_QOS_LUT_USAGE_NRT] =
-					QOS_CREQ_LUT_NRT,
-			[SDE_QOS_LUT_USAGE_CWB] =
-					QOS_CREQ_LUT_CWB,
-			[SDE_QOS_LUT_USAGE_MACROTILE_QSEED] =
-					QOS_CREQ_LUT_MACROTILE_QSEED,
-			[SDE_QOS_LUT_USAGE_LINEAR_QSEED] =
-					QOS_CREQ_LUT_LINEAR_QSEED,
-		};
-		int key = prop_key[i];
+	if (prop_exists[QOS_CREQ_LUT] &&
+		(prop_count[QOS_CREQ_LUT] >=
+		(SDE_QOS_LUT_USAGE_MAX * qos_count * SDE_CREQ_LUT_TYPE_MAX))) {
 		u64 lut_hi, lut_lo;
 
-		if (!prop_exists[key])
-			continue;
-
-		for (j = 0; j < qos_count; j++) {
-			lut_hi = PROP_VALUE_ACCESS(prop_value, key,
-				(j * 2) + 0);
-			lut_lo = PROP_VALUE_ACCESS(prop_value, key,
-				(j * 2) + 1);
-			index = (j * SDE_QOS_LUT_USAGE_MAX) + i;
-			cfg->perf.creq_lut[index] =
-					(lut_hi << 32) | lut_lo;
-			SDE_DEBUG("creq usage:%d lut:0x%llx\n",
-				index, cfg->perf.creq_lut[index]);
+		for (j = 0; j < (qos_count * SDE_QOS_LUT_USAGE_MAX * SDE_CREQ_LUT_TYPE_MAX); j++) {
+			lut_hi = PROP_VALUE_ACCESS(prop_value, QOS_CREQ_LUT, (j * 2) + 0);
+			lut_lo = PROP_VALUE_ACCESS(prop_value, QOS_CREQ_LUT, (j * 2) + 1);
+			cfg->perf.creq_lut[j] = (lut_hi << 32) | lut_lo;
+			SDE_DEBUG("creq usage:%d lut:0x%llx\n", j, cfg->perf.creq_lut[j]);
 		}
 	}
 
@@ -4645,7 +4570,9 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 	uint32_t virt_vig_list_size, in_rot_list_size = 0;
 	uint32_t cursor_list_size = 0;
 	uint32_t index = 0;
-	const struct sde_format_extended *inline_fmt_tbl;
+	uint32_t in_rot_restricted_list_size = 0;
+	const struct sde_format_extended *inline_fmt_tbl = NULL;
+	const struct sde_format_extended *inline_restricted_fmt_tbl = NULL;
 
 	/* cursor input formats */
 	if (sde_cfg->has_cursor) {
@@ -4742,12 +4669,14 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 	} else if (IS_SDE_INLINE_ROT_REV_200(sde_cfg->true_inline_rot_rev)) {
 		inline_fmt_tbl = true_inline_rot_v2_fmts;
 		in_rot_list_size = ARRAY_SIZE(true_inline_rot_v2_fmts);
+	} else if (IS_SDE_INLINE_ROT_REV_201(sde_cfg->true_inline_rot_rev)) {
+		inline_fmt_tbl = true_inline_rot_v201_fmts;
+		in_rot_list_size = ARRAY_SIZE(true_inline_rot_v201_fmts);
+		inline_restricted_fmt_tbl = true_inline_rot_v201_restricted_fmts;
+		in_rot_restricted_list_size = ARRAY_SIZE(true_inline_rot_v201_fmts);
 	}
 
 	if (in_rot_list_size) {
-		if (sde_cfg->has_fp16)
-			in_rot_list_size += ARRAY_SIZE(fp_16_inline_rot_fmts);
-
 		sde_cfg->inline_rot_formats = kcalloc(in_rot_list_size,
 			sizeof(struct sde_format_extended), GFP_KERNEL);
 		if (!sde_cfg->inline_rot_formats) {
@@ -4758,14 +4687,25 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 
 		index = sde_copy_formats(sde_cfg->inline_rot_formats,
 			in_rot_list_size, 0, inline_fmt_tbl, in_rot_list_size);
-		if (sde_cfg->has_fp16)
-			index += sde_copy_formats(sde_cfg->inline_rot_formats,
-				in_rot_list_size, index, fp_16_inline_rot_fmts,
-				ARRAY_SIZE(fp_16_inline_rot_fmts));
+	}
+
+	if (in_rot_restricted_list_size) {
+		sde_cfg->inline_rot_restricted_formats = kcalloc(in_rot_restricted_list_size,
+			sizeof(struct sde_format_extended), GFP_KERNEL);
+		if (!sde_cfg->inline_rot_restricted_formats) {
+			SDE_ERROR("failed to alloc inline rot restricted format list\n");
+			rc = -ENOMEM;
+			goto free_in_rot;
+		}
+
+		index = sde_copy_formats(sde_cfg->inline_rot_restricted_formats,
+			in_rot_restricted_list_size, 0, inline_restricted_fmt_tbl,
+			in_rot_restricted_list_size);
 	}
 
 	return 0;
-
+free_in_rot:
+	kfree(sde_cfg->inline_rot_formats);
 free_wb:
 	kfree(sde_cfg->wb_formats);
 free_virt:
@@ -4786,7 +4726,8 @@ static void _sde_hw_setup_uidle(struct sde_uidle_cfg *uidle_cfg)
 	if (!uidle_cfg->uidle_rev)
 		return;
 
-	if ((IS_SDE_UIDLE_REV_101(uidle_cfg->uidle_rev)) ||
+	if ((IS_SDE_UIDLE_REV_102(uidle_cfg->uidle_rev)) ||
+			(IS_SDE_UIDLE_REV_101(uidle_cfg->uidle_rev)) ||
 			(IS_SDE_UIDLE_REV_100(uidle_cfg->uidle_rev))) {
 		uidle_cfg->fal10_exit_cnt = SDE_UIDLE_FAL10_EXIT_CNT;
 		uidle_cfg->fal10_exit_danger = SDE_UIDLE_FAL10_EXIT_DANGER;
@@ -4795,6 +4736,7 @@ static void _sde_hw_setup_uidle(struct sde_uidle_cfg *uidle_cfg)
 		uidle_cfg->fal1_target_idle_time = SDE_UIDLE_FAL1_TARGET_IDLE;
 		uidle_cfg->max_dwnscale = SDE_UIDLE_MAX_DWNSCALE;
 		uidle_cfg->debugfs_ctrl = true;
+		uidle_cfg->fal1_max_threshold = SDE_UIDLE_FAL1_MAX_THRESHOLD;
 
 		if (IS_SDE_UIDLE_REV_100(uidle_cfg->uidle_rev)) {
 			uidle_cfg->fal10_threshold =
@@ -4806,6 +4748,15 @@ static void _sde_hw_setup_uidle(struct sde_uidle_cfg *uidle_cfg)
 			uidle_cfg->fal10_threshold =
 				SDE_UIDLE_FAL10_THRESHOLD_90;
 			uidle_cfg->max_fps = SDE_UIDLE_MAX_FPS_90;
+		} else if (IS_SDE_UIDLE_REV_102(uidle_cfg->uidle_rev)) {
+			set_bit(SDE_UIDLE_QACTIVE_OVERRIDE,
+					&uidle_cfg->features);
+			uidle_cfg->fal10_threshold =
+				SDE_UIDLE_FAL10_THRESHOLD_90;
+			uidle_cfg->max_fps = SDE_UIDLE_MAX_FPS_90;
+			uidle_cfg->max_fal1_fps = SDE_UIDLE_MAX_FPS_240;
+			uidle_cfg->fal1_max_threshold =
+					SDE_UIDLE_REV102_FAL1_MAX_THRESHOLD;
 		}
 	} else {
 		pr_err("invalid uidle rev:0x%x, disabling uidle\n",
@@ -5094,6 +5045,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->syscache_supported = true;
 	} else if (IS_WAIPIO_TARGET(hw_rev)) {
 		sde_cfg->has_dedicated_cwb_support = true;
+		sde_cfg->has_cwb_dither = true;
 		sde_cfg->has_wb_ubwc = true;
 		sde_cfg->has_cwb_crop = true;
 		sde_cfg->has_qsync = true;
@@ -5108,10 +5060,11 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->has_3d_merge_reset = true;
 		sde_cfg->has_hdr = true;
 		sde_cfg->has_hdr_plus = true;
+		sde_cfg->skip_inline_rot_threshold = true;
 		set_bit(SDE_MDP_DHDR_MEMPOOL_4K, &sde_cfg->mdp[0].features);
 		sde_cfg->has_vig_p010 = true;
-		sde_cfg->true_inline_rot_rev = SDE_INLINE_ROT_VERSION_2_0_0;
-		sde_cfg->uidle_cfg.uidle_rev = SDE_UIDLE_VERSION_1_0_1;
+		sde_cfg->true_inline_rot_rev = SDE_INLINE_ROT_VERSION_2_0_1;
+		sde_cfg->uidle_cfg.uidle_rev = SDE_UIDLE_VERSION_1_0_2;
 		sde_cfg->vbif_disable_inner_outer_shareable = true;
 		sde_cfg->dither_luma_mode_support = true;
 		sde_cfg->mdss_hw_block_size = 0x158;
@@ -5119,6 +5072,37 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->sspp_multirect_error = true;
 		sde_cfg->has_fp16 = true;
 		set_bit(SDE_MDP_PERIPH_TOP_0_REMOVED, &sde_cfg->mdp[0].features);
+		sde_cfg->has_precise_vsync_ts = true;
+		sde_cfg->has_avr_step = true;
+		sde_cfg->has_trusted_vm_support = true;
+		sde_cfg->has_ubwc_stats = true;
+		sde_cfg->has_demura = true;
+		sde_cfg->demura_supported[SSPP_DMA1][0] = 0;
+		sde_cfg->demura_supported[SSPP_DMA1][1] = 1;
+		sde_cfg->demura_supported[SSPP_DMA3][0] = 0;
+		sde_cfg->demura_supported[SSPP_DMA3][1] = 1;
+	} else if (IS_YUPIK_TARGET(hw_rev)) {
+		sde_cfg->has_cwb_support = true;
+		sde_cfg->has_qsync = true;
+		sde_cfg->perf.min_prefill_lines = 40;
+		sde_cfg->vbif_qos_nlvl = 8;
+		sde_cfg->ts_prefill_rev = 2;
+		sde_cfg->ctl_rev = SDE_CTL_CFG_VERSION_1_0_0;
+		sde_cfg->delay_prg_fetch_start = true;
+		sde_cfg->sui_ns_allowed = true;
+		sde_cfg->sui_misr_supported = true;
+		sde_cfg->sui_block_xin_mask = 0x261;
+		sde_cfg->has_sui_blendstage = true;
+		sde_cfg->has_3d_merge_reset = true;
+		sde_cfg->has_hdr = true;
+		sde_cfg->has_hdr_plus = true;
+		set_bit(SDE_MDP_DHDR_MEMPOOL_4K, &sde_cfg->mdp[0].features);
+		sde_cfg->has_vig_p010 = true;
+		sde_cfg->true_inline_rot_rev = SDE_INLINE_ROT_VERSION_2_0_0;
+		sde_cfg->vbif_disable_inner_outer_shareable = true;
+		sde_cfg->dither_luma_mode_support = true;
+		sde_cfg->mdss_hw_block_size = 0x158;
+		sde_cfg->rc_lm_flush_override = false;
 	} else {
 		SDE_ERROR("unsupported chipset id:%X\n", hw_rev);
 		sde_cfg->perf.min_prefill_lines = 0xffff;
