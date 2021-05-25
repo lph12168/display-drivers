@@ -3850,7 +3850,7 @@ static int dp_display_probe(struct platform_device *pdev)
 		goto bail;
 	}
 
-	index = dp_display_get_num_of_displays();
+	index = dp_display_get_num_of_displays(NULL);
 	if (index >= MAX_DP_ACTIVE_DISPLAY) {
 		pr_err("exceeds max dp count\n");
 		rc = -EINVAL;
@@ -3942,37 +3942,44 @@ bail:
 	return rc;
 }
 
-int dp_display_get_displays(void **displays, int count)
+int dp_display_get_displays(struct drm_device *dev, void **displays, int count)
 {
-	int i;
+	int i, j;
 
 	if (!displays) {
 		DP_ERR("invalid data\n");
 		return -EINVAL;
 	}
 
-	for (i = 0; i < MAX_DP_ACTIVE_DISPLAY && i < count; i++) {
+	for (i = 0, j = 0; i < MAX_DP_ACTIVE_DISPLAY && j < count; i++) {
 		if (!g_dp_display[i])
 			break;
 
-		displays[i] = g_dp_display[i];
+		if (g_dp_display[i]->drm_dev == dev) {
+			displays[j] = g_dp_display[i];
+			j++;
+		}
 	}
 
-	return i;
+	return j;
 }
 
-int dp_display_get_num_of_displays(void)
+int dp_display_get_num_of_displays(struct drm_device *dev)
 {
-	int i;
+	int i, j;
 
-	for (i = 0; i < MAX_DP_ACTIVE_DISPLAY; i++)
+	for (i = 0, j = 0; i < MAX_DP_ACTIVE_DISPLAY; i++) {
 		if (!g_dp_display[i])
 			break;
 
-	return i;
+		if (!dev || g_dp_display[i]->drm_dev == dev)
+			j++;
+	}
+
+	return j;
 }
 
-int dp_display_get_num_of_streams(void)
+int dp_display_get_num_of_streams(struct drm_device *dev)
 {
 	struct dp_display_private *dp;
 	int i, count = 0;
@@ -3981,8 +3988,10 @@ int dp_display_get_num_of_streams(void)
 		if (!g_dp_display[i])
 			break;
 
-		dp = container_of(g_dp_display[i],
-				struct dp_display_private, dp_display);
+		if (g_dp_display[i]->drm_dev != dev)
+			continue;
+
+		dp = container_of(g_dp_display[i], struct dp_display_private, dp_display);
 
 		count += dp->stream_cnt;
 	}
