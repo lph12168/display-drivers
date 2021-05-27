@@ -5899,13 +5899,17 @@ static int dsi_display_init(struct dsi_display *display)
 		if (rc) {
 			DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
 					display->panel->name, rc);
-			return rc;
+			_dsi_display_dev_deinit(display);
+			goto end;
 		}
 	}
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
-	if (rc)
+	if (rc) {
 		DSI_ERR("component add failed, rc=%d\n", rc);
+		_dsi_display_dev_deinit(display);
+		goto end;
+	}
 
 	DSI_DEBUG("component add success: %s\n", display->name);
 end:
