@@ -36,10 +36,6 @@
 
 #define SEC_PANEL_NAME_MAX_LEN  256
 
-#define DSI_MODE_MATCH_ACTIVE_TIMINGS (1 << 0)
-#define DSI_MODE_MATCH_PORCH_TIMINGS (1 << 1)
-#define DSI_MODE_MATCH_FULL_TIMINGS (DSI_MODE_MATCH_ACTIVE_TIMINGS | DSI_MODE_MATCH_PORCH_TIMINGS)
-
 u8 dbgfs_tx_cmd_buf[SZ_4K];
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
@@ -246,6 +242,14 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	bl_temp = (u32)bl_temp * bl_scale_sv / MAX_SV_BL_SCALE_LEVEL;
 	if (bl_temp > panel->bl_config.bl_max_level)
 		bl_temp = panel->bl_config.bl_max_level;
+
+	/* use bl_temp as index of dimming bl lut to find the dimming panel backlight */
+	if (bl_temp != 0 && panel->bl_config.dimming_bl_lut &&
+	    bl_temp < panel->bl_config.dimming_bl_lut->length) {
+		DSI_DEBUG("before dimming bl_temp = %u, after dimming bl_temp = %lu\n",
+			bl_temp, panel->bl_config.dimming_bl_lut->mapped_bl[bl_temp]);
+		bl_temp = panel->bl_config.dimming_bl_lut->mapped_bl[bl_temp];
+	}
 
 	DSI_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
@@ -1719,14 +1723,9 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 	}
 
 	if (!strcmp(buf, "te_signal_check\n")) {
-		if (display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
-			DSI_INFO("TE based ESD check for Video Mode panels is not allowed\n");
-			rc = -EINVAL;
-			goto error;
-		}
-		DSI_INFO("ESD check is switched to TE mode by user\n");
-		esd_config->status_mode = ESD_MODE_PANEL_TE;
-		dsi_display_change_te_irq_status(display, true);
+		DSI_INFO("TE based ESD check for panels is not allowed\n");
+		rc = -EINVAL;
+		goto error;
 	}
 
 	if (!strcmp(buf, "reg_read\n")) {
@@ -2097,7 +2096,10 @@ error:
 
 static int dsi_display_debugfs_deinit(struct dsi_display *display)
 {
-	debugfs_remove_recursive(display->root);
+	if (display->root) {
+		debugfs_remove_recursive(display->root);
+		display->root = NULL;
+	}
 
 	return 0;
 }
@@ -6232,7 +6234,7 @@ static int dsi_display_ext_get_info(struct drm_connector *connector,
 }
 
 static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
-	const struct drm_display_mode *drm_mode,
+	const struct drm_display_mode *drm_mode, struct msm_sub_mode *sub_mode,
 	struct msm_mode_info *mode_info,
 	void *display, const struct msm_resource_caps_info *avail_res)
 {
@@ -6446,6 +6448,16 @@ struct drm_panel *dsi_display_get_drm_panel(struct dsi_display *display)
 	}
 
 	return &display->panel->drm_panel;
+}
+
+bool dsi_display_has_dsc_switch_support(struct dsi_display *display)
+{
+	if (!display || !display->panel) {
+		pr_err("invalid param(s)\n");
+		return false;
+	}
+
+	return display->panel->dsc_switch_supported;
 }
 
 int dsi_display_drm_ext_bridge_init(struct dsi_display *display,
@@ -6847,6 +6859,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 	u32 sublinks_count, mode_idx, array_idx = 0;
 	struct dsi_dyn_clk_caps *dyn_clk_caps;
 	int i, start, end, rc = -EINVAL;
+	int dsc_modes = 0, nondsc_modes = 0;
 
 	if (!display || !out_modes) {
 		DSI_ERR("Invalid params\n");
@@ -6910,6 +6923,11 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 		support_cmd_mode = display_mode.panel_mode_caps & DSI_OP_CMD_MODE;
 		support_video_mode = display_mode.panel_mode_caps & DSI_OP_VIDEO_MODE;
+
+		if (display_mode.priv_info->dsc_enabled)
+			dsc_modes++;
+		else
+			nondsc_modes++;
 
 		/* Setup widebus support */
 		display_mode.priv_info->widebus_support =
@@ -6987,6 +7005,9 @@ int dsi_display_get_modes(struct dsi_display *display,
 			display->modes[start].is_preferred = true;
 		}
 	}
+
+	if (dsc_modes && nondsc_modes)
+		display->panel->dsc_switch_supported = true;
 
 exit:
 	*out_modes = display->modes;
@@ -7151,7 +7172,7 @@ end:
 	return is_matching;
 }
 
-static bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
+bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
 		struct dsi_display_mode *mode2, unsigned int match_flags)
 {
 	if (!mode1 && !mode2)
@@ -7164,11 +7185,16 @@ static bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
 			!dsi_display_match_timings(mode1, mode2, match_flags))
 		return false;
 
+	if ((match_flags & DSI_MODE_MATCH_DSC_CONFIG) &&
+			mode1->priv_info->dsc_enabled != mode2->priv_info->dsc_enabled)
+		return false;
+
 	return true;
 }
 
 int dsi_display_find_mode(struct dsi_display *display,
-		const struct dsi_display_mode *cmp,
+		struct dsi_display_mode *cmp,
+		struct msm_sub_mode *sub_mode,
 		struct dsi_display_mode **out_mode)
 {
 	u32 count, i;
@@ -7176,6 +7202,7 @@ int dsi_display_find_mode(struct dsi_display *display,
 	struct dsi_display_mode *m;
 	struct dsi_dyn_clk_caps *dyn_clk_caps;
 	unsigned int match_flags = DSI_MODE_MATCH_FULL_TIMINGS;
+	struct dsi_display_mode_priv_info priv_info;
 
 	if (!display || !out_mode)
 		return -EINVAL;
@@ -7205,6 +7232,15 @@ int dsi_display_find_mode(struct dsi_display *display,
 		 */
 		if (dyn_clk_caps->maintain_const_fps)
 			match_flags = DSI_MODE_MATCH_ACTIVE_TIMINGS;
+
+		if (sub_mode && sub_mode->dsc_mode) {
+			match_flags |= DSI_MODE_MATCH_DSC_CONFIG;
+			cmp->priv_info = &priv_info;
+			memset(cmp->priv_info, 0,
+				sizeof(struct dsi_display_mode_priv_info));
+			cmp->priv_info->dsc_enabled = (sub_mode->dsc_mode ==
+				MSM_DISPLAY_DSC_MODE_ENABLED) ? true : false;
+		}
 
 		if (dsi_display_mode_match(cmp, m, match_flags)) {
 			*out_mode = m;
@@ -7283,11 +7319,20 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 	if (sde_conn->expected_panel_mode == MSM_DISPLAY_VIDEO_MODE &&
 		display->config.panel_mode == DSI_OP_CMD_MODE) {
 		adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_POMS_TO_VID;
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1, sde_conn->expected_panel_mode,
+			display->config.panel_mode);
 		DSI_DEBUG("Panel operating mode change to video detected\n");
 	} else if (sde_conn->expected_panel_mode == MSM_DISPLAY_CMD_MODE &&
 		display->config.panel_mode == DSI_OP_VIDEO_MODE) {
 		adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_POMS_TO_CMD;
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE2, sde_conn->expected_panel_mode,
+			display->config.panel_mode);
 		DSI_DEBUG("Panel operating mode change to command detected\n");
+	} else if (cur_mode->timing.dsc_enabled != adj_mode->timing.dsc_enabled) {
+		adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS;
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE3, cur_mode->timing.dsc_enabled,
+				adj_mode->timing.dsc_enabled);
+		DSI_DEBUG("DSC mode change detected\n");
 	} else {
 		dyn_clk_caps = &(display->panel->dyn_clk_caps);
 		/* dfps and dynamic clock with const fps use case */
@@ -7297,7 +7342,7 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 				dyn_clk_caps->maintain_const_fps) {
 				DSI_DEBUG("Mode switch is seamless variable refresh\n");
 				adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_VRR;
-				SDE_EVT32(SDE_EVTLOG_FUNC_CASE1,
+				SDE_EVT32(SDE_EVTLOG_FUNC_CASE4,
 					cur_mode->timing.refresh_rate,
 					adj_mode->timing.refresh_rate,
 					cur_mode->timing.h_front_porch,
@@ -7330,7 +7375,7 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 
 				adj_mode->dsi_mode_flags |=
 						DSI_MODE_FLAG_DYN_CLK;
-				SDE_EVT32(SDE_EVTLOG_FUNC_CASE2,
+				SDE_EVT32(SDE_EVTLOG_FUNC_CASE5,
 					cur_mode->pixel_clk_khz,
 					adj_mode->pixel_clk_khz);
 			}

@@ -1415,20 +1415,27 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 	struct sde_encoder_phys_cmd *cmd_enc =
 			to_sde_encoder_phys_cmd(phys_enc);
 	struct sde_encoder_wait_info wait_info = {0};
-	int ret;
+	struct sde_connector *c_conn;
 	bool frame_pending = true;
 	struct sde_hw_ctl *ctl;
 	unsigned long lock_flags;
+	int ret, timeout_ms;
 
-	if (!phys_enc || !phys_enc->hw_ctl) {
+	if (!phys_enc || !phys_enc->hw_ctl || !phys_enc->connector) {
 		SDE_ERROR("invalid argument(s)\n");
 		return -EINVAL;
 	}
 	ctl = phys_enc->hw_ctl;
+	c_conn = to_sde_connector(phys_enc->connector);
+	timeout_ms = KICKOFF_TIMEOUT_MS;
+
+	if (c_conn->lp_mode == SDE_MODE_DPMS_LP1 ||
+		c_conn->lp_mode == SDE_MODE_DPMS_LP2)
+		timeout_ms = (KICKOFF_TIMEOUT_MS) * 2;
 
 	wait_info.wq = &phys_enc->pending_kickoff_wq;
 	wait_info.atomic_cnt = &phys_enc->pending_retire_fence_cnt;
-	wait_info.timeout_ms = KICKOFF_TIMEOUT_MS;
+	wait_info.timeout_ms = timeout_ms;
 
 	/* slave encoder doesn't enable for ppsplit */
 	if (_sde_encoder_phys_is_ppsplit_slave(phys_enc))
@@ -1514,7 +1521,10 @@ static int _sde_encoder_phys_cmd_handle_wr_ptr_timeout(
 
 	SDE_EVT32(DRMID(phys_enc->parent), switch_te, SDE_EVTLOG_FUNC_ENTRY);
 
-	if (switch_te) {
+	if (sde_connector_esd_status(phys_enc->connector)) {
+		/* watchdog TE already set on esd status check failure */
+		ret = _sde_encoder_phys_cmd_wait_for_wr_ptr(phys_enc);
+	} else if (switch_te) {
 		SDE_DEBUG_CMDENC(cmd_enc,
 				"wr_ptr_irq wait failed, retry with WD TE\n");
 
@@ -1839,10 +1849,11 @@ static void sde_encoder_phys_cmd_trigger_start(
 	cmd_enc->wr_ptr_wait_success = false;
 }
 
-static void sde_encoder_phys_cmd_setup_vsync_source(
-		struct sde_encoder_phys *phys_enc, u32 vsync_source)
+static void sde_encoder_phys_cmd_setup_vsync_source(struct sde_encoder_phys *phys_enc,
+		u32 vsync_source, struct msm_display_info *disp_info)
 {
 	struct sde_encoder_virt *sde_enc;
+	struct sde_connector *sde_conn;
 
 	if (!phys_enc || !phys_enc->hw_intf)
 		return;
@@ -1851,7 +1862,9 @@ static void sde_encoder_phys_cmd_setup_vsync_source(
 	if (!sde_enc)
 		return;
 
-	if (sde_enc->disp_info.is_te_using_watchdog_timer &&
+	sde_conn = to_sde_connector(phys_enc->connector);
+
+	if ((disp_info->is_te_using_watchdog_timer || sde_conn->panel_dead) &&
 			phys_enc->hw_intf->ops.setup_vsync_source) {
 		vsync_source = SDE_VSYNC_SOURCE_WD_TIMER_0;
 		phys_enc->hw_intf->ops.setup_vsync_source(phys_enc->hw_intf,

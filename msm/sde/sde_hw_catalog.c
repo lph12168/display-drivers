@@ -2175,8 +2175,7 @@ void sde_hw_mixer_set_preference(struct sde_mdss_cfg *sde_cfg, u32 num_lm,
 	}
 }
 
-static int sde_mixer_parse_dt(struct device_node *np,
-						struct sde_mdss_cfg *sde_cfg)
+static int sde_mixer_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 {
 	int rc = 0, i, j;
 	u32 off_count, blend_off_count, max_blendstages, lm_pair_mask;
@@ -2290,6 +2289,7 @@ static int sde_mixer_parse_dt(struct device_node *np,
 			if (mixer->base == dummy_mixer_base) {
 				mixer->base = 0x0;
 				mixer->len = 0;
+				mixer->dummy_mixer = true;
 			}
 		}
 
@@ -5044,6 +5044,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->has_trusted_vm_support = true;
 		sde_cfg->syscache_supported = true;
 	} else if (IS_WAIPIO_TARGET(hw_rev)) {
+		sde_cfg->allowed_dsc_reservation_switch = SDE_DP_DSC_RESERVATION_SWITCH;
 		sde_cfg->has_dedicated_cwb_support = true;
 		sde_cfg->has_cwb_dither = true;
 		sde_cfg->has_wb_ubwc = true;

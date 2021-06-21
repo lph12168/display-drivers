@@ -25,7 +25,7 @@
 #define TO_S15D16(_x_)	((_x_) << 7)
 
 #define SDE_WB_MAX_LINEWIDTH(fmt, wb_cfg) \
-	(SDE_FORMAT_IS_UBWC(fmt) ? wb_cfg->sblk->maxlinewidth : \
+	((SDE_FORMAT_IS_UBWC(fmt) || SDE_FORMAT_IS_YUV(fmt)) ? wb_cfg->sblk->maxlinewidth : \
 	wb_cfg->sblk->maxlinewidth_linear)
 
 static const u32 cwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, INTR_IDX_PP1_OVFL,
@@ -836,6 +836,13 @@ static int sde_encoder_phys_wb_atomic_check(
 	if (SDE_FORMAT_IS_YUV(fmt) &&
 			!(wb_cfg->features & BIT(SDE_WB_YUV_CONFIG))) {
 		SDE_ERROR("invalid output format %x\n", fmt->base.pixel_format);
+		return -EINVAL;
+	}
+
+	if (fmt->chroma_sample == SDE_CHROMA_H2V1 ||
+		fmt->chroma_sample == SDE_CHROMA_H1V2) {
+		SDE_ERROR("invalid chroma sample type in output format %x\n",
+			fmt->base.pixel_format);
 		return -EINVAL;
 	}
 
@@ -1802,6 +1809,8 @@ static void sde_encoder_phys_wb_disable(struct sde_encoder_phys *phys_enc)
 			return;
 		}
 
+		if (phys_enc->connector)
+			sde_connector_commit_reset(phys_enc->connector, ktime_get());
 		goto exit;
 	}
 
