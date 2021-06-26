@@ -1449,7 +1449,7 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 		if (ctl && ctl->ops.get_start_state)
 			frame_pending = ctl->ops.get_start_state(ctl);
 
-		ret = frame_pending ? ret : 0;
+		ret = (frame_pending || sde_connector_esd_status(phys_enc->connector)) ? ret : 0;
 
 		/*
 		 * There can be few cases of ESD where CTL_START is cleared but
@@ -1521,8 +1521,7 @@ static int _sde_encoder_phys_cmd_handle_wr_ptr_timeout(
 
 	SDE_EVT32(DRMID(phys_enc->parent), switch_te, SDE_EVTLOG_FUNC_ENTRY);
 
-	if (sde_connector_esd_status(phys_enc->connector)) {
-		/* watchdog TE already set on esd status check failure */
+	if (sde_connector_panel_dead(phys_enc->connector)) {
 		ret = _sde_encoder_phys_cmd_wait_for_wr_ptr(phys_enc);
 	} else if (switch_te) {
 		SDE_DEBUG_CMDENC(cmd_enc,
@@ -1769,9 +1768,8 @@ static void _sde_encoder_autorefresh_disable_seq2(
 
 	while (autorefresh_status & BIT(7)) {
 		if (!trial) {
-			SDE_ERROR_CMDENC(cmd_enc,
-			  "autofresh status:0x%x intf:%d\n", autorefresh_status,
-			  phys_enc->intf_idx - INTF_0);
+			pr_err("enc:%d autofresh status:0x%x intf:%d\n", DRMID(phys_enc->parent),
+					autorefresh_status, phys_enc->intf_idx - INTF_0);
 
 			_sde_encoder_phys_cmd_config_autorefresh(phys_enc, 0);
 		}
@@ -1790,9 +1788,8 @@ static void _sde_encoder_autorefresh_disable_seq2(
 		autorefresh_status = hw_mdp->ops.get_autorefresh_status(hw_mdp,
 					phys_enc->intf_idx);
 		hw_intf->ops.check_and_reset_tearcheck(hw_intf, &tear_status);
-		SDE_ERROR_CMDENC(cmd_enc,
-			"autofresh status:0x%x intf:%d tear_read:0x%x tear_write:0x%x\n",
-			autorefresh_status, phys_enc->intf_idx - INTF_0,
+		pr_err("enc:%d autofresh status:0x%x intf:%d tear_read:0x%x tear_write:0x%x\n",
+			DRMID(phys_enc->parent), autorefresh_status, phys_enc->intf_idx - INTF_0,
 			tear_status.read_count, tear_status.write_count);
 		SDE_EVT32(DRMID(phys_enc->parent), phys_enc->intf_idx - INTF_0,
 			autorefresh_status, tear_status.read_count,
