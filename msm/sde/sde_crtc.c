@@ -881,7 +881,7 @@ static void sde_crtc_post_commit_init(struct sde_crtc *sde_crtc)
 			sde_crtc->name,
 			&sde_crtc->output_fence->done_count);
 
-	if (kms->catalog->has_roi_misr)
+	if (kms && kms->catalog && kms->catalog->has_roi_misr)
 		sde_roi_misr_init(sde_crtc);
 }
 
@@ -5599,18 +5599,14 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 
 	for (i = 1; i < SSPP_MAX; i++) {
 		if (pipe_staged[i]) {
-			sde_plane_clear_multirect(pipe_staged[i]);
 			if (is_sde_plane_virtual(pipe_staged[i]->plane)) {
-				struct sde_plane_state *psde_state;
-
-				SDE_DEBUG("r1 only virt plane:%d staged\n",
-					 pipe_staged[i]->plane->base.id);
-
-				psde_state = to_sde_plane_state(
-						pipe_staged[i]);
-
-				psde_state->multirect_index = SDE_SSPP_RECT_1;
+				SDE_ERROR(
+					"r1 only virt plane:%d not supported\n",
+					pipe_staged[i]->plane->base.id);
+				rc  = -EINVAL;
+				goto end;
 			}
+			sde_plane_clear_multirect(pipe_staged[i]);
 		}
 	}
 
@@ -6169,7 +6165,8 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *cstate;
 	int idx, ret;
-	uint64_t fence_fd;
+	uint64_t fence_user_fd;
+	uint64_t __user prev_user_fd;
 
 	if (!crtc || !state || !property) {
 		SDE_ERROR("invalid argument(s)\n");
@@ -6229,19 +6226,34 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 		if (!val)
 			goto exit;
 
-		ret = _sde_crtc_get_output_fence(crtc, state, &fence_fd);
+		ret = copy_from_user(&prev_user_fd, (void __user *)val,
+				sizeof(uint64_t));
 		if (ret) {
-			SDE_ERROR("fence create failed rc:%d\n", ret);
+			SDE_ERROR("copy from user failed rc:%d\n", ret);
+			ret = -EFAULT;
 			goto exit;
 		}
 
-		ret = copy_to_user((uint64_t __user *)(uintptr_t)val, &fence_fd,
-				sizeof(uint64_t));
-		if (ret) {
-			SDE_ERROR("copy to user failed rc:%d\n", ret);
-			put_unused_fd(fence_fd);
-			ret = -EFAULT;
-			goto exit;
+		/*
+		 * client is expected to reset the property to -1 before
+		 * requesting for the release fence
+		 */
+		if (prev_user_fd == -1) {
+			ret = _sde_crtc_get_output_fence(crtc, state,
+					&fence_user_fd);
+			if (ret) {
+				SDE_ERROR("fence create failed rc:%d\n", ret);
+				goto exit;
+			}
+
+			ret = copy_to_user((uint64_t __user *)(uintptr_t)val,
+					&fence_user_fd, sizeof(uint64_t));
+			if (ret) {
+				SDE_ERROR("copy to user failed rc:%d\n", ret);
+				put_unused_fd(fence_user_fd);
+				ret = -EFAULT;
+				goto exit;
+			}
 		}
 		break;
 	case CRTC_PROP_ROI_MISR:

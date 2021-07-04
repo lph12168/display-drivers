@@ -529,7 +529,7 @@ static int dp_display_initialize_hdcp(struct dp_display_private *dp)
 						"hdcp_physical")->io;
 	hdcp_init_data.revision      = &dp->panel->link_info.revision;
 	hdcp_init_data.msm_hdcp_dev  = dp->msm_hdcp_dev;
-
+	hdcp_init_data.forced_encryption = parser->has_force_encryption;
 	fd = sde_hdcp_1x_init(&hdcp_init_data);
 	if (IS_ERR_OR_NULL(fd)) {
 		pr_err("Error initializing HDCP 1.x\n");
@@ -1960,8 +1960,10 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		dp_panel->audio->on(dp_panel->audio);
 	}
 
-	cancel_delayed_work_sync(&dp->hdcp_cb_work);
-	queue_delayed_work(dp->wq, &dp->hdcp_cb_work, HZ);
+	if (dp->msm_hdcp_dev) {
+		cancel_delayed_work_sync(&dp->hdcp_cb_work);
+		queue_delayed_work(dp->wq, &dp->hdcp_cb_work, HZ);
+	}
 end:
 	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
 
@@ -2144,11 +2146,11 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 		flags |= DP_PANEL_SRC_INITIATED_POWER_DOWN;
 
 	/*
-	 * If connector is in MST mode, skip
+	 * If connector is in MST mode and not in suspend state, skip
 	 * powering down host as aux need keep alive
 	 * to handle hot-plug sideband message.
 	 */
-	if (dp->active_stream_cnt || dp->mst.mst_active)
+	if (dp->active_stream_cnt || (dp->mst.mst_active && !dp->suspended))
 		goto end;
 
 	/*
@@ -3264,6 +3266,17 @@ static int dp_pm_prepare(struct device *dev)
 	if (dp->is_connected && !dp->power_on) {
 		dp->aux->abort(dp->aux, false);
 		dp->ctrl->abort(dp->ctrl, false);
+	}
+
+	/*
+	 * If DP is not enabled but powered and suspend state
+	 * is entered, we need to power off the host to disable all
+	 * clocks. This is needed when link training failed.
+	 */
+	if (!dp->power_on && dp->aux->state != DP_STATE_CTRL_POWERED_OFF) {
+		dp->ctrl->off(dp->ctrl);
+		dp_display_host_deinit(dp);
+		dp->aux->state = DP_STATE_CTRL_POWERED_OFF;
 	}
 
 	return 0;
