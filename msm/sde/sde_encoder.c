@@ -2538,14 +2538,13 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
 
 		if (phys) {
-			if (!sde_enc->hw_pp[i * num_pp_per_intf] ||
-				sde_enc->topology.num_intf) {
-				SDE_ERROR_ENC(sde_enc, "invalid phys %d pp_per_intf %d num_intf %d",
-						i, num_pp_per_intf, sde_enc->topology.num_intf);
+			if (!sde_enc->hw_pp[i * num_pp_per_intf]) {
+				SDE_ERROR_ENC(sde_enc, "invalid phys %d pp_per_intf %d",
+						i, num_pp_per_intf);
 				return;
 			}
 			phys->hw_pp = sde_enc->hw_pp[i * num_pp_per_intf];
-			phys->connector = conn->state->connector;
+			phys->connector = conn;
 			if (phys->ops.mode_set)
 				phys->ops.mode_set(phys, mode, adj_mode);
 		}
@@ -3110,7 +3109,7 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 
 	/* reset connector topology name property */
 	if (sde_enc->cur_master && sde_enc->cur_master->connector &&
-			sde_enc->crtc->state->active_changed) {
+			sde_enc->crtc && sde_enc->crtc->state->active_changed) {
 		ret = sde_rm_update_topology(&sde_kms->rm,
 				sde_enc->cur_master->connector->state, NULL);
 		if (ret) {
@@ -5531,6 +5530,8 @@ int sde_encoder_update_caps_for_cont_splash(struct drm_encoder *encoder,
 		SDE_ERROR_ENC(sde_enc, "No encoder mapped to connector=%d\n",
 				conn->base.id);
 	}
+
+	sde_enc->crtc = encoder->crtc;
 
 	ret = sde_rm_reserve(&sde_kms->rm, encoder, encoder->crtc->state,
 			conn->state, false);

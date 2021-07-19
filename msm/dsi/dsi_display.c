@@ -251,12 +251,12 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	/* use bl_temp as index of dimming bl lut to find the dimming panel backlight */
 	if (bl_temp != 0 && panel->bl_config.dimming_bl_lut &&
 	    bl_temp < panel->bl_config.dimming_bl_lut->length) {
-		DSI_DEBUG("before dimming bl_temp = %u, after dimming bl_temp = %lu\n",
+		pr_debug("before dimming bl_temp = %u, after dimming bl_temp = %lu\n",
 			bl_temp, panel->bl_config.dimming_bl_lut->mapped_bl[bl_temp]);
 		bl_temp = panel->bl_config.dimming_bl_lut->mapped_bl[bl_temp];
 	}
 
-	DSI_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
+	pr_debug("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
 
 	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
@@ -585,9 +585,6 @@ static bool dsi_display_validate_reg_read(struct dsi_panel *panel)
 
 	for (i = 0; i < count; i++)
 		len += lenp[i];
-
-	for (i = 0; i < len; i++)
-		j += len;
 
 	for (j = 0; j < config->groups; ++j) {
 		for (i = 0; i < len; ++i) {
@@ -1001,13 +998,17 @@ static int dsi_display_ctrl_get_host_init_state(struct dsi_display *dsi_display,
 {
 	struct dsi_display_ctrl *ctrl;
 	int i, rc = -EINVAL;
+	bool final_state = true;
 
 	display_for_each_ctrl(i, dsi_display) {
+		bool ctrl_state = false;
 		ctrl = &dsi_display->ctrl[i];
-		rc = dsi_ctrl_get_host_engine_init_state(ctrl->ctrl, state);
-		if (rc)
+		rc = dsi_ctrl_get_host_engine_init_state(ctrl->ctrl, &ctrl_state);
+		final_state &= ctrl_state;
+		if ((rc) || !(final_state))
 			break;
 	}
+	*state = final_state;
 	return rc;
 }
 
@@ -1204,6 +1205,16 @@ int dsi_display_cmd_receive(void *display, const char *cmd_buf,
 	}
 
 	rc = dsi_display_ctrl_get_host_init_state(dsi_display, &state);
+
+	/**
+	 * Handle scenario where a command transfer is initiated through
+	 * sysfs interface when device is in suspend state.
+	 */
+	if (!rc && !state) {
+		pr_warn_ratelimited("Command xfer attempted while device is in suspend state\n");
+		rc = -EPERM;
+		goto end;
+	}
 	if (rc || !state) {
 		DSI_ERR("[DSI] Invalid host state = %d rc = %d\n",
 			state, rc);
@@ -2814,7 +2825,7 @@ static void dsi_display_toggle_resync_fifo(struct dsi_display *display)
 	 * bit on each phy. Avoid this for Cphy.
 	 */
 
-	if (display->panel->host_config.phy_type == DSI_PHY_TYPE_CPHY)
+	if (dsi_is_type_cphy(&display->panel->host_config))
 		return;
 
 	display_for_each_ctrl(i, display) {
@@ -4333,10 +4344,7 @@ void dsi_display_update_byte_intf_div(struct dsi_display *display)
 	config = &display->panel->host_config;
 
 	phy_ver = dsi_phy_get_version(m_ctrl->phy);
-	if (phy_ver <= DSI_PHY_VERSION_2_0)
-		config->byte_intf_clk_div = 1;
-	else
-		config->byte_intf_clk_div = 2;
+	config->byte_intf_clk_div = 2;
 }
 
 static int dsi_display_update_dsi_bitrate(struct dsi_display *display,
@@ -4499,17 +4507,6 @@ static void _dsi_display_calc_pipe_delay(struct dsi_display *display,
 		delay->pll_delay = 25;
 
 	delay->pll_delay = ((delay->pll_delay * esc_clk_rate_hz) / 1000000);
-}
-
-/*
- * dsi_display_is_type_cphy - check if panel type is cphy
- * @display: Pointer to private display structure
- * Returns: True if panel type is cphy
- */
-static inline bool dsi_display_is_type_cphy(struct dsi_display *display)
-{
-	return (display->panel->host_config.phy_type ==
-		DSI_PHY_TYPE_CPHY) ? true : false;
 }
 
 static int _dsi_display_dyn_update_clks(struct dsi_display *display,
@@ -6684,7 +6681,7 @@ void dsi_display_adjust_mode_timing(struct dsi_display *display,
 		do_div(old_htotal, display->ctrl_count);
 		new_htotal = dsi_mode->timing.clk_rate_hz * lanes;
 		div = bpp * vtotal * dsi_mode->timing.refresh_rate;
-		if (dsi_display_is_type_cphy(display)) {
+		if (dsi_is_type_cphy(&display->panel->host_config)) {
 			new_htotal = new_htotal * bits_per_symbol;
 			div = div * num_of_symbols;
 		}
@@ -6702,7 +6699,7 @@ void dsi_display_adjust_mode_timing(struct dsi_display *display,
 		do_div(htotal, display->ctrl_count);
 		new_vtotal = dsi_mode->timing.clk_rate_hz * lanes;
 		div = bpp * htotal * dsi_mode->timing.refresh_rate;
-		if (dsi_display_is_type_cphy(display)) {
+		if (dsi_is_type_cphy(&display->panel->host_config)) {
 			new_vtotal = new_vtotal * bits_per_symbol;
 			div = div * num_of_symbols;
 		}
@@ -7153,7 +7150,7 @@ int dsi_display_find_mode(struct dsi_display *display,
 	struct dsi_display_mode *m;
 	struct dsi_dyn_clk_caps *dyn_clk_caps;
 	unsigned int match_flags = DSI_MODE_MATCH_FULL_TIMINGS;
-	struct dsi_display_mode_priv_info priv_info;
+	struct dsi_display_mode_priv_info *priv_info;
 
 	if (!display || !out_mode)
 		return -EINVAL;
@@ -7169,6 +7166,10 @@ int dsi_display_find_mode(struct dsi_display *display,
 		if (rc)
 			return rc;
 	}
+
+	priv_info = kzalloc(sizeof(struct dsi_display_mode_priv_info), GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(priv_info))
+		return -ENOMEM;
 
 	mutex_lock(&display->display_lock);
 	dyn_clk_caps = &(display->panel->dyn_clk_caps);
@@ -7186,9 +7187,7 @@ int dsi_display_find_mode(struct dsi_display *display,
 
 		if (sub_mode && sub_mode->dsc_mode) {
 			match_flags |= DSI_MODE_MATCH_DSC_CONFIG;
-			cmp->priv_info = &priv_info;
-			memset(cmp->priv_info, 0,
-				sizeof(struct dsi_display_mode_priv_info));
+			cmp->priv_info = priv_info;
 			cmp->priv_info->dsc_enabled = (sub_mode->dsc_mode ==
 				MSM_DISPLAY_DSC_MODE_ENABLED) ? true : false;
 		}
@@ -7203,6 +7202,7 @@ int dsi_display_find_mode(struct dsi_display *display,
 	cmp->priv_info = NULL;
 
 	mutex_unlock(&display->display_lock);
+	kfree(priv_info);
 
 	if (!*out_mode) {
 		DSI_ERR("[%s] failed to find mode for v_active %u h_active %u fps %u pclk %u\n",

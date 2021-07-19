@@ -5708,7 +5708,6 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	static const struct drm_prop_enum_list e_dcwb_data_points[] = {
 		{CAPTURE_MIXER_OUT, "capture_mixer_out"},
 		{CAPTURE_DSPP_OUT, "capture_pp_out"},
-		{CAPTURE_DEMURA_OUT, "capture_demura_out"},
 	};
 
 	static const struct drm_prop_enum_list e_idle_pc_state[] = {
@@ -7153,11 +7152,6 @@ struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 		drm_crtc_cleanup(crtc);
 		kfree(sde_crtc);
 		return ERR_PTR(rc);
-	}
-
-	if (kms->catalog->allowed_dsc_reservation_switch && !kms->dsc_switch_support) {
-		SDE_DEBUG("dsc switch not supported\n");
-		kms->catalog->allowed_dsc_reservation_switch = 0;
 	}
 
 	/* create CRTC properties */

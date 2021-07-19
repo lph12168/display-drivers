@@ -925,7 +925,8 @@ static void _sde_dbg_dump_dsi_dbg_bus(struct sde_dbg_sde_debug_bus *bus, u32 ena
 	struct sde_dbg_dsi_ctrl_list_entry *ctl_entry;
 	struct list_head *list;
 	int list_size = 0;
-	bool in_mem, in_log, i, dsi_count = 0;
+	bool in_mem, in_log;
+	u32 i, dsi_count = 0;
 	u32 **dump_mem = NULL;
 	u32 *dump_addr = NULL;
 	struct sde_debug_bus_entry *entries;
@@ -1153,7 +1154,7 @@ static int sde_dbg_debugfs_open(struct inode *inode, struct file *file)
 	file->private_data = inode->i_private;
 	mutex_lock(&sde_dbg_base.mutex);
 	sde_dbg_base.cur_evt_index = 0;
-	sde_dbg_base.evtlog->first = sde_dbg_base.evtlog->curr + 1;
+	sde_dbg_base.evtlog->first = (u32)atomic_add_return(0, &sde_dbg_base.evtlog->curr) + 1;
 	sde_dbg_base.evtlog->last =
 		sde_dbg_base.evtlog->first + SDE_EVTLOG_ENTRY;
 	mutex_unlock(&sde_dbg_base.mutex);
