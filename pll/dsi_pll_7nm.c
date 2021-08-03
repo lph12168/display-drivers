@@ -1574,7 +1574,7 @@ static struct clk_regmap_div dsi1pll_bitclk_src = {
 };
 
 static struct clk_fixed_factor dsi0pll_post_vco_div = {
-	.div = 4,
+	.div = 8,
 	.mult = 1,
 	.hw.init = &(struct clk_init_data){
 		.name = "dsi0pll_post_vco_div",
@@ -1586,7 +1586,7 @@ static struct clk_fixed_factor dsi0pll_post_vco_div = {
 };
 
 static struct clk_fixed_factor dsi1pll_post_vco_div = {
-	.div = 4,
+	.div = 8,
 	.mult = 1,
 	.hw.init = &(struct clk_init_data){
 		.name = "dsi1pll_post_vco_div",
@@ -1733,10 +1733,8 @@ static struct clk_regmap_mux dsi0pll_pclk_src_mux = {
 		.hw.init = &(struct clk_init_data){
 			.name = "dsi0pll_pclk_src_mux",
 			.parent_names = (const char *[]){"dsi0pll_bitclk_src",
-					"dsi0pll_post_bit_div",
-					"dsi0pll_pll_out_div",
-					"dsi0pll_post_vco_div"},
-			.num_parents = 4,
+					"dsi0pll_post_bit_div"},
+			.num_parents = 2,
 			.flags = CLK_GET_RATE_NOCACHE,
 			.ops = &clk_regmap_mux_closest_ops,
 		},
@@ -1767,10 +1765,8 @@ static struct clk_regmap_mux dsi1pll_pclk_src_mux = {
 		.hw.init = &(struct clk_init_data){
 			.name = "dsi1pll_pclk_src_mux",
 			.parent_names = (const char *[]){"dsi1pll_bitclk_src",
-					"dsi1pll_post_bit_div",
-					"dsi1pll_pll_out_div",
-					"dsi1pll_post_vco_div"},
-			.num_parents = 4,
+					"dsi1pll_post_bit_div"},
+			.num_parents = 2,
 			.flags = CLK_GET_RATE_NOCACHE,
 			.ops = &clk_regmap_mux_closest_ops,
 		},
