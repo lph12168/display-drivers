@@ -1139,9 +1139,22 @@ static int sde_encoder_virt_atomic_check(
 			return ret;
 		}
 
-		sde_crtc_state_set_topology_name(crtc_state,
-				sde_connector_get_property(conn_state,
-				CONNECTOR_PROP_TOPOLOGY_NAME));
+		/**
+		 * There will be two connectors for one CRTC in CWB case,
+		 * and only update mode_info and topology name for primary
+		 * connector if the number of encoder is more then one in
+		 * virtual encoder case.
+		 */
+		if (hweight32(sde_crtc_state->base.encoder_mask) == 1 ||
+				drm_enc->encoder_type != DRM_MODE_ENCODER_VIRTUAL) {
+			memcpy(&sde_crtc_state->mode_info,
+					&sde_conn_state->mode_info,
+					sizeof(sde_conn_state->mode_info));
+
+			sde_crtc_state_set_topology_name(crtc_state,
+					sde_connector_get_property(conn_state,
+					CONNECTOR_PROP_TOPOLOGY_NAME));
+		}
 
 		ret = sde_connector_set_blob_data(conn_state->connector,
 				conn_state,
@@ -1851,6 +1864,11 @@ static int _sde_encoder_dsc_2_lm_2_enc_1_intf(struct sde_encoder_virt *sde_enc,
 	int i, rc;
 
 	memset(&cfg, 0, sizeof(cfg));
+
+	if (params->num_channels < 2) {
+		SDE_ERROR_ENC(sde_enc, "invalid enc number for DSC\n");
+		return -EINVAL;
+	}
 
 	for (i = 0; i < params->num_channels; i++) {
 		hw_pp[i] = sde_enc->hw_pp[i];

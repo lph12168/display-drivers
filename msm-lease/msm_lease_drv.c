@@ -285,14 +285,19 @@ static int msm_lease_open(struct drm_device *dev, struct drm_file *file)
 	if (!dev->registered)
 		return -ENOENT;
 
-	rc = g_master_open(dev, file);
-	if (rc)
-		return rc;
+	if (!dev->mode_config.poll_enabled || drm_is_render_client(file))
+		return g_master_open(dev, file);
 
 	mutex_lock(&g_lease_mutex);
 
 	lease = _find_lease_from_minor(file->minor);
-	if (!lease)
+	if (!lease) {
+		rc = -ENODEV;
+		goto out2;
+	}
+
+	rc = g_master_open(dev, file);
+	if (rc)
 		goto out2;
 
 	mutex_lock(&dev->master_mutex);
@@ -472,7 +477,7 @@ static void msm_lease_postclose(struct drm_device *dev, struct drm_file *file)
 	if (!lease)
 		goto out;
 
-	if (file->master)
+	if (drm_is_current_master(file))
 		msm_lease_lastclose(lease);
 
 	mutex_lock(&dev->master_mutex);
@@ -846,6 +851,9 @@ static void msm_lease_parse_remain_objs(void)
 
 			found = false;
 			drm_for_each_encoder(encoder, dev) {
+				if (encoder->encoder_type ==
+						DRM_MODE_ENCODER_VIRTUAL)
+					continue;
 				if ((encoder->possible_crtcs &
 						drm_crtc_mask(crtc)) &&
 						(encoder->possible_crtcs !=
@@ -987,7 +995,7 @@ static int msm_lease_notifier(struct notifier_block *nb,
 {
 	struct msm_lease *lease_drv;
 	struct drm_device *ddev, *master_ddev;
-	u32 object_ids[MAX_LEASE_OBJECT_COUNT];
+	u32 object_ids[MAX_LEASE_OBJECT_COUNT] = {0};
 	int object_count = 0;
 	int ret;
 
@@ -1017,7 +1025,8 @@ static int msm_lease_notifier(struct notifier_block *nb,
 	/* update ids list */
 	lease_drv->minor = ddev->primary;
 	lease_drv->obj_cnt = object_count;
-	memcpy(lease_drv->object_ids, object_ids, sizeof(u32) * object_count);
+	if (object_count > 0)
+		memcpy(lease_drv->object_ids, object_ids, sizeof(u32) * object_count);
 
 	/* fixup crtcs' primary planes */
 	msm_lease_fixup_crtc_primary(master_ddev, object_ids, object_count);
