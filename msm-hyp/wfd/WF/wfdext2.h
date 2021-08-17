@@ -251,16 +251,13 @@ enum WFDTranslationMode {
 #define WFD_FORMAT_V422               17
 #define WFD_FORMAT_AYUV               18
 #define WFD_FORMAT_NV16               19
-#define WFD_FORMAT_RGBX1010102        20
-#define WFD_FORMAT_RGBA1010102        21
-#define WFD_FORMAT_BGRX1010102        22
-#define WFD_FORMAT_BGRA1010102        23
-#define WFD_FORMAT_XBGR2101010        24
-#define WFD_FORMAT_XRGB2101010        25
-#define WFD_FORMAT_ARGB2101010        26
-#define WFD_FORMAT_ABGR2101010        27
-#define WFD_FORMAT_P010               28
-#define WFD_FORMAT_TP10               29
+#define WFD_FORMAT_P010               20
+#define WFD_FORMAT_BGRA8888           21
+#define WFD_FORMAT_BGRX8888           22
+#define WFD_FORMAT_RGBA1010102        23
+#define WFD_FORMAT_RGBX1010102        24
+#define WFD_FORMAT_BGRA1010102        25
+#define WFD_FORMAT_BGRX1010102        26
 
 #ifndef WFD_FORMAT_NV12_QC_SUPERTILE
 #define WFD_FORMAT_NV12_QC_SUPERTILE  ((1 << 16) | WFD_FORMAT_NV12)
@@ -268,11 +265,13 @@ enum WFDTranslationMode {
 #ifndef WFD_FORMAT_NV12_QC_32M4KA
 #define WFD_FORMAT_NV12_QC_32M4KA     ((2 << 16) | WFD_FORMAT_NV12)
 #endif
+#ifndef WFD_FORMAT_NV12_QC_TP10
+#define WFD_FORMAT_NV12_QC_TP10       ((3 << 16) | WFD_FORMAT_NV12)
+#endif
 
 /* QTI extension definitions - start at 50 */
-#define WFD_FORMAT_BGRA8888           50
-#define WFD_FORMAT_BGRX8888           51
-#define WFD_FORMAT_BGR565             52
+#define WFD_FORMAT_BGR565             50
+#define WFD_FORMAT_BGR888             51
 
 struct WFD_EGLImageType {
 	WFDuint32 width;
