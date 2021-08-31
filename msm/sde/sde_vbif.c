@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -27,7 +27,7 @@ static int _sde_vbif_wait_for_xin_halt(struct sde_hw_vbif *vbif, u32 xin_id)
 	int rc;
 
 	if (!vbif || !vbif->cap || !vbif->ops.get_halt_ctrl) {
-		SDE_ERROR("invalid arguments vbif %d\n", vbif != 0);
+		SDE_ERROR("invalid arguments vbif %d\n", vbif != NULL);
 		return -EINVAL;
 	}
 
@@ -174,7 +174,7 @@ static u32 _sde_vbif_get_ot_limit(struct sde_hw_vbif *vbif,
 	u32 val;
 
 	if (!vbif || !vbif->cap) {
-		SDE_ERROR("invalid arguments vbif %d\n", vbif != 0);
+		SDE_ERROR("invalid arguments vbif %d\n", vbif != NULL);
 		return -EINVAL;
 	}
 

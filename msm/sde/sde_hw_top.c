@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "sde_hwio.h"
@@ -355,7 +355,7 @@ static void sde_hw_setup_dce(struct sde_hw_mdp *mdp, u32 dce_sel)
 	SDE_REG_WRITE(c, DCE_SEL, dce_sel);
 }
 
-void sde_hw_reset_ubwc(struct sde_hw_mdp *mdp, struct sde_mdss_cfg *m)
+static void sde_hw_reset_ubwc(struct sde_hw_mdp *mdp, struct sde_mdss_cfg *m)
 {
 	struct sde_hw_blk_reg_map c;
 	u32 ubwc_version;
