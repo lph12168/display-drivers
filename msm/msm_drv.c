@@ -92,7 +92,7 @@ static void msm_fb_output_poll_changed(struct drm_device *dev)
  * RETURNS
  * Zero for success or -errorno.
  */
-int msm_atomic_check(struct drm_device *dev,
+static int msm_atomic_check(struct drm_device *dev,
 			    struct drm_atomic_state *state)
 {
 	struct msm_drm_private *priv;
@@ -133,7 +133,7 @@ static char *vram = "16m";
 MODULE_PARM_DESC(vram, "Configure VRAM size (for devices without IOMMU/GPUMMU)");
 module_param(vram, charp, 0);
 
-bool dumpstate = false;
+static bool dumpstate;
 MODULE_PARM_DESC(dumpstate, "Dump KMS state on errors");
 module_param(dumpstate, bool, 0600);
 
@@ -1366,7 +1366,7 @@ end:
  * Returns:
  * Zero on success, negative errno on failure.
  */
-int msm_ioctl_rmfb2(struct drm_device *dev, void *data,
+static int msm_ioctl_rmfb2(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv)
 {
 	struct drm_framebuffer *fb = NULL;
@@ -1400,7 +1400,6 @@ int msm_ioctl_rmfb2(struct drm_device *dev, void *data,
 
 	return 0;
 }
-EXPORT_SYMBOL(msm_ioctl_rmfb2);
 
 /**
  * msm_ioctl_power_ctrl - enable/disable power vote on MDSS Hw

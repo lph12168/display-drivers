@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d]: " fmt, __func__, __LINE__
@@ -833,7 +833,7 @@ struct clk *sde_power_clk_get_clk(struct sde_power_handle *phandle,
 
 	if (!phandle) {
 		pr_err("invalid input power handle\n");
-		return 0;
+		return NULL;
 	}
 	mp = &phandle->mp;
 

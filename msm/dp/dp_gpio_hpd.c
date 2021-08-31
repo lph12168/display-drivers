@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
 
@@ -271,7 +271,7 @@ error:
 	return rc;
 }
 
-int dp_gpio_hpd_register(struct dp_hpd *dp_hpd)
+static int dp_gpio_hpd_register(struct dp_hpd *dp_hpd)
 {
 	struct dp_gpio_hpd_private *gpio_hpd;
 

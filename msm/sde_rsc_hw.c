@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[sde_rsc_hw:%s:%d]: " fmt, __func__, __LINE__
@@ -663,7 +663,7 @@ static int sde_rsc_state_update(struct sde_rsc_priv *rsc,
 	return rc;
 }
 
-int rsc_hw_init(struct sde_rsc_priv *rsc)
+static int rsc_hw_init(struct sde_rsc_priv *rsc)
 {
 	int rc = 0;
 
