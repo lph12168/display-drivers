@@ -1552,6 +1552,8 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		dp->debug = NULL;
 		goto error_debug;
 	}
+	dp->debug->hdcp_wait_sink_sync =
+		dp->parser->hdcp_wait_sink_sync_enabled;
 
 	dp->tot_dsc_blks_in_use = 0;
 
