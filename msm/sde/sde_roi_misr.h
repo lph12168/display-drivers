@@ -27,17 +27,23 @@ struct sde_crtc_misr_event {
 };
 
 /**
- * sde_misr_state - sde misr state of current topology
- * @num_misrs: Number of roi misrs in current topology
- * @mixer_width: width of every mixer in current topology
- * @roi_misr_cfg: roi misr configuration from user space
- * @roi_range: misr roi range table
+ * struct sde_roi_misr_mode_info - defines misr related mode info
+ * @num_misrs:		the number of misrs
+ * @mixer_width:	the layer mixer width
+ * @roi_range:		the maximum roi range for misrs
  */
-struct sde_misr_state {
+struct sde_roi_misr_mode_info {
 	u32 num_misrs;
 	u32 mixer_width;
-	struct sde_roi_misr_usr_cfg roi_misr_cfg;
 	struct drm_clip_rect roi_range[ROI_MISR_MAX_ROIS_PER_CRTC];
+};
+
+/**
+ * sde_misr_state - sde misr state of current topology
+ * @roi_misr_cfg: roi misr configuration from user space
+ */
+struct sde_misr_state {
+	struct sde_roi_misr_usr_cfg roi_misr_cfg;
 };
 
 /**
@@ -66,5 +72,22 @@ struct sde_misr_enc_data {
 	void (*crtc_roi_misr_cb)(void *);
 	void *crtc_roi_misr_cb_data;
 };
+
+/**
+ * sde_roi_misr_get_mode_info - get roi misr mode info
+ * @connector: Pointer to drm connector structure
+ * @drm_mode: Pointer to drm_display mode structure
+ * @mode_info: Pointer to msm_mode_info structure
+ * @misr_mode_info: Output parameter, pointer to
+ *			sde_roi_misr_mode_info structure
+ * @display: Pointer to private display structure
+ *
+ * Returns: Zero on success
+ */
+int sde_roi_misr_get_mode_info(struct drm_connector *connector,
+		const struct drm_display_mode *drm_mode,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display);
 
 #endif /* _SDE_ROI_MISR_H */
