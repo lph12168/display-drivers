@@ -812,6 +812,29 @@ static void dp_parser_widebus(struct dp_parser *parser)
 			parser->has_widebus);
 }
 
+static void dp_parser_sink_sync(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+
+	parser->hdcp_wait_sink_sync_enabled =
+		of_property_read_bool(dev->of_node,
+			"qcom,hdcp-wait-sink-sync");
+
+	pr_debug("hdcp-wait-sink-sync parsing successful:%d\n",
+			parser->hdcp_wait_sink_sync_enabled);
+}
+
+static void dp_parser_force_encryption(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+
+	parser->has_force_encryption = of_property_read_bool(dev->of_node,
+			"qcom,hdcp-force-encryption");
+
+	pr_debug("hdcp-force-encryption parsing successful:%d\n",
+			parser->has_force_encryption);
+}
+
 static int dp_parser_bond(struct dp_parser *parser)
 {
 	struct device *dev = &parser->pdev->dev;
@@ -918,6 +941,8 @@ static int dp_parser_parse(struct dp_parser *parser)
 	dp_parser_dsc(parser);
 	dp_parser_fec(parser);
 	dp_parser_widebus(parser);
+	dp_parser_force_encryption(parser);
+	dp_parser_sink_sync(parser);
 err:
 	return rc;
 }

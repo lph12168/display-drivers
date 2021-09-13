@@ -303,6 +303,8 @@ struct dp_parser {
 	bool dsc_feature_enable;
 	bool fec_feature_enable;
 	bool has_widebus;
+	bool has_force_encryption;
+	bool hdcp_wait_sink_sync_enabled;
 	bool gpio_aux_switch;
 	u32 max_dp_dsc_blks;
 	u32 max_dp_dsc_input_width_pixs;
