@@ -64,6 +64,8 @@ struct shd_display {
 	struct sde_rect src;
 	struct sde_rect roi;
 	struct shd_stage_range stage_range;
+	uint32_t misr_roi_mask;
+	struct sde_rect misr_range[ROI_MISR_MAX_ROIS_PER_CRTC];
 	bool full_screen;
 
 	struct platform_device *pdev;
