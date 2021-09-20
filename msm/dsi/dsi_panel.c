@@ -451,9 +451,9 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		goto error;
 	}
 
-	cmds->ctrl_flags = 0;
-
 	for (i = 0; i < count; i++) {
+		cmds->ctrl_flags = 0;
+
 		if (state == DSI_CMD_SET_STATE_LP)
 			cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM;
 
@@ -2693,6 +2693,10 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 		DSI_DEBUG("failed to parse qcom,src-chroma-format\n");
 		rc = 0;
 		data = MSM_CHROMA_444;
+	} else if (data == MSM_CHROMA_422) {
+		priv_info->dsc.config.native_422 = 1;
+	} else if (data == MSM_CHROMA_420) {
+		priv_info->dsc.config.native_420 = 1;
 	}
 
 	priv_info->dsc.chroma_format = data;

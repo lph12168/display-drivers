@@ -257,6 +257,9 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	if (bl_temp > panel->bl_config.bl_max_level)
 		bl_temp = panel->bl_config.bl_max_level;
 
+        if (bl_temp && (bl_temp < panel->bl_config.bl_min_level))
+                bl_temp = panel->bl_config.bl_min_level;
+
 	pr_debug("bl_scale = %u, bl_scale_sv = %u, bl_lvl = %u\n",
 		bl_scale, bl_scale_sv, (u32)bl_temp);
 
@@ -274,12 +277,13 @@ static int dsi_display_cmd_engine_enable(struct dsi_display *display)
 	int rc = 0;
 	int i;
 	struct dsi_display_ctrl *m_ctrl, *ctrl;
-	bool skip_op = is_skip_op_required(display);
+	bool skip_op = display->trusted_vm_env;
 
 	m_ctrl = &display->ctrl[display->cmd_master_idx];
 	mutex_lock(&m_ctrl->ctrl->ctrl_lock);
 
-	rc = dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl, DSI_CTRL_ENGINE_ON);
+	rc = dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl,
+				DSI_CTRL_ENGINE_ON, skip_op);
 	if (rc) {
 		DSI_ERR("[%s] enable mcmd engine failed, skip_op:%d rc:%d\n",
 		       display->name, skip_op, rc);
@@ -291,7 +295,8 @@ static int dsi_display_cmd_engine_enable(struct dsi_display *display)
 		if (!ctrl->ctrl || (ctrl == m_ctrl))
 			continue;
 
-		rc = dsi_ctrl_set_cmd_engine_state(ctrl->ctrl, DSI_CTRL_ENGINE_ON);
+		rc = dsi_ctrl_set_cmd_engine_state(ctrl->ctrl,
+					DSI_CTRL_ENGINE_ON, skip_op);
 		if (rc) {
 			DSI_ERR(
 			    "[%s] enable cmd engine failed, skip_op:%d rc:%d\n",
@@ -302,7 +307,8 @@ static int dsi_display_cmd_engine_enable(struct dsi_display *display)
 
 	goto done;
 error_disable_master:
-	(void)dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl, DSI_CTRL_ENGINE_OFF);
+	(void)dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl,
+				DSI_CTRL_ENGINE_OFF, skip_op);
 done:
 	mutex_unlock(&m_ctrl->ctrl->ctrl_lock);
 	return rc;
@@ -313,7 +319,7 @@ static int dsi_display_cmd_engine_disable(struct dsi_display *display)
 	int rc = 0;
 	int i;
 	struct dsi_display_ctrl *m_ctrl, *ctrl;
-	bool skip_op = is_skip_op_required(display);
+	bool skip_op = display->trusted_vm_env;
 
 	m_ctrl = &display->ctrl[display->cmd_master_idx];
 	mutex_lock(&m_ctrl->ctrl->ctrl_lock);
@@ -323,14 +329,16 @@ static int dsi_display_cmd_engine_disable(struct dsi_display *display)
 		if (!ctrl->ctrl || (ctrl == m_ctrl))
 			continue;
 
-		rc = dsi_ctrl_set_cmd_engine_state(ctrl->ctrl, DSI_CTRL_ENGINE_OFF);
+		rc = dsi_ctrl_set_cmd_engine_state(ctrl->ctrl,
+					DSI_CTRL_ENGINE_OFF, skip_op);
 		if (rc)
 			DSI_ERR(
 			   "[%s] disable cmd engine failed, skip_op:%d rc:%d\n",
 				display->name, skip_op, rc);
 	}
 
-	rc = dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl, DSI_CTRL_ENGINE_OFF);
+	rc = dsi_ctrl_set_cmd_engine_state(m_ctrl->ctrl,
+				DSI_CTRL_ENGINE_OFF, skip_op);
 	if (rc)
 		DSI_ERR("[%s] disable mcmd engine failed, skip_op:%d rc:%d\n",
 			display->name, skip_op, rc);

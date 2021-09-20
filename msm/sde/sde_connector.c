@@ -131,7 +131,6 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	struct drm_event event;
 	int rc = 0;
 	struct sde_kms *sde_kms;
-	struct sde_vm_ops *vm_ops;
 
 	sde_kms = _sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
@@ -167,8 +166,7 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 
 	sde_vm_lock(sde_kms);
 
-	vm_ops = sde_vm_get_ops(sde_kms);
-	if (vm_ops && vm_ops->vm_owns_hw && !vm_ops->vm_owns_hw(sde_kms)) {
+	if (!sde_vm_owns_hw(sde_kms)) {
 		SDE_DEBUG("skipping bl update due to HW unavailablity\n");
 		goto done;
 	}
@@ -882,10 +880,6 @@ static int _sde_connector_update_dirty_properties(
 			_sde_connector_update_power_locked(c_conn);
 			mutex_unlock(&c_conn->lock);
 			break;
-		case CONNECTOR_PROP_BL_SCALE:
-		case CONNECTOR_PROP_SV_BL_SCALE:
-			_sde_connector_update_bl_scale(c_conn);
-			break;
 		case CONNECTOR_PROP_HDR_METADATA:
 			_sde_connector_update_hdr_metadata(c_conn, c_state);
 			break;
@@ -1056,6 +1050,14 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 	c_conn->allow_bl_update = false;
 }
 
+void sde_connector_helper_bridge_post_disable(struct drm_connector *connector)
+{
+	struct sde_connector *c_conn = NULL;
+	c_conn = to_sde_connector(connector);
+
+	c_conn->panel_dead = false;
+}
+
 void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn = NULL;
@@ -1088,7 +1090,6 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
 		backlight_update_status(c_conn->bl_device);
 	}
-	c_conn->panel_dead = false;
 }
 
 int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
@@ -2077,7 +2078,6 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 {
 	struct drm_connector *connector = file->private_data;
 	struct sde_connector *c_conn = NULL;
-	struct sde_vm_ops *vm_ops;
 	struct sde_kms *sde_kms;
 	char *input, *token, *input_copy, *input_dup = NULL;
 	const char *delim = " ";
@@ -2107,9 +2107,8 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 	if (!input)
 		return -ENOMEM;
 
-	vm_ops = sde_vm_get_ops(sde_kms);
 	sde_vm_lock(sde_kms);
-	if (vm_ops && vm_ops->vm_owns_hw && !vm_ops->vm_owns_hw(sde_kms)) {
+	if (!sde_vm_owns_hw(sde_kms)) {
 		SDE_DEBUG("op not supported due to HW unavailablity\n");
 		rc = -EOPNOTSUPP;
 		goto end;

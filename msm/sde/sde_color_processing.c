@@ -2028,6 +2028,8 @@ static int _sde_cp_crtc_update_pu_features(struct drm_crtc *crtc, bool *need_flu
 			hw_cfg.displayh = hw_cfg.num_of_mixers *
 					hw_lm->cfg.out_width;
 			hw_cfg.displayv = hw_lm->cfg.out_height;
+			hw_cfg.panel_width = sde_crtc->base.state->adjusted_mode.hdisplay;
+			hw_cfg.panel_height = sde_crtc->base.state->adjusted_mode.vdisplay;
 
 			ret = set_pu_feature(hw_dspp, &hw_cfg, sde_crtc);
 			/* feature does not need flush when ret > 0 */
@@ -2082,6 +2084,7 @@ static void _sde_clear_ltm_merge_mode(struct sde_crtc *sde_crtc)
 	}
 
 	sde_crtc->ltm_merge_clear_pending = false;
+	SDE_EVT32(DRMID(&sde_crtc->base), num_mixers, sde_crtc->ltm_merge_clear_pending);
 	spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
 }
 
@@ -2597,6 +2600,7 @@ void sde_cp_crtc_destroy_properties(struct drm_crtc *crtc)
 	sde_crtc->ltm_buffer_cnt = 0;
 	sde_crtc->ltm_hist_en = false;
 	sde_crtc->ltm_merge_clear_pending = false;
+	SDE_EVT32(DRMID(crtc), sde_crtc->ltm_merge_clear_pending);
 	sde_crtc->hist_irq_idx = -1;
 
 	mutex_destroy(&sde_crtc->crtc_cp_lock);
@@ -4149,6 +4153,7 @@ static void _sde_cp_crtc_disable_ltm_hist(struct sde_crtc *sde_crtc,
 	spin_lock_irqsave(&sde_crtc->ltm_lock, irq_flags);
 	sde_crtc->ltm_hist_en = false;
 	sde_crtc->ltm_merge_clear_pending = true;
+	SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc->ltm_merge_clear_pending);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_free);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_busy);
 	for (i = 0; i < sde_crtc->ltm_buffer_cnt; i++)
@@ -4221,6 +4226,7 @@ static void _sde_cp_ltm_hist_interrupt_cb(void *arg, int irq_idx)
 				0);
 		}
 		sde_crtc->ltm_merge_clear_pending = true;
+		SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc->ltm_merge_clear_pending);
 		spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
 		DRM_DEBUG_DRIVER("LTM histogram is disabled\n");
 		return;
