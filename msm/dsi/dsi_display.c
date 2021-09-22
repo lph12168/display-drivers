@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/list.h>
@@ -6405,6 +6405,11 @@ int dsi_display_get_panel_vfp(void *dsi_display,
 	mutex_lock(&display->display_lock);
 
 	count = display->panel->num_display_modes;
+	if (!count && display->ext_conn) {
+		mutex_unlock(&display->display_lock);
+		DSI_DEBUG("external bridge did not have timing node\n");
+		return -EPERM;
+	}
 
 	if (display->panel->cur_mode)
 		refresh_rate = display->panel->cur_mode->timing.refresh_rate;
