@@ -1709,7 +1709,8 @@ static void _sde_plane_setup_panel_stacking(struct sde_plane *psde,
 {
 	struct sde_hw_pipe_line_insertion_cfg *cfg;
 	struct sde_crtc_state *cstate;
-	uint32_t h_start, h_total, y_start;
+	uint32_t h_start = 0, h_total = 0, y_start = 0;
+	int ret;
 
 	if (!test_bit(SDE_SSPP_LINE_INSERTION, &psde->features))
 		return;
@@ -1721,9 +1722,14 @@ static void _sde_plane_setup_panel_stacking(struct sde_plane *psde,
 	if (!cstate->padding_height)
 		return;
 
-	sde_crtc_calc_vpadding_param(psde->base.state->crtc->state,
+	ret = sde_crtc_calc_vpadding_param(
+		psde->base.state->crtc->state,
 		pstate->base.crtc_y, pstate->base.crtc_h,
 		&y_start, &h_start, &h_total);
+	if (ret) {
+		SDE_ERROR("failed to calculate vpadding parameters\n");
+		return;
+	}
 
 	cfg->enable = true;
 	cfg->dummy_lines = cstate->padding_dummy;
