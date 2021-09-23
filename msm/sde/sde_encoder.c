@@ -2059,7 +2059,7 @@ static int _sde_encoder_update_roi(struct drm_encoder *drm_enc)
 	struct sde_encoder_virt *sde_enc;
 	struct drm_connector *drm_conn;
 	struct drm_display_mode *adj_mode;
-	struct sde_rect roi;
+	struct sde_rect roi = {0};
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder parameter\n");
