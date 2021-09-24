@@ -675,8 +675,9 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	/* open a open WFD device */
 	num_dev = wfdEnumerateDevices_User(NULL, 0, attribs);
 	if (!num_dev) {
-		pr_err("wfdEnumerateDevices_User - failed!\n");
-		return -ENODEV;
+		pr_info("wfdEnumerateDevices_User - failed for client %x!\n",
+				kms->client_id);
+		wire_user_deinit(kms->client_id, 0x00);
 	}
 
 	wfdEnumerateDevices_User(wfd_ids, num_dev, attribs);
