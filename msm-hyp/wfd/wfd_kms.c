@@ -121,6 +121,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_helper.h>
+#include "msm_hyp_trace.h"
 #include "msm_hyp_utils.h"
 #include "wfd_kms.h"
 
@@ -661,6 +662,7 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	WFDPort port;
 	int i, j, num_port, port_idx;
 	int rc;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	attribs[0] = WFD_DEVICE_CLIENT_TYPE;
 	attribs[1] = kms->client_id;
@@ -671,6 +673,10 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 		pr_err("failed to init wire user for client %x\n", kms->client_id);
 		return rc;
 	}
+
+	snprintf(marker_buff, sizeof(marker_buff),
+		"kernel_fe: wire client %x ready", kms->client_id);
+	place_marker(marker_buff);
 
 	/* open a open WFD device */
 	num_dev = wfdEnumerateDevices_User(NULL, 0, attribs);
@@ -795,11 +801,17 @@ static void wfd_kms_bridge_enable(struct drm_bridge *drm_bridge)
 			struct msm_hyp_connector, bridge);
 	struct wfd_connector_info_priv *priv = container_of(connector->info,
 			struct wfd_connector_info_priv, base);
+	static bool first_frame = true;
 
 	wfdSetPortAttribi_User(priv->wfd_device,
 			priv->wfd_port,
 			WFD_PORT_POWER_MODE,
 			WFD_POWER_MODE_ON);
+
+	if (first_frame) {
+		place_marker("kernel_fe: Set port attribute POWER ON");
+		first_frame = false;
+	}
 }
 
 static void wfd_kms_bridge_disable(struct drm_bridge *drm_bridge)
@@ -1389,12 +1401,18 @@ static void *wfd_kms_complete_handler_cb(enum event_types type,
 	struct display_event *disp_event = (struct display_event *)info;
 	struct msm_hyp_crtc *c = to_msm_hyp_crtc(crtc);
 	struct wfd_crtc_info_priv *priv;
+	static bool first_frame = true;
 
 	if (type != DISPLAY_EVENT || !info || !params)
 		return NULL;
 
 	if (disp_event->type == COMMIT_COMPLETE) {
 		msm_hyp_crtc_commit_done(crtc);
+
+		if (first_frame) {
+			place_marker("kernel_fe: Fisrt commit envent done");
+			first_frame = false;
+		}
 	} else if (disp_event->type == VSYNC) {
 		msm_hyp_crtc_vblank_done(crtc);
 
@@ -1443,9 +1461,17 @@ static void wfd_kms_commit(struct msm_hyp_kms *kms,
 	struct display_event disp_event;
 	struct cb_info cb_info;
 	int i;
+	static bool first_frame = true;
 
 	if (!old_state)
 		return;
+
+	HYP_ATRACE_BEGIN(__func__);
+
+	if (first_frame) {
+		place_marker("kernel_fe: First commit kickoff");
+		first_frame = false;
+	}
 
 	for_each_new_crtc_in_state(old_state, crtc, crtc_state, i) {
 		c = to_msm_hyp_crtc(crtc);
@@ -1471,6 +1497,7 @@ static void wfd_kms_commit(struct msm_hyp_kms *kms,
 				priv->wfd_port,
 				WFD_COMMIT_ASYNC);
 	}
+	HYP_ATRACE_END(__func__);
 }
 
 static void wfd_kms_enable_vblank(struct msm_hyp_kms *kms,
@@ -1543,6 +1570,7 @@ static int wfd_kms_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct wfd_kms *kms;
 	int ret;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	kms = devm_kzalloc(dev, sizeof(*kms), GFP_KERNEL);
 	if (!kms)
@@ -1565,6 +1593,10 @@ static int wfd_kms_probe(struct platform_device *pdev)
 		pr_err("component add failed, rc=%d\n", ret);
 		return ret;
 	}
+
+	snprintf(marker_buff, sizeof(marker_buff),
+		"kernel_fe: wfd_kms probe client %x", kms->client_id);
+	place_marker(marker_buff);
 
 	return 0;
 }

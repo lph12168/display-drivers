@@ -81,6 +81,7 @@
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
 
 #include <linux/of_platform.h>
+#include <soc/qcom/boot_stats.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_atomic.h>
@@ -88,6 +89,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include "msm_drv_hyp.h"
 #include "msm_hyp_utils.h"
+#include "msm_hyp_trace.h"
 
 #define CRTC_INPUT_FENCE_TIMEOUT    10000
 #define MAX_PLANES                  32
@@ -1527,11 +1529,15 @@ static int _msm_hyp_start_atomic(struct msm_hyp_drm_private *priv,
 static void _msm_hyp_end_atomic(struct msm_hyp_drm_private *priv,
 		uint32_t crtc_mask)
 {
+	HYP_ATRACE_BEGIN(__func__);
+
 	spin_lock(&priv->pending_crtcs_event.lock);
 	DRM_DEBUG("end: %08x", crtc_mask);
 	priv->pending_crtcs &= ~crtc_mask;
 	wake_up_all_locked(&priv->pending_crtcs_event);
 	spin_unlock(&priv->pending_crtcs_event.lock);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_prepare_fence(
@@ -1590,6 +1596,8 @@ void msm_hyp_crtc_commit_done(struct drm_crtc *crtc)
 	if (!crtc)
 		return;
 
+	HYP_ATRACE_BEGIN(__func__);
+
 	complete_all(&c->commit_done);
 
 	/* signal output fence */
@@ -1605,6 +1613,8 @@ void msm_hyp_crtc_commit_done(struct drm_crtc *crtc)
 		}
 	drm_connector_list_iter_end(&conn_iter);
 
+	HYP_ATRACE_END(__func__);
+
 	DRM_DEBUG("crtc %d commit done\n", crtc->base.id);
 }
 
@@ -1614,8 +1624,12 @@ static void _msm_hyp_atomic_prepare_commit(struct drm_device *ddev,
 	struct msm_hyp_drm_private *priv = ddev->dev_private;
 	struct msm_hyp_kms *kms = priv->kms;
 
+	HYP_ATRACE_BEGIN(__func__);
+
 	if (kms->funcs && kms->funcs->prepare_commit)
 		kms->funcs->prepare_commit(kms, old_state);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_atomic_commit(struct drm_device *ddev,
@@ -1629,6 +1643,8 @@ static void _msm_hyp_atomic_commit(struct drm_device *ddev,
 	struct msm_hyp_crtc_state *cstate;
 	struct msm_hyp_plane_state *pstate;
 	int i;
+
+	HYP_ATRACE_BEGIN(__func__);
 
 	for_each_new_crtc_in_state(old_state, crtc, crtc_state, i) {
 		if (!crtc_state->active)
@@ -1645,6 +1661,8 @@ static void _msm_hyp_atomic_commit(struct drm_device *ddev,
 
 	if (kms->funcs && kms->funcs->commit)
 		kms->funcs->commit(kms, old_state);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_atomic_complete_commit(struct drm_device *ddev,
@@ -1653,8 +1671,12 @@ static void _msm_hyp_atomic_complete_commit(struct drm_device *ddev,
 	struct msm_hyp_drm_private *priv = ddev->dev_private;
 	struct msm_hyp_kms *kms = priv->kms;
 
+	HYP_ATRACE_BEGIN(__func__);
+
 	if (kms->funcs && kms->funcs->complete_commit)
 		kms->funcs->complete_commit(kms, old_state);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_atomic_wait_for_commit_done(
@@ -1666,18 +1688,34 @@ static void _msm_hyp_atomic_wait_for_commit_done(
 	struct msm_hyp_crtc *c;
 	int i;
 
+	HYP_ATRACE_BEGIN(__func__);
+
 	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
 		c = to_msm_hyp_crtc(crtc);
 		wait_for_completion(&c->commit_done);
 	}
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_complete_commit(struct msm_hyp_commit *c)
 {
 	struct drm_device *dev = c->dev;
 	struct drm_atomic_state *old_state = c->state;
+	static bool first_frame = true;
+
+	HYP_ATRACE_BEGIN("Input_Fence_WAIT");
+
+	if (first_frame) {
+		place_marker("kernel_fe: First commit start");
+		first_frame = false;
+	}
 
 	drm_atomic_helper_wait_for_fences(dev, old_state, false);
+
+	HYP_ATRACE_END("Input_Fence_WAIT");
+
+	HYP_ATRACE_BEGIN(__func__);
 
 	_msm_hyp_atomic_prepare_commit(dev, old_state);
 
@@ -1703,6 +1741,8 @@ static void _msm_hyp_complete_commit(struct msm_hyp_commit *c)
 
 	if (c->nonblock)
 		kfree(c);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static void _msm_hyp_drm_commit_work_cb(struct kthread_work *work)
@@ -1745,6 +1785,8 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	int ret = -EINVAL, i;
 	bool nonblock;
 
+	HYP_ATRACE_BEGIN(__func__);
+
 	/* cache since work will kfree commit in non-blocking case */
 	nonblock = commit->nonblock;
 
@@ -1768,6 +1810,8 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	/* free nonblocking commits in this context, after processing */
 	if (!nonblock)
 		kfree(commit);
+
+	HYP_ATRACE_END(__func__);
 }
 
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
@@ -2163,6 +2207,8 @@ static int msm_hyp_pdev_probe(struct platform_device *pdev)
 	ret = component_master_add_with_match(&pdev->dev, &msm_hyp_ops, match);
 	if (ret)
 		goto fail;
+
+	place_marker("kernel_fe: msm_hyp probe ready");
 
 	return 0;
 
