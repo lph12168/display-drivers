@@ -11,7 +11,7 @@
 #include <linux/atomic.h>
 #include <linux/kthread.h>
 #include <linux/ktime.h>
-
+#include "msm_hyp_trace.h"
 #include "wire_user.h"
 #include "wire_format.h"
 #include "user_os_utils.h"
@@ -335,6 +335,8 @@ wire_user_profile_begin(
 
 	time_start[index] = ktime_get();
 
+	HYP_ATRACE_BEGIN(func_name[index]);
+
 	return 0;
 }
 
@@ -357,6 +359,8 @@ wire_user_profile_end(
 		WIRE_LOG_INFO("%s execution time: %lld us",
 			func_name[index], (long long)time_exec);
 	}
+
+	HYP_ATRACE_END(func_name[index]);
 
 	return 0;
 }
@@ -898,6 +902,8 @@ wfdDeviceCommitExt_User(
 	union msg_device_commit_ext *dev_commit_ext = NULL;
 	WFDErrorCode sts = WFD_ERROR_NONE;
 
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
+
 	wire_user_profile_begin(WFD_DEVICE_COMMIT_EXT_PROFILING);
 
 	if (type != WFD_COMMIT_ENTIRE_PORT) {
@@ -926,10 +932,16 @@ wfdDeviceCommitExt_User(
 	dev_commit_ext->req.hdl = (u32)(uintptr_t)wire_port->port;
 	dev_commit_ext->req.flags = (u32)flags;
 
+	snprintf(marker_buff, sizeof(marker_buff),
+		"Commit SEND, dev=%p type=%d hdl=%p timestamp=%lu",
+		device, type, hdl, req.hdr.timestamp);
+	HYP_ATRACE_BEGIN(marker_buff);
+
 	if (wire_port_send_recv(wire_dev, wire_port, &req, &resp, 0x00)) {
 		WIRE_LOG_ERROR("RPC call failed");
 		goto end;
 	}
+	HYP_ATRACE_END(marker_buff);
 
 	/* reset batch commit */
 	if (wire_port->commit.size) {
@@ -3343,6 +3355,7 @@ static int event_listener(void *param)
 	void *handle = ctx->init_info.context;
 	struct wire_packet *req;
 	int rc;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	req = kzalloc(sizeof(struct wire_packet), GFP_KERNEL);
 	if (!req)
@@ -3379,8 +3392,18 @@ static int event_listener(void *param)
 		}
 
 		if (!rc) {
+			snprintf(marker_buff, sizeof(marker_buff),
+				"Event RECV'D, type=%d disp_id=%d timestamp=%lu",
+				req->payload.ev_req.info.disp_event,
+				req->payload.ev_req.info.disp_event.display_id,
+				req->hdr.timestamp);
+
+			HYP_ATRACE_BEGIN(marker_buff);
+
 			/* Need to handle event callbacks outside of channel lock */
 			event_handler(ctx, &req->payload.ev_req);
+
+			HYP_ATRACE_END(marker_buff);
 		}
 	}
 
@@ -3473,6 +3496,7 @@ wire_user_request_cb(
 	struct wire_context *ctx = wire_dev->ctx;
 	void *handle = ctx->init_info.context;
 	int rc = 0;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	/* Request/Response */
 	WIRE_HEAP struct wire_packet req;
@@ -3513,6 +3537,13 @@ wire_user_request_cb(
 
 	ev_req->type = (enum e_types)type;
 
+	snprintf(marker_buff, sizeof(marker_buff),
+		"Event REQ, type=%d disp_id=%d timestamp=%lu",
+		req.payload.ev_req.info.disp_event.type,
+		req.payload.ev_req.info.disp_event.display_id,
+		req.hdr.timestamp);
+	HYP_ATRACE_BEGIN(marker_buff);
+
 	if (type == DISPLAY_EVENT) {
 		ev_req->info.disp_event.type = (enum e_display_types)
 						info->disp_event.type;
@@ -3527,6 +3558,8 @@ wire_user_request_cb(
 		WIRE_LOG_ERROR("RPC call failed");
 		goto end;
 	}
+
+	HYP_ATRACE_END(marker_buff);
 
 	rc = ev_resp->status;
 
