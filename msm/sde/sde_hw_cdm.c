@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "sde_hw_mdss.h"
@@ -212,7 +212,7 @@ static int sde_hw_cdm_setup_cdwn(struct sde_hw_cdm *ctx,
 	return 0;
 }
 
-int sde_hw_cdm_enable(struct sde_hw_cdm *ctx,
+static int sde_hw_cdm_enable(struct sde_hw_cdm *ctx,
 		struct sde_hw_cdm_cfg *cdm)
 {
 	struct sde_hw_blk_reg_map *c = &ctx->hw;
@@ -255,7 +255,7 @@ int sde_hw_cdm_enable(struct sde_hw_cdm *ctx,
 	return 0;
 }
 
-void sde_hw_cdm_disable(struct sde_hw_cdm *ctx)
+static void sde_hw_cdm_disable(struct sde_hw_cdm *ctx)
 {
 	if (ctx && ctx->ops.bind_pingpong_blk)
 		ctx->ops.bind_pingpong_blk(ctx, false, 0);
