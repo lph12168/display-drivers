@@ -258,7 +258,7 @@ static int dp_hdcp2p2_wakeup(struct hdcp_transport_wakeup_data *data)
 		kthread_queue_work(&ctrl->worker, &ctrl->auth);
 		break;
 	case HDCP_TRANSPORT_CMD_RX_INFO:
-		ctrl->downstream_version = data->buf[1] & 0x1;
+		ctrl->downstream_version = data->buf[1] & 0x3;
 		break;
 	case HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION:
 		dp_hdcp2p2_send_nofication(ctrl,

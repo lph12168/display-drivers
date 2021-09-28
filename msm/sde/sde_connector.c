@@ -2120,52 +2120,54 @@ static const struct drm_connector_helper_funcs sde_connector_helper_ops_v2 = {
 };
 
 static void sde_connector_populate_roi_misr_roi_range(
-		struct sde_kms *sde_kms,
-		const struct drm_display_mode *drm_mode,
+		struct sde_connector *c_conn,
 		struct sde_kms_info *info,
+		struct drm_display_mode *mode,
+		struct msm_mode_info *mode_info,
 		int topology_idx)
 {
-	char misr_prop_name[20];
-	char misr_prop_value[30];
-	struct sde_rect roi_misr_rect_range[ROI_MISR_MAX_MISRS_PER_CRTC];
+	char misr_prop_name[20] = {0};
+	char misr_prop_value[30] = {0};
+	struct drm_clip_rect *roi_range;
+	struct sde_rect roi_rect;
+	struct sde_roi_misr_mode_info misr_mode_info = {0};
 	int range_data_idx;
 	int roi_misr_num;
-	int misr_width;
 	int roi_factor, roi_id;
+	int ret;
 	int i;
 
-	roi_misr_num = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_idx);
-	if (!roi_misr_num)
+	ret = sde_roi_misr_get_mode_info(&c_conn->base, mode,
+			mode_info, &misr_mode_info, c_conn->display);
+	if (ret)
 		return;
 
-	memset(misr_prop_name, 0, sizeof(misr_prop_name));
-	misr_width = drm_mode->hdisplay / roi_misr_num;
-
-	for (i = 0; i < roi_misr_num; i++) {
-		roi_misr_rect_range[i].x = misr_width * i;
-		roi_misr_rect_range[i].y = 0;
-		roi_misr_rect_range[i].w = misr_width;
-		roi_misr_rect_range[i].h = drm_mode->vdisplay;
-	}
-
+	roi_misr_num = misr_mode_info.num_misrs;
 	roi_factor = sde_rm_is_3dmux_case(topology_idx)
 			? 2 * ROI_MISR_MAX_ROIS_PER_MISR
 			: ROI_MISR_MAX_ROIS_PER_MISR;
 
 	for (i = 0; i < roi_misr_num * ROI_MISR_MAX_ROIS_PER_MISR; i++) {
 		range_data_idx = SDE_ROI_MISR_GET_HW_IDX(i);
-
 		roi_id = roi_factor * range_data_idx
 				+ SDE_ROI_MISR_GET_ROI_IDX(i);
+		roi_range = &misr_mode_info.roi_range[roi_id];
+
+		roi_rect.x = roi_range->x1;
+		roi_rect.y = roi_range->y1;
+		roi_rect.w = roi_range->x2 - roi_range->x1 + 1;
+		roi_rect.h = roi_range->y2 - roi_range->y1 + 1;
+
+		/* Skip invalid range info due to the range table is not cotinuous */
+		if (!roi_rect.w || !roi_rect.h)
+			continue;
 
 		snprintf(misr_prop_name, sizeof(misr_prop_name),
 				"misr_roi_%d", roi_id);
 		snprintf(misr_prop_value, sizeof(misr_prop_value),
 				"(%d,%d,%d,%d)",
-				roi_misr_rect_range[range_data_idx].x,
-				roi_misr_rect_range[range_data_idx].y,
-				roi_misr_rect_range[range_data_idx].w,
-				roi_misr_rect_range[range_data_idx].h);
+				roi_rect.x, roi_rect.y,
+				roi_rect.w, roi_rect.h);
 
 		sde_kms_info_add_keystr(info, misr_prop_name,
 				misr_prop_value);
@@ -2226,8 +2228,8 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 			continue;
 		}
 
-		sde_connector_populate_roi_misr_roi_range(sde_kms,
-				mode, info, topology_idx);
+		sde_connector_populate_roi_misr_roi_range(c_conn,
+				info, mode, &mode_info, topology_idx);
 
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 			mode_info.mdp_transfer_time_us);
