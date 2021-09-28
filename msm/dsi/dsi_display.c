@@ -5696,8 +5696,12 @@ static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
 	mode_info->comp_info.comp_type = MSM_DISPLAY_COMPRESSION_NONE;
 
 	topology = &mode_info->topology;
-	topology->num_lm = (avail_res->max_mixer_width
-			<= drm_mode->hdisplay) ? 2 : 1;
+	if (ext_display->panel->host_config.ext_bridge_always_dual_intf) {
+		topology->num_lm = ext_display->ctrl_count;
+	} else {
+		topology->num_lm = (avail_res->max_mixer_width
+				<= drm_mode->hdisplay) ? 2 : 1;
+	}
 	topology->num_enc = 0;
 	topology->num_intf = ext_display->ctrl_count;
 
