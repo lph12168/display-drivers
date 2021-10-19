@@ -78,7 +78,7 @@ struct dp_hpd *dp_hpd_get(struct device *dev, struct dp_parser *parser,
 				PTR_ERR(dp_hpd));
 
 		dp_hpd = dp_usbpd_init(dev, cb);
-		if (IS_ERR(dp_hpd)) {
+		if (IS_ERR_OR_NULL(dp_hpd)) {
 			pr_err("failed to get usbpd\n");
 			goto out;
 		}
