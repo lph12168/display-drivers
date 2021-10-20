@@ -737,7 +737,7 @@ static void dsi_drm_update_dtd(struct edid *edid,
 				timing->v_back_porch;
 		u32 h_img = 0, v_img = 0;
 
-		dtd->pixel_clock = mode->pixel_clk_khz / 10;
+		dtd->pixel_clock = cpu_to_le16(mode->pixel_clk_khz / 10);
 
 		pd->hactive_lo = timing->h_active & 0xFF;
 		pd->hblank_lo = h_blank & 0xFF;

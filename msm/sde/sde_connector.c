@@ -235,7 +235,7 @@ int sde_connector_register_event(struct drm_connector *connector,
 void sde_connector_unregister_event(struct drm_connector *connector,
 		uint32_t event_idx)
 {
-	(void)sde_connector_register_event(connector, event_idx, 0, 0);
+	(void)sde_connector_register_event(connector, event_idx, NULL, NULL);
 }
 
 static void _sde_connector_install_dither_property(struct drm_device *dev,
@@ -380,7 +380,9 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 	if (en == c_conn->esd_status_check)
 		return;
 
-	sde_connector_get_info(connector, &info);
+	if (sde_connector_get_info(connector, &info))
+		return;
+
 	if (c_conn->ops.check_status &&
 		(info.capabilities & MSM_DISPLAY_ESD_ENABLED)) {
 		if (en) {
@@ -860,7 +862,7 @@ static void sde_connector_atomic_reset(struct drm_connector *connector)
 
 	if (connector->state) {
 		sde_connector_atomic_destroy_state(connector, connector->state);
-		connector->state = 0;
+		connector->state = NULL;
 	}
 
 	c_state = msm_property_alloc_state(&c_conn->property_info);
@@ -1114,7 +1116,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 	struct sde_connector_state *c_state;
 	int idx, rc;
 	uint64_t fence_user_fd;
-	uint64_t __user prev_user_fd;
+	uint64_t prev_user_fd;
 
 	if (!connector || !state || !property) {
 		SDE_ERROR("invalid argument(s), conn %pK, state %pK, prp %pK\n",
@@ -1157,7 +1159,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		if (!val)
 			goto end;
 
-		rc = copy_from_user(&prev_user_fd, (void __user *)val,
+		rc = copy_from_user((void *)&prev_user_fd, (void __user *)val,
 				sizeof(uint64_t));
 		if (rc) {
 			SDE_ERROR("copy from user failed rc:%d\n", rc);
@@ -1197,7 +1199,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		break;
 	case CONNECTOR_PROP_ROI_V1:
 		rc = _sde_connector_set_roi_v1(c_conn, c_state,
-				(void *)(uintptr_t)val);
+				(void __user *)(uintptr_t)val);
 		if (rc)
 			SDE_ERROR_CONN(c_conn, "invalid roi_v1, rc: %d\n", rc);
 		break;
@@ -1224,7 +1226,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 
 	if (idx == CONNECTOR_PROP_HDR_METADATA) {
 		rc = _sde_connector_set_ext_hdr_info(c_conn,
-			c_state, (void *)(uintptr_t)val);
+			c_state, (void __user *)(uintptr_t)val);
 		if (rc)
 			SDE_ERROR_CONN(c_conn, "cannot set hdr info %d\n", rc);
 	}
@@ -1696,7 +1698,9 @@ static int sde_connector_init_debugfs(struct drm_connector *connector)
 
 	sde_connector = to_sde_connector(connector);
 
-	sde_connector_get_info(connector, &info);
+	if (sde_connector_get_info(connector, &info))
+		return -EINVAL;
+
 	if (sde_connector->ops.check_status &&
 		(info.capabilities & MSM_DISPLAY_ESD_ENABLED)) {
 		debugfs_create_u32("esd_status_interval", 0600,
@@ -2120,52 +2124,54 @@ static const struct drm_connector_helper_funcs sde_connector_helper_ops_v2 = {
 };
 
 static void sde_connector_populate_roi_misr_roi_range(
-		struct sde_kms *sde_kms,
-		const struct drm_display_mode *drm_mode,
+		struct sde_connector *c_conn,
 		struct sde_kms_info *info,
+		struct drm_display_mode *mode,
+		struct msm_mode_info *mode_info,
 		int topology_idx)
 {
-	char misr_prop_name[20];
-	char misr_prop_value[30];
-	struct sde_rect roi_misr_rect_range[ROI_MISR_MAX_MISRS_PER_CRTC];
+	char misr_prop_name[20] = {0};
+	char misr_prop_value[30] = {0};
+	struct drm_clip_rect *roi_range;
+	struct sde_rect roi_rect;
+	struct sde_roi_misr_mode_info misr_mode_info = {0};
 	int range_data_idx;
 	int roi_misr_num;
-	int misr_width;
 	int roi_factor, roi_id;
+	int ret;
 	int i;
 
-	roi_misr_num = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_idx);
-	if (!roi_misr_num)
+	ret = sde_roi_misr_get_mode_info(&c_conn->base, mode,
+			mode_info, &misr_mode_info, c_conn->display);
+	if (ret)
 		return;
 
-	memset(misr_prop_name, 0, sizeof(misr_prop_name));
-	misr_width = drm_mode->hdisplay / roi_misr_num;
-
-	for (i = 0; i < roi_misr_num; i++) {
-		roi_misr_rect_range[i].x = misr_width * i;
-		roi_misr_rect_range[i].y = 0;
-		roi_misr_rect_range[i].w = misr_width;
-		roi_misr_rect_range[i].h = drm_mode->vdisplay;
-	}
-
+	roi_misr_num = misr_mode_info.num_misrs;
 	roi_factor = sde_rm_is_3dmux_case(topology_idx)
 			? 2 * ROI_MISR_MAX_ROIS_PER_MISR
 			: ROI_MISR_MAX_ROIS_PER_MISR;
 
 	for (i = 0; i < roi_misr_num * ROI_MISR_MAX_ROIS_PER_MISR; i++) {
 		range_data_idx = SDE_ROI_MISR_GET_HW_IDX(i);
-
 		roi_id = roi_factor * range_data_idx
 				+ SDE_ROI_MISR_GET_ROI_IDX(i);
+		roi_range = &misr_mode_info.roi_range[roi_id];
+
+		roi_rect.x = roi_range->x1;
+		roi_rect.y = roi_range->y1;
+		roi_rect.w = roi_range->x2 - roi_range->x1 + 1;
+		roi_rect.h = roi_range->y2 - roi_range->y1 + 1;
+
+		/* Skip invalid range info due to the range table is not cotinuous */
+		if (!roi_rect.w || !roi_rect.h)
+			continue;
 
 		snprintf(misr_prop_name, sizeof(misr_prop_name),
 				"misr_roi_%d", roi_id);
 		snprintf(misr_prop_value, sizeof(misr_prop_value),
 				"(%d,%d,%d,%d)",
-				roi_misr_rect_range[range_data_idx].x,
-				roi_misr_rect_range[range_data_idx].y,
-				roi_misr_rect_range[range_data_idx].w,
-				roi_misr_rect_range[range_data_idx].h);
+				roi_rect.x, roi_rect.y,
+				roi_rect.w, roi_rect.h);
 
 		sde_kms_info_add_keystr(info, misr_prop_name,
 				misr_prop_value);
@@ -2226,8 +2232,8 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 			continue;
 		}
 
-		sde_connector_populate_roi_misr_roi_range(sde_kms,
-				mode, info, topology_idx);
+		sde_connector_populate_roi_misr_roi_range(c_conn,
+				info, mode, &mode_info, topology_idx);
 
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 			mode_info.mdp_transfer_time_us);

@@ -165,10 +165,10 @@ static void _msm_property_install_integer(struct msm_property_info *info,
 		 * Properties need to be attached to each drm object that
 		 * uses them, but only need to be created once
 		 */
-		if (*prop == 0) {
+		if (*prop == NULL) {
 			*prop = drm_property_create_range(info->dev,
 					flags, name, min, max);
-			if (*prop == 0)
+			if (*prop == NULL)
 				DRM_ERROR("create %s property failed\n", name);
 		}
 
@@ -221,7 +221,7 @@ void msm_property_install_enum(struct msm_property_info *info,
 		 * Properties need to be attached to each drm object that
 		 * uses them, but only need to be created once
 		 */
-		if (*prop == 0) {
+		if (*prop == NULL) {
 			/* 'bitmask' is a special type of 'enum' */
 			if (is_bitmask)
 				*prop = drm_property_create_bitmask(info->dev,
@@ -231,7 +231,7 @@ void msm_property_install_enum(struct msm_property_info *info,
 				*prop = drm_property_create_enum(info->dev,
 						DRM_MODE_PROP_ENUM | flags,
 						name, values, num_values);
-			if (*prop == 0)
+			if (*prop == NULL)
 				DRM_ERROR("create %s property failed\n", name);
 		}
 
@@ -272,11 +272,11 @@ void msm_property_install_blob(struct msm_property_info *info,
 		 * Properties need to be attached to each drm object that
 		 * uses them, but only need to be created once
 		 */
-		if (*prop == 0) {
+		if (*prop == NULL) {
 			/* use 'create' for blob property place holder */
 			*prop = drm_property_create(info->dev,
 					DRM_MODE_PROP_BLOB | flags, name, 0);
-			if (*prop == 0)
+			if (*prop == NULL)
 				DRM_ERROR("create %s property failed\n", name);
 		}
 
@@ -571,7 +571,7 @@ void *msm_property_get_blob(struct msm_property_info *info,
 {
 	struct drm_property_blob *blob;
 	size_t len = 0;
-	void *rc = 0;
+	void *rc = NULL;
 
 	if (!info || !property_state || !property_state->values ||
 			(property_idx >= info->blob_count)) {

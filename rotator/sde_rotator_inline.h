@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __SDE_ROTATOR_INLINE_H__
@@ -113,46 +113,47 @@ void sde_rotator_inline_reg_dump(struct platform_device *pdev);
 
 #else
 
-void *sde_rotator_inline_open(struct platform_device *pdev)
+static void *sde_rotator_inline_open(struct platform_device *pdev)
 {
 	return NULL;
 }
 
-int sde_rotator_inline_get_dst_pixfmt(struct platform_device *pdev,
+static int sde_rotator_inline_get_dst_pixfmt(struct platform_device *pdev,
 		u32 src_pixfmt, u32 *dst_pixfmt)
 {
 	return 0;
 }
 
-int sde_rotator_inline_get_downscale_caps(struct platform_device *pdev,
+static int sde_rotator_inline_get_downscale_caps(struct platform_device *pdev,
 		char *downscale_caps, int len)
 {
 	return 0;
 }
 
-int sde_rotator_inline_get_maxlinewidth(struct platform_device *pdev)
+static int sde_rotator_inline_get_maxlinewidth(struct platform_device *pdev)
 {
 	return 0;
 }
 
-int sde_rotator_inline_get_pixfmt_caps(struct platform_device *pdev,
+static int sde_rotator_inline_get_pixfmt_caps(struct platform_device *pdev,
 		bool input, u32 *pixfmt, int len)
 {
 	return 0;
 }
 
-int sde_rotator_inline_commit(void *handle, struct sde_rotator_inline_cmd *cmd,
+static int sde_rotator_inline_commit(void *handle,
+		struct sde_rotator_inline_cmd *cmd,
 		enum sde_rotator_inline_cmd_type cmd_type)
 {
 	return 0;
 }
 
-int sde_rotator_inline_release(void *handle)
+static int sde_rotator_inline_release(void *handle)
 {
 	return 0;
 }
 
-void sde_rotator_inline_reg_dump(struct platform_device *pdev)
+static void sde_rotator_inline_reg_dump(struct platform_device *pdev)
 {
 }
 

@@ -302,6 +302,7 @@ static int _sde_encoder_phys_shd_rm_reserve(
 				struct sde_shd_hw_roi_misr, base);
 		hw_roi_misr->base = *(struct sde_hw_roi_misr *)roi_misr_iter.hw;
 		hw_roi_misr->orig = roi_misr_iter.hw;
+		hw_roi_misr->roi_mask = display->misr_roi_mask;
 		sde_shd_hw_roi_misr_init_op(&hw_roi_misr->base);
 
 		SDE_DEBUG("reserve ROI_MISR%d from enc %d to %d\n",
@@ -683,7 +684,8 @@ static void sde_encoder_phys_shd_disable(struct sde_encoder_phys *phys_enc)
 
 	if (!phys_enc->hw_intf || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid hw_intf %d hw_ctl %d\n",
-				phys_enc->hw_intf != 0, phys_enc->hw_ctl != 0);
+				phys_enc->hw_intf != NULL,
+				phys_enc->hw_ctl != NULL);
 		return;
 	}
 
@@ -747,7 +749,8 @@ int sde_encoder_phys_shd_get_line_count(
 	return 0;
 }
 
-int sde_encoder_phys_shd_atomic_check(struct sde_encoder_phys *phys_enc,
+static int sde_encoder_phys_shd_atomic_check(
+		struct sde_encoder_phys *phys_enc,
 		struct drm_crtc_state *crtc_state,
 		struct drm_connector_state *conn_state)
 {
