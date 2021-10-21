@@ -2530,11 +2530,21 @@ static int sde_connector_init_debugfs(struct drm_connector *connector)
 
 static int sde_connector_late_register(struct drm_connector *connector)
 {
+	struct sde_connector *c_conn = to_sde_connector(connector);
+
+	if (c_conn->ops.late_register)
+		c_conn->ops.late_register(connector);
+
 	return sde_connector_init_debugfs(connector);
 }
 
 static void sde_connector_early_unregister(struct drm_connector *connector)
 {
+	struct sde_connector *c_conn = to_sde_connector(connector);
+
+	if (c_conn->ops.early_unregister)
+		c_conn->ops.early_unregister(connector);
+
 	/* debugfs under connector->debugfs are deleted by drm_debugfs */
 }
 
