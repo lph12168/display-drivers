@@ -593,7 +593,7 @@ static struct sde_prop_type ctl_prop[] = {
 	{HW_DISP, "qcom,sde-ctl-display-pref", false, PROP_TYPE_STRING_ARRAY},
 };
 
-struct sde_prop_type mixer_blend_prop[] = {
+static struct sde_prop_type mixer_blend_prop[] = {
 	{MIXER_BLEND_OP_OFF, "qcom,sde-mixer-blend-op-off", true,
 		PROP_TYPE_U32_ARRAY},
 };
@@ -807,7 +807,7 @@ static int _parse_dt_bit_offset(struct device_node *np,
 	u32 count, bool mandatory)
 {
 	int rc = 0, len, i, j;
-	const u32 *arr;
+	const __be32 *arr;
 
 	arr = of_get_property(np, prop_name, &len);
 	if (arr) {
@@ -1347,8 +1347,10 @@ static int sde_dgm_parse_dt(struct device_node *np, u32 index,
 static int sde_sspp_parse_dt(struct device_node *np,
 	struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[SSPP_PROP_MAX], off_count, i, j;
-	int vig_prop_count[VIG_PROP_MAX], rgb_prop_count[RGB_PROP_MAX];
+	int rc, off_count, i, j;
+	int prop_count[SSPP_PROP_MAX] = {0};
+	int vig_prop_count[VIG_PROP_MAX] = {0};
+	int rgb_prop_count[RGB_PROP_MAX] = {0};
 	bool prop_exists[SSPP_PROP_MAX], vig_prop_exists[VIG_PROP_MAX];
 	bool rgb_prop_exists[RGB_PROP_MAX];
 	bool dgm_prop_exists[SSPP_SUBBLK_COUNT_MAX][DMA_PROP_MAX];
@@ -1563,7 +1565,8 @@ end:
 static int sde_ctl_parse_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[HW_PROP_MAX], i;
+	int rc, i;
+	int prop_count[HW_PROP_MAX] = {0};
 	bool prop_exists[HW_PROP_MAX];
 	struct sde_prop_value *prop_value = NULL;
 	struct sde_ctl_cfg *ctl;
@@ -1626,9 +1629,10 @@ end:
 static int sde_mixer_parse_dt(struct device_node *np,
 						struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[MIXER_PROP_MAX], i, j;
-	int blocks_prop_count[MIXER_BLOCKS_PROP_MAX];
-	int blend_prop_count[MIXER_BLEND_PROP_MAX];
+	int rc, i, j;
+	int prop_count[MIXER_PROP_MAX] = {0};
+	int blocks_prop_count[MIXER_BLOCKS_PROP_MAX] = {0};
+	int blend_prop_count[MIXER_BLEND_PROP_MAX] = {0};
 	bool prop_exists[MIXER_PROP_MAX];
 	bool blocks_prop_exists[MIXER_BLOCKS_PROP_MAX];
 	bool blend_prop_exists[MIXER_BLEND_PROP_MAX];
@@ -1805,7 +1809,8 @@ end:
 static int sde_intf_parse_dt(struct device_node *np,
 						struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[INTF_PROP_MAX], i;
+	int rc, i;
+	int prop_count[INTF_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[INTF_PROP_MAX];
 	u32 off_count;
@@ -1892,7 +1897,8 @@ end:
 
 static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[WB_PROP_MAX], i, j;
+	int rc, i, j;
+	int prop_count[WB_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[WB_PROP_MAX];
 	u32 off_count;
@@ -2131,7 +2137,8 @@ static void _sde_dspp_setup_blocks(struct sde_mdss_cfg *sde_cfg,
 static void _sde_inline_rot_parse_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg, struct sde_rot_cfg *rot)
 {
-	int rc, prop_count[INLINE_ROT_PROP_MAX], i, j, index;
+	int rc, i, j, index;
+	int prop_count[INLINE_ROT_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[INLINE_ROT_PROP_MAX];
 	u32 off_count, sspp_count = 0, wb_count = 0;
@@ -2281,7 +2288,8 @@ end:
 static int sde_dspp_top_parse_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[DSPP_TOP_PROP_MAX];
+	int rc;
+	int prop_count[DSPP_TOP_PROP_MAX] = {0};
 	bool prop_exists[DSPP_TOP_PROP_MAX];
 	struct sde_prop_value *prop_value = NULL;
 	u32 off_count;
@@ -2329,12 +2337,13 @@ end:
 static int sde_dspp_parse_dt(struct device_node *np,
 						struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[DSPP_PROP_MAX], i;
-	int ad_prop_count[AD_PROP_MAX];
+	int rc, i;
+	int prop_count[DSPP_PROP_MAX] = {0};
+	int ad_prop_count[AD_PROP_MAX] = {0};
 	bool prop_exists[DSPP_PROP_MAX], ad_prop_exists[AD_PROP_MAX];
 	bool blocks_prop_exists[DSPP_BLOCKS_PROP_MAX];
 	struct sde_prop_value *ad_prop_value = NULL;
-	int blocks_prop_count[DSPP_BLOCKS_PROP_MAX];
+	int blocks_prop_count[DSPP_BLOCKS_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL, *blocks_prop_value = NULL;
 	u32 off_count, ad_off_count;
 	struct sde_dspp_cfg *dspp;
@@ -2445,7 +2454,9 @@ end:
 static int sde_ds_parse_dt(struct device_node *np,
 			struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[DS_PROP_MAX], top_prop_count[DS_TOP_PROP_MAX], i;
+	int rc, i;
+	int prop_count[DS_PROP_MAX] = {0};
+	int top_prop_count[DS_TOP_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL, *top_prop_value = NULL;
 	bool prop_exists[DS_PROP_MAX], top_prop_exists[DS_TOP_PROP_MAX];
 	u32 off_count = 0, top_off_count = 0;
@@ -2558,7 +2569,8 @@ end:
 static int sde_dsc_parse_dt(struct device_node *np,
 			struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[DSC_PROP_MAX], i;
+	int rc, i;
+	int prop_count[DSC_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[DSC_PROP_MAX];
 	u32 dsc_pair_mask;
@@ -2620,7 +2632,8 @@ end:
 static int sde_roi_misr_parse_dt(struct device_node *np,
 				struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[MAX_BLOCKS], i;
+	int rc, i;
+	int prop_count[MAX_BLOCKS] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[ROI_MISR_PROP_MAX];
 	u32 off_count;
@@ -2678,7 +2691,8 @@ end:
 static int sde_cdm_parse_dt(struct device_node *np,
 				struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[HW_PROP_MAX], i;
+	int rc, i;
+	int prop_count[HW_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[HW_PROP_MAX];
 	u32 off_count;
@@ -2733,7 +2747,8 @@ end:
 static int sde_vbif_parse_dt(struct device_node *np,
 				struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[VBIF_PROP_MAX], i, j, k;
+	int rc, i, j, k;
+	int prop_count[VBIF_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[VBIF_PROP_MAX];
 	u32 off_count, vbif_len;
@@ -2946,7 +2961,8 @@ end:
 
 static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[PP_PROP_MAX], i;
+	int rc, i;
+	int prop_count[PP_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[PP_PROP_MAX];
 	u32 off_count, major_version;
@@ -3111,7 +3127,7 @@ static int sde_validate_limit_node(struct device_node *snp,
 {
 	int i = 0, rc = 0;
 	struct device_node *node = NULL;
-	int limit_value_count[LIMIT_PROP_MAX];
+	int limit_value_count[LIMIT_PROP_MAX] = {0};
 	bool limit_value_exists[LIMIT_SUBBLK_COUNT_MAX][LIMIT_PROP_MAX];
 	const char *type = NULL;
 
@@ -3191,7 +3207,8 @@ end:
 
 static int sde_parse_dt(struct device_node *np, struct sde_mdss_cfg *cfg)
 {
-	int rc, i, dma_rc, len, prop_count[SDE_PROP_MAX];
+	int rc, i, dma_rc, len;
+	int prop_count[SDE_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[SDE_PROP_MAX];
 	const char *type;
@@ -3369,7 +3386,8 @@ end:
 static int sde_parse_reg_dma_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg)
 {
-	int rc = 0, i, prop_count[REG_DMA_PROP_MAX];
+	int rc = 0, i;
+	int prop_count[REG_DMA_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	u32 off_count;
 	bool prop_exists[REG_DMA_PROP_MAX];
@@ -3419,7 +3437,8 @@ end:
 
 static int sde_perf_parse_dt(struct device_node *np, struct sde_mdss_cfg *cfg)
 {
-	int rc, len, prop_count[PERF_PROP_MAX];
+	int rc, len;
+	int prop_count[PERF_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[PERF_PROP_MAX];
 	const char *str = NULL;
@@ -3740,7 +3759,8 @@ end:
 static int sde_parse_merge_3d_dt(struct device_node *np,
 		struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[HW_PROP_MAX], off_count, i;
+	int rc, off_count, i;
+	int prop_count[HW_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[HW_PROP_MAX];
 	struct sde_merge_3d_cfg *merge_3d;
@@ -3785,7 +3805,8 @@ fail:
 static int sde_qdss_parse_dt(struct device_node *np,
 				struct sde_mdss_cfg *sde_cfg)
 {
-	int rc, prop_count[HW_PROP_MAX], i;
+	int rc, i;
+	int prop_count[HW_PROP_MAX] = {0};
 	struct sde_prop_value *prop_value = NULL;
 	bool prop_exists[HW_PROP_MAX];
 	u32 off_count;
