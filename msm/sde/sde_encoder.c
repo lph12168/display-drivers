@@ -1147,6 +1147,15 @@ static int sde_encoder_virt_atomic_check(
 		 */
 		if (hweight32(sde_crtc_state->base.encoder_mask) == 1 ||
 				drm_enc->encoder_type != DRM_MODE_ENCODER_VIRTUAL) {
+			ret = sde_roi_misr_get_mode_info(
+					&sde_conn->base,
+					adj_mode,
+					&sde_conn_state->mode_info,
+					&sde_crtc_state->misr_mode_info,
+					sde_conn->display);
+			if (ret)
+				return ret;
+
 			memcpy(&sde_crtc_state->mode_info,
 					&sde_conn_state->mode_info,
 					sizeof(sde_conn_state->mode_info));

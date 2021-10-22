@@ -613,9 +613,16 @@ static int shd_display_atomic_check(struct msm_kms *kms,
 			continue;
 
 		/* always add base crtc's lock into state */
+retry:
 		rc = drm_modeset_lock(&base->crtc->mutex, state->acquire_ctx);
-		if (rc)
+		if (rc == -EDEADLK) {
+			rc = drm_modeset_backoff(state->acquire_ctx);
+			if (!rc)
+				SDE_ERROR("backoff failed\n");
+			goto retry;
+		} else if (WARN_ON(rc)) {
 			return rc;
+		}
 
 		/* read old crtc state from all shared displays */
 		crtc_mask = active_mask = 0;
@@ -711,6 +718,54 @@ static int shd_connector_get_info(struct drm_connector *connector,
 	info->is_connected = true;
 	info->num_of_h_tiles = 1;
 	info->h_tile_instance[0] = display->base->intf_idx;
+
+	return 0;
+}
+
+static int shd_connector_get_roi_misr_mode_info(
+		struct drm_connector *connector,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display)
+{
+	struct shd_display *shd_display = display;
+	struct sde_kms *sde_kms;
+	struct msm_drm_private *priv;
+	struct sde_rect *roi_ptr;
+	struct drm_clip_rect *roi_range;
+	enum sde_rm_topology_name topology_name;
+	int num_misrs;
+	int i;
+
+	if (!mode_info || !misr_mode_info || !display) {
+		SDE_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	priv = shd_display->base->crtc->dev->dev_private;
+	sde_kms = to_sde_kms(priv->kms);
+	topology_name = sde_rm_get_topology_name(&sde_kms->rm,
+			mode_info->topology);
+	num_misrs = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_name);
+
+	misr_mode_info->num_misrs = num_misrs;
+	misr_mode_info->mixer_width =
+		shd_display->base->mode.hdisplay / num_misrs;
+
+	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_CRTC; i++) {
+		roi_ptr = &shd_display->misr_range[i];
+		roi_range = &misr_mode_info->roi_range[i];
+
+		roi_range->x1 = roi_ptr->x;
+		roi_range->y1 = roi_ptr->y;
+		roi_range->x2 = roi_ptr->x + roi_ptr->w - 1;
+		roi_range->y2 = roi_ptr->y + roi_ptr->h - 1;
+
+		SDE_DEBUG("%s: idx[%d] roi(%u,%u,%u,%u)\n",
+				shd_display->name, i,
+				roi_range->x1, roi_range->y1,
+				roi_range->x2, roi_range->y2);
+	}
 
 	return 0;
 }
@@ -1088,6 +1143,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 		.get_info =     shd_connector_get_info,
 		.get_mode_info = shd_connector_get_mode_info,
 		.set_property = shd_conn_set_property,
+		.get_roi_misr_mode_info = shd_connector_get_roi_misr_mode_info,
 	};
 
 	static const struct sde_encoder_ops enc_ops = {
@@ -1278,6 +1334,84 @@ static int shd_drm_base_init(struct drm_device *ddev,
 	return rc;
 }
 
+static int shd_check_roi_range(struct shd_display *display,
+		struct sde_rect *range_ptr, u32 roi_id)
+{
+	if ((range_ptr->x >= display->roi.x)
+		&& range_ptr->x <= display->roi.w
+		&& range_ptr->y >= display->roi.y
+		&& range_ptr->y <= display->roi.h
+		&& range_ptr->w <= display->roi.w
+		&& range_ptr->h <= display->roi.h)
+		return 0;
+
+	SDE_ERROR("%s check shared roi range failed:\n", display->name);
+	SDE_ERROR("SHD src %dx%d dst %d,%d %dx%d\n",
+			display->src.w, display->src.h,
+			display->roi.x, display->roi.y,
+			display->roi.w, display->roi.h);
+	SDE_ERROR("MISR range id %u, roi %u,%u %ux%u\n", roi_id,
+			range_ptr->x, range_ptr->y,
+			range_ptr->w, range_ptr->h);
+
+	return -EINVAL;
+}
+
+static int shd_parse_misr_shared_roi(struct shd_display *display)
+{
+	struct device_node *of_node = display->pdev->dev.of_node;
+	struct sde_rect *range_ptr;
+	const u32 elems_per_group = 5;
+	u32 roi_range[120];
+	u32 temp_id, temp_id_offset;
+	int cnt, i;
+
+	cnt = of_property_count_elems_of_size(of_node,
+			"qcom,misr_roi_range", sizeof(u32));
+	if (cnt < 0)
+		return 0;
+
+	if ((cnt % elems_per_group) != 0) {
+		/* The number of elements should be a multiple of 5 */
+		SDE_ERROR("The number of misr range is wrong\n");
+		goto error;
+	}
+
+	if (of_property_read_u32_array(of_node, "qcom,misr_roi_range",
+			roi_range, cnt)) {
+		SDE_ERROR("Failed to parse blend stage range\n");
+		goto error;
+	}
+
+	cnt /= elems_per_group;
+
+	for (i = 0; i < cnt; i++) {
+		temp_id_offset = i * elems_per_group;
+		temp_id = roi_range[temp_id_offset];
+		range_ptr = &display->misr_range[temp_id];
+
+		range_ptr->x = roi_range[temp_id_offset + 1];
+		range_ptr->y = roi_range[temp_id_offset + 2];
+		range_ptr->w = roi_range[temp_id_offset + 3];
+		range_ptr->h = roi_range[temp_id_offset + 4];
+
+		if (shd_check_roi_range(display, range_ptr, temp_id))
+			goto error;
+
+		display->misr_roi_mask |= BIT(temp_id);
+
+		SDE_DEBUG("%s misr range id %u, roi {%u,%u,%u,%u}\n",
+				display->name, temp_id,
+				range_ptr->x, range_ptr->y,
+				range_ptr->w, range_ptr->h);
+	}
+
+	return 0;
+
+error:
+	return -EINVAL;
+}
+
 static int shd_parse_display(struct shd_display *display)
 {
 	struct device_node *of_node = display->pdev->dev.of_node;
@@ -1396,6 +1530,10 @@ next:
 		"qcom,display-type", NULL);
 	if (!display->display_type)
 		display->display_type = "unknown";
+
+	rc = shd_parse_misr_shared_roi(display);
+	if (rc)
+		SDE_ERROR("Failed to parse shared ROI range\n");
 
 error:
 	return rc;

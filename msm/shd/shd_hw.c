@@ -53,6 +53,21 @@
 #define   CTL_WB_ACTIVE                 0x0EC
 #define   CTL_CWB_ACTIVE                0x0F0
 
+/* SDE_ROI_MISR_CTL */
+#define ROI_MISR_OP_MODE                 0x00
+#define ROI_MISR_POSITION(i)            (0x10 + 0x4 * (i))
+#define ROI_MISR_SIZE(i)                (0x20 + 0x4 * (i))
+#define ROI_MISR_CTRL(i)                (0x30 + 0x4 * (i))
+#define ROI_MISR_EXPECTED(i)            (0x50 + 0x4 * (i))
+
+/* ROI_MISR_CTRL register */
+#define ROI_MISR_CTRL_ENABLE            BIT(8)
+#define ROI_MISR_CTRL_STATUS_CLEAR      BIT(10)
+#define ROI_MISR_CTRL_RUN_MODE          BIT(31)
+
+#define ROI_POSITION_VAL(x, y)          ((x) | ((y) << 16))
+#define ROI_SIZE_VAL(w, h)              ((w) | ((h) << 16))
+
 static DEFINE_SPINLOCK(hw_ctl_lock);
 
 /**
@@ -476,19 +491,81 @@ static void _sde_shd_setup_roi_misr(struct sde_hw_roi_misr *ctx,
 	hw_roi_misr->misr_cfg = *cfg;
 }
 
+static void _sde_shd_roi_misr_reset(struct sde_hw_roi_misr *ctx)
+{
+	/* do nothing */
+}
+
+static void _sde_shd_reset_hw_roi_misr(struct sde_hw_roi_misr *ctx)
+{
+	struct sde_shd_hw_roi_misr *hw_roi_misr;
+	struct sde_hw_blk_reg_map *roi_misr_c;
+	uint32_t tmp_hw_mask;
+	int i;
+
+	hw_roi_misr = container_of(ctx, struct sde_shd_hw_roi_misr, base);
+	roi_misr_c = &ctx->hw;
+
+	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_MISR; ++i) {
+		if (!(hw_roi_misr->roi_mask & BIT(i)))
+			continue;
+
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_POSITION(i), 0x0);
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_SIZE(i), 0x0);
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_EXPECTED(i), 0x0);
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_CTRL(i), 0x0);
+	}
+
+	tmp_hw_mask = SDE_REG_READ(roi_misr_c, ROI_MISR_OP_MODE);
+	tmp_hw_mask &= ~hw_roi_misr->roi_mask;
+	SDE_REG_WRITE(roi_misr_c, ROI_MISR_OP_MODE, tmp_hw_mask);
+}
+
 static void _sde_shd_flush_hw_roi_misr(struct sde_hw_roi_misr *ctx)
 {
 	struct sde_shd_hw_roi_misr *hw_roi_misr;
+	struct sde_hw_blk_reg_map *roi_misr_c;
+	struct sde_roi_misr_hw_cfg *roi_info;
+	uint32_t ctrl_val = 0;
+	uint32_t tmp_hw_mask;
+	int i;
 
 	if (!ctx)
 		return;
 
 	hw_roi_misr = container_of(ctx, struct sde_shd_hw_roi_misr, base);
+	roi_misr_c = &ctx->hw;
+	roi_info = &hw_roi_misr->misr_cfg;
 
-	if (hw_roi_misr->misr_cfg.roi_mask
-		&& hw_roi_misr->orig->ops.setup_roi_misr)
-		hw_roi_misr->orig->ops.setup_roi_misr(ctx,
-				&hw_roi_misr->misr_cfg);
+	_sde_shd_reset_hw_roi_misr(ctx);
+
+	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_MISR; ++i) {
+		if (!(roi_info->roi_mask & BIT(i)))
+			continue;
+
+		ctrl_val = ROI_MISR_CTRL_RUN_MODE
+			| ROI_MISR_CTRL_ENABLE
+			| ROI_MISR_CTRL_STATUS_CLEAR
+			| roi_info->frame_count[i];
+
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_POSITION(i),
+			ROI_POSITION_VAL(roi_info->misr_roi_rect[i].x,
+			roi_info->misr_roi_rect[i].y));
+
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_SIZE(i),
+			ROI_SIZE_VAL(roi_info->misr_roi_rect[i].w,
+			roi_info->misr_roi_rect[i].h));
+
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_EXPECTED(i),
+			roi_info->golden_value[i]);
+
+		SDE_REG_WRITE(roi_misr_c, ROI_MISR_CTRL(i), ctrl_val);
+	}
+
+	tmp_hw_mask = SDE_REG_READ(roi_misr_c, ROI_MISR_OP_MODE);
+	tmp_hw_mask |= roi_info->roi_mask;
+	roi_info->roi_mask = 0;
+	SDE_REG_WRITE(roi_misr_c, ROI_MISR_OP_MODE, tmp_hw_mask);
 }
 
 static int _sde_shd_setup_dsc_cfg(struct sde_hw_ctl *ctx,
@@ -584,6 +661,9 @@ void sde_shd_hw_roi_misr_init_op(struct sde_hw_roi_misr *ctx)
 {
 	ctx->ops.setup_roi_misr =
 			_sde_shd_setup_roi_misr;
+
+	ctx->ops.reset_roi_misr =
+			_sde_shd_roi_misr_reset;
 }
 
 void sde_shd_hw_skip_sspp_clear(struct sde_hw_ctl *ctx,
