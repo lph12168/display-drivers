@@ -216,6 +216,8 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_SV_BL_SCALE,
 	CONNECTOR_PROP_SUPPORTED_COLORSPACES,
 	CONNECTOR_PROP_DYN_BIT_CLK,
+	CONNECTOR_PROP_DIMMING_CTRL,
+	CONNECTOR_PROP_DIMMING_MIN_BL,
 
 	/* enum/bitmask properties */
 	CONNECTOR_PROP_TOPOLOGY_NAME,
@@ -973,6 +975,8 @@ struct msm_drm_private {
 
 	struct task_struct *pp_event_thread;
 	struct kthread_worker pp_event_worker;
+
+	struct kthread_work thread_priority_work;
 
 	unsigned int num_encoders;
 	struct drm_encoder *encoders[MAX_ENCODERS];

@@ -2787,7 +2787,6 @@ static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 				&sde_enc->cur_master->intf_cfg_v1);
 
 	_sde_encoder_update_vsync_source(sde_enc, &sde_enc->disp_info);
-	sde_encoder_control_te(drm_enc, true);
 
 	memset(&sde_enc->prv_conn_roi, 0, sizeof(sde_enc->prv_conn_roi));
 	memset(&sde_enc->cur_conn_roi, 0, sizeof(sde_enc->cur_conn_roi));
@@ -2890,6 +2889,7 @@ void sde_encoder_virt_restore(struct drm_encoder *drm_enc)
 		sde_enc->cur_master->ops.restore(sde_enc->cur_master);
 
 	_sde_encoder_virt_enable_helper(drm_enc);
+	sde_encoder_control_te(drm_enc, true);
 }
 
 static void sde_encoder_populate_encoder_phys(struct drm_encoder *drm_enc,
@@ -3039,9 +3039,12 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 	memset(&sde_enc->cur_master->intf_cfg_v1, 0,
 			sizeof(sde_enc->cur_master->intf_cfg_v1));
 
+	/* turn off vsync_in to update tear check configuration */
+	sde_encoder_control_te(drm_enc, false);
 	sde_encoder_populate_encoder_phys(drm_enc, sde_enc, msm_mode);
 
 	_sde_encoder_virt_enable_helper(drm_enc);
+	sde_encoder_control_te(drm_enc, true);
 }
 
 void sde_encoder_virt_reset(struct drm_encoder *drm_enc)
@@ -3172,6 +3175,7 @@ void sde_encoder_helper_phys_disable(struct sde_encoder_phys *phys_enc,
 	struct sde_encoder_virt *sde_enc;
 	struct sde_hw_ctl *ctl = phys_enc->hw_ctl;
 	struct sde_ctl_flush_cfg cfg;
+	struct sde_hw_dsc *hw_dsc = NULL;
 	int i;
 
 	ctl->ops.reset(ctl);
@@ -3225,6 +3229,17 @@ void sde_encoder_helper_phys_disable(struct sde_encoder_phys *phys_enc,
 		ctl->ops.reset_post_disable(ctl, &phys_enc->intf_cfg_v1,
 				phys_enc->hw_pp->merge_3d ?
 				phys_enc->hw_pp->merge_3d->idx : 0);
+
+	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
+		hw_dsc = sde_enc->hw_dsc[i];
+
+		if (hw_dsc && hw_dsc->ops.bind_pingpong_blk) {
+			hw_dsc->ops.bind_pingpong_blk(hw_dsc, false, PINGPONG_MAX);
+
+			if (ctl->ops.update_bitmask)
+				ctl->ops.update_bitmask(ctl, SDE_HW_FLUSH_DSC, hw_dsc->idx, true);
+		}
+	}
 
 	sde_crtc_disable_cp_features(sde_enc->base.crtc);
 	ctl->ops.get_pending_flush(ctl, &cfg);
