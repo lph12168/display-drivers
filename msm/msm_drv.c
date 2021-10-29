@@ -1921,8 +1921,8 @@ static int __init msm_drm_register(void)
 	sde_rsc_register();
 	dsi_display_register();
 	msm_hdcp_register();
-	dp_display_register();
 	dp_sim_register();
+	dp_display_register();
 	msm_smmu_driver_init();
 	sde_wb_register();
 	sde_shd_register();
@@ -1940,8 +1940,8 @@ static void __exit msm_drm_unregister(void)
 	sde_shd_unregister();
 	sde_wb_unregister();
 	msm_smmu_driver_cleanup();
-	dp_sim_unregister();
 	dp_display_unregister();
+	dp_sim_unregister();
 	msm_hdcp_unregister();
 	dsi_display_unregister();
 	sde_rsc_unregister();
