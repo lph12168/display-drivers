@@ -683,7 +683,7 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	if (!num_dev) {
 		pr_info("wfdEnumerateDevices_User - failed for client %x!\n",
 				kms->client_id);
-		wire_user_deinit(kms->client_id, 0x00);
+		/* TODO: Debug and add back wire_user_deinit(kms->client_id, 0x00) */
 	}
 
 	wfdEnumerateDevices_User(wfd_ids, num_dev, attribs);
