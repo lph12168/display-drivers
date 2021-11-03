@@ -42,6 +42,8 @@
 #include "msm_hyp_fence.h"
 #include "msm_drv.h"
 
+#define DRM_DRI_NAME_SIZE 32
+
 struct msm_hyp_connector_info {
 	int connector_type;
 	const struct drm_bridge_funcs *bridge_funcs;
@@ -244,6 +246,8 @@ struct msm_hyp_drm_private {
 	struct drm_client_dev client;
 
 	struct blocking_notifier_head component_notifier_list;
+
+	char dev_name_from_dt[DRM_DRI_NAME_SIZE];
 };
 
 void msm_hyp_set_kms(struct drm_device *dev, struct msm_hyp_kms *kms);
