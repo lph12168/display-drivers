@@ -524,6 +524,40 @@ static int shd_display_set_default_clock(struct drm_crtc_state *crtc_state,
 	return 0;
 }
 
+u32 shd_get_handoff_crtc_mask(struct drm_crtc *crtc)
+{
+	struct sde_crtc *sde_crtc;
+	struct shd_crtc *shd_crtc;
+	struct shd_display *display;
+	struct shd_display_base *base;
+	struct device_node *handoff_node = NULL;
+	u32 crtc_mask = 0;
+	int i = 0;
+
+	if (crtc->helper_private->atomic_check != shd_crtc_atomic_check)
+		return 0;
+
+	sde_crtc = to_sde_crtc(crtc);
+	shd_crtc = sde_crtc->priv_handle;
+	base = shd_crtc->display->base;
+
+	if (!shd_crtc->display->handoff_count)
+		return 0;
+
+	if (shd_crtc->display->handoff_mask)
+		return shd_crtc->display->handoff_mask;
+
+	for (i = 0; i < shd_crtc->display->handoff_count; i++) {
+		handoff_node = shd_crtc->display->handoff_node[i];
+		list_for_each_entry(display, &base->disp_list, head) {
+			if (handoff_node == display->pdev->dev.of_node)
+				crtc_mask |= drm_crtc_mask(display->crtc);
+		}
+	}
+	shd_crtc->display->handoff_mask = crtc_mask;
+	return crtc_mask;
+}
+
 static int shd_display_atomic_check(struct msm_kms *kms,
 		struct drm_atomic_state *state)
 {
@@ -1337,7 +1371,7 @@ static int shd_parse_display(struct shd_display *display)
 	struct device_node *of_src, *of_roi;
 	u32 src_w, src_h, dst_x, dst_y, dst_w, dst_h;
 	u32 range[2];
-	int rc;
+	int rc, i = 0;
 
 	display->base_of = of_parse_phandle(of_node,
 		"qcom,shared-display-base", 0);
@@ -1345,6 +1379,14 @@ static int shd_parse_display(struct shd_display *display)
 		SDE_ERROR("No base device present\n");
 		rc = -ENODEV;
 		goto error;
+	}
+
+	for (i = 0; i < MAX_CONNECTORS; i++) {
+		display->handoff_node[i] = of_parse_phandle(of_node,
+				"qcom,inithandoff-display", i);
+		if (!display->handoff_node[i])
+			break;
+		++display->handoff_count;
 	}
 
 	of_src = of_get_child_by_name(of_node, "qcom,shared-display-src-mode");
