@@ -1562,6 +1562,14 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 
 	dp_display_get_usb_extcon(dp);
 
+	if (dp->hpd->register_hpd) {
+		rc = dp->hpd->register_hpd(dp->hpd);
+		if (rc) {
+			pr_err("failed register hpd\n");
+			goto error_hpd_reg;
+		}
+	}
+
 	if (dp->parser->force_connect_mode) {
 		/*
 		 * always enter simulation first regardless of the actual
@@ -1571,14 +1579,6 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		 */
 		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
 		dp_display_process_hpd_high(dp);
-	}
-
-	if (dp->hpd->register_hpd) {
-		rc = dp->hpd->register_hpd(dp->hpd);
-		if (rc) {
-			pr_err("failed register hpd\n");
-			goto error_hpd_reg;
-		}
 	}
 
 	return rc;
