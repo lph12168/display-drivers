@@ -11,6 +11,7 @@
  * Includes
  * ---------------------------------------------------------------------------
  */
+#include <soc/qcom/boot_stats.h>
 #if defined(__linux__)
 #include "WF/wfd.h"
 #include "WF/wfdext2.h"
@@ -22,14 +23,6 @@
 #include "wfdext2.h"
 #endif
 
-#ifdef ANDROID
-#define ATRACE_TAG ATRACE_TAG_ALWAYS
-#include <cutils/trace.h>
-#else
-#define ATRACE_TAG
-#define ATRACE_BEGIN(_x_)
-#define ATRACE_END(_x_)
-#endif
 /*
  * ---------------------------------------------------------------------------
  * Defines
@@ -40,6 +33,7 @@
 
 #define WIRE_INIT_EVENT_SUPPORT 0x1
 
+#define MARKER_BUFF_LENGTH 256
 /*
  * ---------------------------------------------------------------------------
  * Structure Definitions
