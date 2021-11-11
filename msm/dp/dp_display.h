@@ -17,6 +17,7 @@
 enum dp_drv_state {
 	PM_DEFAULT,
 	PM_SUSPEND,
+	PM_FREEZE,
 };
 
 struct dp_display_info {
