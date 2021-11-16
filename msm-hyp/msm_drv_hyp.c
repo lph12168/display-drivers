@@ -2104,12 +2104,20 @@ static int msm_hyp_bind(struct device *dev)
 	struct drm_device *ddev;
 	struct msm_hyp_drm_private *priv;
 	int ret;
+	const char *dev_name;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	priv->driver = msm_hyp_driver;
+
+	ret = of_property_read_string(pdev->dev.of_node,
+			"qcom,dev-name", &dev_name);
+	if (ret == 0) {
+		strlcpy(priv->dev_name_from_dt, dev_name, DRM_DRI_NAME_SIZE);
+		priv->driver.name = priv->dev_name_from_dt;
+	}
 
 	ddev = drm_dev_alloc(&priv->driver, dev);
 	if (IS_ERR_OR_NULL(ddev)) {
