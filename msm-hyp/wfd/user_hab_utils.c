@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/atomic.h>
 #include <linux/kthread.h>
+#include "msm_hyp_trace.h"
 #include "user_os_utils.h"
 #include "wire_user.h"
 
@@ -308,7 +309,7 @@ user_os_utils_send_recv(
 
 	u32 num_of_wfd_cmds = 0;
 	enum openwfd_cmd_type wfd_cmd_type = OPENWFD_CMD_MAX;
-	char name[1024] = {0};
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	if (!req || !resp) {
 		UTILS_LOG_ERROR("NULL req(0x%p) or resp(0x%p)",
@@ -345,8 +346,8 @@ user_os_utils_send_recv(
 		goto end;
 	}
 
-	snprintf(name, sizeof(name), "hab_send %d\n", wfd_cmd_type);
-	ATRACE_BEGIN(name);
+	snprintf(marker_buff, sizeof(marker_buff), "hab_send %d\n", wfd_cmd_type);
+	HYP_ATRACE_BEGIN(marker_buff);
 
 	req_size = sizeof(struct wire_header) + req->hdr.payload_size;
 #ifdef USE_HAB
@@ -359,7 +360,7 @@ user_os_utils_send_recv(
 		(uint32_t)req_size,
 		(uint32_t)0x00);
 
-	ATRACE_END();
+	HYP_ATRACE_END(marker_buff);
 
 	if (rc) {
 		UTILS_LOG_ERROR("habmm_socket_send(payload type(%d)) failed",
@@ -371,8 +372,8 @@ user_os_utils_send_recv(
 	if (req_flags & WIRE_RESP_NOACK_FLAG)
 		goto end;
 
-	snprintf(name, sizeof(name), "hab_recv %d\n", wfd_cmd_type);
-	ATRACE_BEGIN(name);
+	snprintf(marker_buff, sizeof(marker_buff), "hab_recv %d\n", wfd_cmd_type);
+	HYP_ATRACE_BEGIN(marker_buff);
 
 	do {
 		/* TODO: Need handle exit hab_receive during deinit */
@@ -402,7 +403,7 @@ user_os_utils_send_recv(
 		}
 	} while (-EINTR == rc);
 
-	ATRACE_END();
+	HYP_ATRACE_END(marker_buff);
 
 	if (rc) {
 		UTILS_LOG_ERROR("habmm_socket_recv(payload type(%d)) failed",

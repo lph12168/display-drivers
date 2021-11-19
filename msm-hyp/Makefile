@@ -8,6 +8,7 @@ CFLAGS_REMOVE_wfd/wfd_kms.o += -mgeneral-regs-only
 CFLAGS_REMOVE_wfd/wire_user.o += -mgeneral-regs-only
 
 msm_hyp-y := \
+			msm_hyp_trace_point.o \
 			msm_drv_hyp.o\
 			msm_hyp_notifier.o\
 			msm_hyp_utils.o

@@ -3306,9 +3306,24 @@ static void dp_pm_complete(struct device *dev)
 	}
 }
 
+static int dp_pm_freeze(struct device *dev)
+{
+	struct dp_display_private *dp;
+
+	if (!dev)
+		return -EINVAL;
+
+	dp = dev_get_drvdata(dev);
+
+	dp_display_set_mst_state(&dp->dp_display, PM_FREEZE);
+
+	return 0;
+}
+
 static const struct dev_pm_ops dp_pm_ops = {
 	.prepare = dp_pm_prepare,
 	.complete = dp_pm_complete,
+	.freeze = dp_pm_freeze,
 };
 
 static struct platform_driver dp_display_driver = {
