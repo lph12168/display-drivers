@@ -326,6 +326,9 @@ static void dp_aux_abort_transaction(struct dp_aux *dp_aux, bool reset)
 	aux = container_of(dp_aux, struct dp_aux_private, dp_aux);
 
 	atomic_set(&aux->aborted, !reset);
+	/* Terminate the on going AUX operation right away */
+	aux->aux_error_num = DP_AUX_ERR_TOUT;
+	complete(&aux->comp);
 }
 
 static void dp_aux_update_offset_and_segment(struct dp_aux_private *aux,
