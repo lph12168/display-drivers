@@ -21,10 +21,66 @@ struct dp_gpio_hpd_private {
 	struct dp_hpd base;
 	struct dss_gpio gpio_cfg;
 	struct delayed_work work;
+	struct workqueue_struct *connect_wq;
+	struct work_struct connect;
+	struct work_struct disconnect;
+	struct work_struct attention;
 	struct dp_hpd_cb *cb;
 	int irq;
 	bool hpd;
 };
+
+static void dp_gpio_hpd_attention_work(struct work_struct *work)
+{
+	struct dp_gpio_hpd_private *gpio_hpd = container_of(work,
+				struct dp_gpio_hpd_private, attention);
+
+	if (!gpio_hpd) {
+		DP_ERR("invalid input\n");
+		return;
+	}
+
+	gpio_hpd->base.hpd_irq = true;
+
+	if (gpio_hpd->cb && gpio_hpd->cb->attention)
+		gpio_hpd->cb->attention(gpio_hpd->dev);
+}
+
+static void dp_gpio_hpd_connect_work(struct work_struct *work)
+{
+	struct dp_gpio_hpd_private *gpio_hpd = container_of(work,
+				struct dp_gpio_hpd_private, connect);
+
+	if (!gpio_hpd) {
+		DP_ERR("invalid input\n");
+		return;
+	}
+
+	gpio_hpd->base.hpd_high = true;
+	gpio_hpd->base.alt_mode_cfg_done = true;
+	gpio_hpd->base.hpd_irq = false;
+
+	if (gpio_hpd->cb && gpio_hpd->cb->configure)
+		gpio_hpd->cb->configure(gpio_hpd->dev);
+}
+
+static void dp_gpio_hpd_disconnect_work(struct work_struct *work)
+{
+	struct dp_gpio_hpd_private *gpio_hpd = container_of(work,
+				struct dp_gpio_hpd_private, disconnect);
+
+	if (!gpio_hpd) {
+		DP_ERR("invalid input\n");
+		return;
+	}
+
+	gpio_hpd->base.hpd_high = false;
+	gpio_hpd->base.alt_mode_cfg_done = false;
+	gpio_hpd->base.hpd_irq = false;
+
+	if (gpio_hpd->cb && gpio_hpd->cb->disconnect)
+		gpio_hpd->cb->disconnect(gpio_hpd->dev);
+}
 
 static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 {
@@ -36,10 +92,6 @@ static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 		goto error;
 	}
 
-	gpio_hpd->base.hpd_high = hpd;
-	gpio_hpd->base.alt_mode_cfg_done = hpd;
-	gpio_hpd->base.hpd_irq = false;
-
 	if (!gpio_hpd->cb ||
 		!gpio_hpd->cb->configure ||
 		!gpio_hpd->cb->disconnect) {
@@ -48,10 +100,21 @@ static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 		goto error;
 	}
 
-	if (hpd)
-		rc = gpio_hpd->cb->configure(gpio_hpd->dev);
-	else
-		rc = gpio_hpd->cb->disconnect(gpio_hpd->dev);
+	if (hpd) {
+		rc = queue_work(gpio_hpd->connect_wq,
+				&gpio_hpd->connect);
+		if (!rc)
+			DP_DEBUG("connect not queued\n");
+	} else {
+		gpio_hpd->base.hpd_high = false;
+		gpio_hpd->base.alt_mode_cfg_done = false;
+		gpio_hpd->base.hpd_irq = false;
+
+		rc = queue_work(gpio_hpd->connect_wq,
+				&gpio_hpd->disconnect);
+		if (!rc)
+			DP_DEBUG("disconnect not queued\n");
+	}
 
 error:
 	return rc;
@@ -67,10 +130,11 @@ static int dp_gpio_hpd_attention(struct dp_gpio_hpd_private *gpio_hpd)
 		goto error;
 	}
 
-	gpio_hpd->base.hpd_irq = true;
-
-	if (gpio_hpd->cb && gpio_hpd->cb->attention)
-		rc = gpio_hpd->cb->attention(gpio_hpd->dev);
+	if (gpio_hpd->cb && gpio_hpd->cb->attention) {
+		rc = queue_work(gpio_hpd->connect_wq, &gpio_hpd->attention);
+		if (!rc)
+			DP_DEBUG("attention not queued\n");
+	}
 
 error:
 	return rc;
@@ -271,6 +335,16 @@ struct dp_hpd *dp_gpio_hpd_get(struct device *dev,
 	gpio_hpd->cb = cb;
 	gpio_hpd->irq = gpio_to_irq(gpio_hpd->gpio_cfg.gpio);
 	INIT_DELAYED_WORK(&gpio_hpd->work, dp_gpio_hpd_work);
+
+	gpio_hpd->connect_wq = create_singlethread_workqueue("dp-gpio-conn-eq");
+	if (!gpio_hpd->connect_wq) {
+		DP_ERR("Error creating connect_wq\n");
+		goto gpio_error;
+	}
+
+	INIT_WORK(&gpio_hpd->connect, dp_gpio_hpd_connect_work);
+	INIT_WORK(&gpio_hpd->disconnect, dp_gpio_hpd_disconnect_work);
+	INIT_WORK(&gpio_hpd->attention, dp_gpio_hpd_attention_work);
 
 	gpio_hpd->base.simulate_connect = dp_gpio_hpd_simulate_connect;
 	gpio_hpd->base.simulate_attention = dp_gpio_hpd_simulate_attention;
