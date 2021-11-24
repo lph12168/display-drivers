@@ -1244,6 +1244,13 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
+	/* Abort is requested, exit */
+	if (atomic_read(&ctrl->aborted))
+		return -EPERM;
+
+	if (!ctrl->power_on)
+		return -EPERM;
+
 	rc = dp_ctrl_enable_stream_clocks(ctrl, panel);
 	if (rc) {
 		pr_err("failure on stream clock enable\n");
