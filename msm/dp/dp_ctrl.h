@@ -35,6 +35,7 @@ struct dp_ctrl {
 };
 
 struct dp_ctrl_in {
+	u32 cell_idx;
 	struct device *dev;
 	struct dp_panel *panel;
 	struct dp_aux *aux;
