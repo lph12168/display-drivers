@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/iopoll.h>
 #include "sde_hw_mdss.h"
@@ -858,7 +858,7 @@ static int dealloc_reg_dma_v1(struct sde_reg_dma_buffer *dma_buf)
 	}
 
 	if (dma_buf->buf) {
-		msm_gem_put_iova(dma_buf->buf, 0);
+		msm_gem_put_iova(dma_buf->buf, NULL);
 		msm_gem_address_space_unregister_cb(dma_buf->aspace,
 				sde_reg_dma_aspace_cb_locked, dma_buf);
 		mutex_lock(&reg_dma->drm_dev->struct_mutex);

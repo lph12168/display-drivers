@@ -1015,7 +1015,7 @@ struct dp_dsc_dto_data {
 	u32 dto_denominator;
 };
 
-struct dp_dsc_dto_data dto_tbl[] = {
+static struct dp_dsc_dto_data dto_tbl[] = {
 	{MSM_DISPLAY_COMPRESSION_RATIO_2_TO_1, 24, 1, 2},
 	{MSM_DISPLAY_COMPRESSION_RATIO_2_TO_1, 30, 5, 8},
 	{MSM_DISPLAY_COMPRESSION_RATIO_3_TO_1, 24, 1, 3},
@@ -1514,7 +1514,7 @@ struct dp_dsc_slice_caps_bit_map {
 	u32 bit_index;
 };
 
-const struct dp_dsc_slices_per_line slice_per_line_tbl[] = {
+static const struct dp_dsc_slices_per_line slice_per_line_tbl[] = {
 	{0,     340,    1   },
 	{340,   680,    2   },
 	{680,   1360,   4   },
@@ -1525,7 +1525,7 @@ const struct dp_dsc_slices_per_line slice_per_line_tbl[] = {
 	{8000,  9600,   24  }
 };
 
-const struct dp_dsc_peak_throughput peak_throughput_mode_0_tbl[] = {
+static const struct dp_dsc_peak_throughput peak_throughput_mode_0_tbl[] = {
 	{0, 0},
 	{1, 340},
 	{2, 400},
@@ -1543,7 +1543,7 @@ const struct dp_dsc_peak_throughput peak_throughput_mode_0_tbl[] = {
 	{14, 1000},
 };
 
-const struct dp_dsc_slice_caps_bit_map slice_caps_bit_map_tbl[] = {
+static const struct dp_dsc_slice_caps_bit_map slice_caps_bit_map_tbl[] = {
 	{1, 0},
 	{2, 1},
 	{4, 3},

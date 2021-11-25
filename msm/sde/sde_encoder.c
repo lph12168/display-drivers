@@ -716,7 +716,7 @@ void sde_encoder_get_hw_resources(struct drm_encoder *drm_enc,
 
 	if (!hw_res || !drm_enc || !conn_state) {
 		SDE_ERROR("invalid argument(s), drm_enc %d, res %d, state %d\n",
-				drm_enc != 0, hw_res != 0, conn_state != 0);
+				drm_enc != NULL, hw_res != NULL, conn_state != NULL);
 		return;
 	}
 
@@ -801,7 +801,7 @@ void sde_encoder_helper_update_intf_cfg(
 	enum sde_3d_blend_mode mode_3d;
 
 	if (!phys_enc) {
-		SDE_ERROR("invalid arg, encoder %d\n", phys_enc != 0);
+		SDE_ERROR("invalid arg, encoder %d\n", phys_enc != NULL);
 		return;
 	}
 
@@ -866,7 +866,7 @@ void sde_encoder_helper_split_config(
 	int ret;
 
 	if (!phys_enc || !phys_enc->hw_mdptop || !phys_enc->parent) {
-		SDE_ERROR("invalid arg(s), encoder %d\n", phys_enc != 0);
+		SDE_ERROR("invalid arg(s), encoder %d\n", phys_enc != NULL);
 		return;
 	}
 
@@ -999,7 +999,9 @@ static int sde_encoder_virt_atomic_check(
 
 	if (!drm_enc || !crtc_state || !conn_state) {
 		SDE_ERROR("invalid arg(s), drm_enc %d, crtc/conn state %d/%d\n",
-				drm_enc != 0, crtc_state != 0, conn_state != 0);
+				drm_enc != NULL,
+				crtc_state != NULL,
+				conn_state != NULL);
 		return -EINVAL;
 	}
 
@@ -2081,7 +2083,7 @@ static int _sde_encoder_update_roi(struct drm_encoder *drm_enc)
 	struct sde_encoder_virt *sde_enc;
 	struct drm_connector *drm_conn;
 	struct drm_display_mode *adj_mode;
-	struct sde_rect roi;
+	struct sde_rect roi = {0};
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder parameter\n");
@@ -4290,7 +4292,7 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 
 	if (!drm_enc || !phys) {
 		SDE_ERROR("invalid argument(s), drm_enc %d, phys_enc %d\n",
-				drm_enc != 0, phys != 0);
+				drm_enc != NULL, phys != NULL);
 		return;
 	}
 
@@ -4534,7 +4536,7 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc)
 				!phys->ops.needs_single_flush(phys)) {
 			if (ctl->ops.reg_dma_flush)
 				ctl->ops.reg_dma_flush(ctl, is_regdma_blocking);
-			_sde_encoder_trigger_flush(&sde_enc->base, phys, 0x0);
+			_sde_encoder_trigger_flush(&sde_enc->base, phys, NULL);
 		} else if (ctl->ops.get_pending_flush) {
 			ctl->ops.get_pending_flush(ctl, &pending_flush);
 		}
@@ -5742,7 +5744,7 @@ static int sde_encoder_virt_add_phys_encs(
 		if (IS_ERR_OR_NULL(enc)) {
 			SDE_ERROR_ENC(sde_enc, "failed to init vid enc: %ld\n",
 				PTR_ERR(enc));
-			return enc == 0 ? -EINVAL : PTR_ERR(enc);
+			return enc == NULL ? -EINVAL : PTR_ERR(enc);
 		}
 
 		sde_enc->phys_encs[sde_enc->num_phys_encs] = enc;
@@ -5755,7 +5757,7 @@ static int sde_encoder_virt_add_phys_encs(
 		if (IS_ERR_OR_NULL(enc)) {
 			SDE_ERROR_ENC(sde_enc, "failed to init cmd enc: %ld\n",
 				PTR_ERR(enc));
-			return enc == 0 ? -EINVAL : PTR_ERR(enc);
+			return enc == NULL ? -EINVAL : PTR_ERR(enc);
 		}
 
 		sde_enc->phys_encs[sde_enc->num_phys_encs] = enc;
@@ -5788,7 +5790,7 @@ static int sde_encoder_virt_add_phys_enc_wb(struct sde_encoder_virt *sde_enc,
 	if (IS_ERR_OR_NULL(enc)) {
 		SDE_ERROR_ENC(sde_enc, "failed to init wb enc: %ld\n",
 			PTR_ERR(enc));
-		return enc == 0 ? -EINVAL : PTR_ERR(enc);
+		return enc == NULL ? -EINVAL : PTR_ERR(enc);
 	}
 
 	sde_enc->phys_encs[sde_enc->num_phys_encs] = enc;
@@ -5816,7 +5818,7 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 
 	if (!sde_enc || !sde_kms) {
 		SDE_ERROR("invalid arg(s), enc %d kms %d\n",
-				sde_enc != 0, sde_kms != 0);
+				sde_enc != NULL, sde_kms != NULL);
 		return -EINVAL;
 	}
 

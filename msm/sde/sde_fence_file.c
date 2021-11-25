@@ -1,4 +1,5 @@
-/* Copyright (c) 2020 The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
  *
  * Copyright (C) 2012 Google, Inc.
  *
@@ -45,7 +46,7 @@ static void sde_file_check_cb_func(struct dma_fence *fence,
 	wake_up_all(&fence_file->wq);
 }
 
-static unsigned int sde_file_poll(struct file *file, poll_table *wait)
+static __poll_t sde_file_poll(struct file *file, poll_table *wait)
 {
 	struct sde_fence_file *fence_file = file->private_data;
 
@@ -57,7 +58,7 @@ static unsigned int sde_file_poll(struct file *file, poll_table *wait)
 			&fence_file->cb, sde_file_check_cb_func) < 0)
 			wake_up_all(&fence_file->wq);
 
-	return dma_fence_is_signaled(fence_file->fence) ? POLLIN : 0;
+	return dma_fence_is_signaled(fence_file->fence) ? POLLIN : 0x0;
 }
 
 static int sde_file_release(struct inode *inode, struct file *file)

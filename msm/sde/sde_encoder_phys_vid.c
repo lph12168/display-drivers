@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -469,7 +469,7 @@ static void sde_encoder_phys_vid_setup_timing_engine(
 
 	if (!phys_enc || !phys_enc->sde_kms || !phys_enc->hw_ctl ||
 					!phys_enc->hw_intf) {
-		SDE_ERROR("invalid encoder %d\n", phys_enc != 0);
+		SDE_ERROR("invalid encoder %d\n", phys_enc != NULL);
 		return;
 	}
 
@@ -890,7 +890,8 @@ static void sde_encoder_phys_vid_enable(struct sde_encoder_phys *phys_enc)
 	ctl = phys_enc->hw_ctl;
 	if (!phys_enc->hw_intf || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid hw_intf %d hw_ctl %d\n",
-				phys_enc->hw_intf != 0, phys_enc->hw_ctl != 0);
+				phys_enc->hw_intf != NULL,
+				phys_enc->hw_ctl != NULL);
 		return;
 	}
 	if (!ctl->ops.update_bitmask_intf ||
@@ -981,7 +982,9 @@ static void sde_encoder_phys_vid_get_hw_resources(
 
 	if (!phys_enc || !hw_res) {
 		SDE_ERROR("invalid arg(s), enc %d hw_res %d conn_state %d\n",
-				phys_enc != 0, hw_res != 0, conn_state != 0);
+				phys_enc != NULL,
+				hw_res != NULL,
+				conn_state != NULL);
 		return;
 	}
 
@@ -1195,7 +1198,8 @@ static void sde_encoder_phys_vid_disable(struct sde_encoder_phys *phys_enc)
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
 	if (!phys_enc->hw_intf || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid hw_intf %d hw_ctl %d\n",
-				phys_enc->hw_intf != 0, phys_enc->hw_ctl != 0);
+				phys_enc->hw_intf != NULL,
+				phys_enc->hw_ctl != NULL);
 		return;
 	}
 

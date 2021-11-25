@@ -117,7 +117,7 @@ struct shp_device {
 	const struct msm_kms_funcs *orig_kms_funcs;
 };
 
-struct shp_device g_shp_device;
+static struct shp_device g_shp_device;
 
 static void shp_plane_send_uevent(struct drm_device *dev)
 {

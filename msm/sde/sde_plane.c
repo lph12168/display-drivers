@@ -400,7 +400,7 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 
 	if (!plane || !fb) {
 		SDE_ERROR("invalid arguments plane %d fb %d\n",
-				plane != 0, fb != 0);
+				plane != NULL, fb != NULL);
 		return;
 	}
 
@@ -595,7 +595,8 @@ void sde_plane_set_revalidate(struct drm_plane *plane, bool enable)
 	psde->revalidate = enable;
 }
 
-int sde_plane_danger_signal_ctrl(struct drm_plane *plane, bool enable)
+#ifdef CONFIG_DEBUG_FS
+static int sde_plane_danger_signal_ctrl(struct drm_plane *plane, bool enable)
 {
 	struct sde_plane *psde;
 	int rc;
@@ -624,6 +625,7 @@ int sde_plane_danger_signal_ctrl(struct drm_plane *plane, bool enable)
 end:
 	return 0;
 }
+#endif
 
 /**
  * _sde_plane_set_ot_limit - set OT limit for the given plane
@@ -640,7 +642,7 @@ static void _sde_plane_set_ot_limit(struct drm_plane *plane,
 
 	if (!plane || !plane->dev || !crtc) {
 		SDE_ERROR("invalid arguments plane %d crtc %d\n",
-				plane != 0, crtc != 0);
+				plane != NULL, crtc != NULL);
 		return;
 	}
 
@@ -772,7 +774,7 @@ static void _sde_plane_set_input_fence(struct sde_plane *psde,
 {
 	if (!psde || !pstate) {
 		SDE_ERROR("invalid arg(s), plane %d state %d\n",
-				psde != 0, pstate != 0);
+				psde != NULL, pstate != NULL);
 		return;
 	}
 
@@ -993,7 +995,8 @@ static inline void _sde_plane_set_scanout(struct drm_plane *plane,
 	if (!plane || !pstate || !pipe_cfg || !fb) {
 		SDE_ERROR(
 			"invalid arg(s), plane %d state %d cfg %d fb %d\n",
-			plane != 0, pstate != 0, pipe_cfg != 0, fb != 0);
+			plane != NULL, pstate != NULL,
+			pipe_cfg != NULL, fb != NULL);
 		return;
 	}
 
@@ -1215,7 +1218,8 @@ static int _sde_plane_setup_scaler2(struct sde_plane *psde,
 	if (!psde || !phase_steps || !filter || !fmt) {
 		SDE_ERROR(
 			"invalid arg(s), plane %d phase %d filter %d fmt %d\n",
-			psde != 0, phase_steps != 0, filter != 0, fmt != 0);
+			psde != NULL, phase_steps != NULL,
+			filter != NULL, fmt != NULL);
 		return -EINVAL;
 	}
 
@@ -1516,7 +1520,7 @@ static void _sde_plane_setup_scaler(struct sde_plane *psde,
 
 	if (!psde || !fmt || !pstate) {
 		SDE_ERROR("invalid arg(s), plane %d fmt %d state %d\n",
-				psde != 0, fmt != 0, pstate != 0);
+				psde != NULL, fmt != NULL, pstate != NULL);
 		return;
 	}
 
@@ -1709,7 +1713,8 @@ static void _sde_plane_setup_panel_stacking(struct sde_plane *psde,
 {
 	struct sde_hw_pipe_line_insertion_cfg *cfg;
 	struct sde_crtc_state *cstate;
-	uint32_t h_start, h_total, y_start;
+	uint32_t h_start = 0, h_total = 0, y_start = 0;
+	int ret;
 
 	if (!test_bit(SDE_SSPP_LINE_INSERTION, &psde->features))
 		return;
@@ -1721,9 +1726,14 @@ static void _sde_plane_setup_panel_stacking(struct sde_plane *psde,
 	if (!cstate->padding_height)
 		return;
 
-	sde_crtc_calc_vpadding_param(psde->base.state->crtc->state,
+	ret = sde_crtc_calc_vpadding_param(
+		psde->base.state->crtc->state,
 		pstate->base.crtc_y, pstate->base.crtc_h,
 		&y_start, &h_start, &h_total);
+	if (ret) {
+		SDE_ERROR("failed to calculate vpadding parameters\n");
+		return;
+	}
 
 	cfg->enable = true;
 	cfg->dummy_lines = cstate->padding_dummy;
@@ -3612,7 +3622,7 @@ static int sde_plane_sspp_atomic_check(struct drm_plane *plane,
 
 	if (!plane || !state) {
 		SDE_ERROR("invalid arg(s), plane %d state %d\n",
-				plane != 0, state != 0);
+				plane != NULL, state != NULL);
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -3787,7 +3797,7 @@ static int sde_plane_atomic_check(struct drm_plane *plane,
 
 	if (!plane || !state) {
 		SDE_ERROR("invalid arg(s), plane %d state %d\n",
-				plane != 0, state != 0);
+				plane != NULL, state != NULL);
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -3897,7 +3907,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 	fb = rstate->out_fb;
 	if (!crtc || !fb) {
 		SDE_ERROR_PLANE(psde, "invalid crtc %d or fb %d\n",
-				crtc != 0, fb != 0);
+				crtc != NULL, fb != NULL);
 		return -EINVAL;
 	}
 	fmt = to_sde_format(msm_framebuffer_format(fb));
@@ -4191,7 +4201,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 		if (SDE_FORMAT_IS_YUV(fmt))
 			_sde_plane_setup_csc(psde);
 		else
-			psde->csc_ptr = 0;
+			psde->csc_ptr = NULL;
 
 		if (psde->pipe_hw->ops.setup_inverse_pma) {
 			uint32_t pma_mode = 0;
@@ -4367,7 +4377,8 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 		return;
 	} else if (!psde->pipe_hw || !psde->pipe_sblk) {
 		SDE_ERROR("invalid plane, pipe_hw %d pipe_sblk %d\n",
-				psde->pipe_hw != 0, psde->pipe_sblk != 0);
+				psde->pipe_hw != NULL,
+				psde->pipe_sblk != NULL);
 		return;
 	} else if (!catalog) {
 		SDE_ERROR("invalid catalog\n");
@@ -4857,15 +4868,15 @@ static int sde_plane_atomic_set_property(struct drm_plane *plane,
 				break;
 			case PLANE_PROP_SCALER_V1:
 				_sde_plane_set_scaler_v1(psde, pstate,
-						(void *)(uintptr_t)val);
+						(void __user *)(uintptr_t)val);
 				break;
 			case PLANE_PROP_SCALER_V2:
 				_sde_plane_set_scaler_v2(psde, pstate,
-						(void *)(uintptr_t)val);
+						(void __user *)(uintptr_t)val);
 				break;
 			case PLANE_PROP_EXCL_RECT_V1:
 				_sde_plane_set_excl_rect_v1(psde, pstate,
-						(void *)(uintptr_t)val);
+						(void __user *)(uintptr_t)val);
 				break;
 			default:
 				/* nothing to do */
@@ -4985,7 +4996,7 @@ static void sde_plane_destroy_state(struct drm_plane *plane,
 
 	if (!plane || !state) {
 		SDE_ERROR("invalid arg(s), plane %d state %d\n",
-				plane != 0, state != 0);
+				plane != NULL, state != NULL);
 		return;
 	}
 
@@ -5041,7 +5052,7 @@ sde_plane_duplicate_state(struct drm_plane *plane)
 			&pstate->property_state, pstate->property_values);
 
 	/* clear out any input fence */
-	pstate->input_fence = 0;
+	pstate->input_fence = NULL;
 	input_fence_default = msm_property_get_default(
 			&psde->property_info, PLANE_PROP_INPUT_FENCE);
 	drm_prop = msm_property_index_to_drm_property(
@@ -5090,7 +5101,7 @@ static void sde_plane_reset(struct drm_plane *plane)
 	/* remove previous state, if present */
 	if (plane->state) {
 		sde_plane_destroy_state(plane, plane->state);
-		plane->state = 0;
+		plane->state = NULL;
 	}
 
 	pstate = msm_property_alloc_state(&psde->property_info);
@@ -5238,8 +5249,8 @@ static int _sde_plane_init_debugfs(struct drm_plane *plane)
 	struct sde_plane *psde;
 	struct sde_kms *kms;
 	struct msm_drm_private *priv;
-	const struct sde_sspp_sub_blks *sblk = 0;
-	const struct sde_sspp_cfg *cfg = 0;
+	const struct sde_sspp_sub_blks *sblk = NULL;
+	const struct sde_sspp_cfg *cfg = NULL;
 
 	if (!plane || !plane->dev) {
 		SDE_ERROR("invalid arguments\n");
@@ -5483,7 +5494,7 @@ struct drm_plane *sde_plane_init(struct drm_device *dev,
 
 	psde->nformats = sde_populate_formats(format_list,
 				psde->formats,
-				0,
+				NULL,
 				ARRAY_SIZE(psde->formats));
 
 	if (!psde->nformats) {
