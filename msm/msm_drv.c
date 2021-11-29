@@ -807,16 +807,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		priv->fbdev = msm_fbdev_init(ddev);
 #endif
 
-	priv->debug_root = debugfs_create_dir("debug",
-					ddev->primary->debugfs_root);
-	if (IS_ERR_OR_NULL(priv->debug_root)) {
-		pr_err("debugfs_root create_dir fail, error %ld\n",
-		       PTR_ERR(priv->debug_root));
-		priv->debug_root = NULL;
-		goto fail;
-	}
-
-	ret = sde_dbg_debugfs_register(priv->debug_root);
+	ret = sde_dbg_debugfs_register(dev);
 	if (ret) {
 		dev_err(dev, "failed to reg sde dbg debugfs: %d\n", ret);
 		goto fail;
@@ -1467,7 +1458,7 @@ void msm_mode_object_event_notify(struct drm_mode_object *obj,
 
 static int msm_release(struct inode *inode, struct file *filp)
 {
-	struct drm_file *file_priv = filp->private_data;
+	struct drm_file *file_priv;
 	struct drm_minor *minor;
 	struct drm_device *dev;
 	struct msm_drm_private *priv;
@@ -1479,6 +1470,7 @@ static int msm_release(struct inode *inode, struct file *filp)
 
 	mutex_lock(&msm_release_lock);
 
+	file_priv = filp->private_data;
 	if (!file_priv) {
 		ret = -EINVAL;
 		goto end;
