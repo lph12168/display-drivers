@@ -834,6 +834,7 @@ static int msm_drm_device_init(struct platform_device *pdev,
 	struct device *dev = &pdev->dev;
 	struct drm_device *ddev;
 	struct msm_drm_private *priv;
+	uint32_t instance_id = 0;
 	int i, ret;
 
 	ddev = drm_dev_alloc(drv, dev);
@@ -853,6 +854,16 @@ static int msm_drm_device_init(struct platform_device *pdev,
 
 	ddev->dev_private = priv;
 	priv->dev = ddev;
+
+	of_property_read_u32(dev->of_node, "cell-index", &instance_id);
+	if (instance_id > MAX_HW_INSTANCES) {
+		pr_err("invalid hardware instance id %d\n", instance_id);
+		ret = -EINVAL;
+		goto priv_alloc_fail;
+	}
+
+	priv->instance_id = instance_id;
+	pr_debug("sde hardware instance id = %d\n", priv->instance_id);
 
 	ret = sde_power_resource_init(pdev, &priv->phandle);
 	if (ret) {

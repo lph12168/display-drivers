@@ -76,6 +76,8 @@ struct msm_gem_vma;
 #define MAX_BRIDGES    16
 #define MAX_CONNECTORS 16
 
+#define MAX_HW_INSTANCES 2
+
 #define MSM_RGB 0x0
 #define MSM_YUV 0x1
 
@@ -1019,6 +1021,8 @@ struct msm_drm_private {
 	uint32_t pending_crtcs;
 	uint32_t pending_planes;
 	wait_queue_head_t pending_crtcs_event;
+
+	uint32_t instance_id;
 
 	unsigned int num_planes;
 	struct drm_plane *planes[MAX_PLANES];
