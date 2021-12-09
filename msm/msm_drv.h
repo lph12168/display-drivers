@@ -388,6 +388,14 @@ enum msm_event_wait {
 };
 
 /**
+ * enum msm_component_event - type of component events
+ * @MSM_COMP_OBJECT_CREATED - notify when all builtin objects are created
+ */
+enum msm_component_event {
+	MSM_COMP_OBJECT_CREATED = 0,
+};
+
+/**
  * struct msm_roi_alignment - region of interest alignment restrictions
  * @xstart_pix_align: left x offset alignment restriction
  * @width_pix_align: width alignment restriction
@@ -1079,6 +1087,8 @@ struct msm_drm_private {
 
 	struct mutex vm_client_lock;
 	struct list_head vm_client_list;
+	/* list of component registered for notification */
+	struct blocking_notifier_head component_notifier_list;
 };
 
 /* get struct msm_kms * from drm_device * */
@@ -1510,5 +1520,34 @@ int msm_get_dsc_count(struct msm_drm_private *priv,
 		u32 hdisplay, u32 *num_dsc);
 
 int msm_get_src_bpc(int chroma_format, int bpc);
+
+/**
+ * msm_drm_register_component - register a component notifier
+ * @dev: drm device
+ * @nb: notifier block to callback on events
+ *
+ * This function registers a notifier callback function
+ * to msm_drm_component_list, which would be called during probe.
+ */
+int msm_drm_register_component(struct drm_device *dev,
+		struct notifier_block *nb);
+
+/**
+ * msm_drm_unregister_component - unregister a component notifier
+ * @dev: drm device
+ * @nb: notifier block to callback on events
+ *
+ * This function registers a notifier callback function
+ * to msm_drm_component_list, which would be called during probe.
+ */
+int msm_drm_unregister_component(struct drm_device *dev,
+		struct notifier_block *nb);
+
+/**
+ * msm_drm_notify_components - notify components of msm_component_event
+ * @event: defined in msm_component_event
+ */
+int msm_drm_notify_components(struct drm_device *dev,
+		enum msm_component_event event);
 
 #endif /* __MSM_DRV_H__ */
