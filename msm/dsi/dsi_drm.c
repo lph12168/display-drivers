@@ -316,9 +316,16 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 				struct drm_display_mode *adjusted_mode)
 {
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+	struct dsi_display *display;
 
 	if (!bridge || !mode || !adjusted_mode) {
 		DSI_ERR("Invalid params\n");
+		return;
+	}
+
+	display = c_bridge->display;
+	if (!display) {
+		DSI_ERR("Invalid dsi display data\n");
 		return;
 	}
 
@@ -328,6 +335,16 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 	/* restore bit_clk_rate also for dynamic clk use cases */
 	c_bridge->dsi_mode.timing.clk_rate_hz =
 		dsi_drm_find_bit_clk_rate(c_bridge->display, adjusted_mode);
+
+	if (display->panel->host_config.ext_bridge_dynamic_mode_set) {
+		if (mode->hdisplay > 2560)
+			display->ctrl_count = 2;
+		else
+			display->ctrl_count = 1;
+
+		dsi_display_clk_mngr_update_ctrl_count(display->clk_mngr,
+			display->ctrl_count);
+	}
 
 	DSI_DEBUG("clk_rate: %llu\n", c_bridge->dsi_mode.timing.clk_rate_hz);
 }
