@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -866,7 +866,8 @@ end:
 	return ret;
 }
 
-void sde_encoder_phys_cmd_irq_control(struct sde_encoder_phys *phys_enc,
+static void sde_encoder_phys_cmd_irq_control(
+		struct sde_encoder_phys *phys_enc,
 		bool enable)
 {
 	struct sde_encoder_phys_cmd *cmd_enc;
@@ -1110,7 +1111,7 @@ static void _sde_encoder_phys_cmd_pingpong_config(
 		to_sde_encoder_phys_cmd(phys_enc);
 
 	if (!phys_enc || !phys_enc->hw_ctl || !phys_enc->hw_pp) {
-		SDE_ERROR("invalid arg(s), enc %d\n", phys_enc != 0);
+		SDE_ERROR("invalid arg(s), enc %d\n", phys_enc != NULL);
 		return;
 	}
 
@@ -1127,7 +1128,7 @@ static void sde_encoder_phys_cmd_enable_helper(
 		struct sde_encoder_phys *phys_enc)
 {
 	if (!phys_enc || !phys_enc->hw_ctl || !phys_enc->hw_pp) {
-		SDE_ERROR("invalid arg(s), encoder %d\n", phys_enc != 0);
+		SDE_ERROR("invalid arg(s), encoder %d\n", phys_enc != NULL);
 		return;
 	}
 

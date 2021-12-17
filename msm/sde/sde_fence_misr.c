@@ -69,7 +69,7 @@ static uint32_t sde_misr_fence_read(struct dma_fence *fence,
 	return copy_len;
 }
 
-const struct sde_fence_file_ops misr_file_ops = {
+static const struct sde_fence_file_ops misr_file_ops = {
 	.read = sde_misr_fence_read,
 };
 

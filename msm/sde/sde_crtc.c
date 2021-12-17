@@ -4693,7 +4693,7 @@ static void sde_crtc_reset(struct drm_crtc *crtc)
 	/* remove previous state, if present */
 	if (crtc->state) {
 		sde_crtc_destroy_state(crtc, crtc->state);
-		crtc->state = 0;
+		crtc->state = NULL;
 	}
 
 	sde_crtc = to_sde_crtc(crtc);
@@ -6137,7 +6137,7 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 	struct sde_crtc_state *cstate;
 	int idx, ret;
 	uint64_t fence_user_fd;
-	uint64_t __user prev_user_fd;
+	uint64_t prev_user_fd;
 
 	if (!crtc || !state || !property) {
 		SDE_ERROR("invalid argument(s)\n");
@@ -6197,7 +6197,7 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 		if (!val)
 			goto exit;
 
-		ret = copy_from_user(&prev_user_fd, (void __user *)val,
+		ret = copy_from_user((void *)&prev_user_fd, (void __user *)val,
 				sizeof(uint64_t));
 		if (ret) {
 			SDE_ERROR("copy from user failed rc:%d\n", ret);

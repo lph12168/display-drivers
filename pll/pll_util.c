@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -334,8 +334,8 @@ static int mdss_pll_util_parse_dt_dfps_sub(struct platform_device *pdev,
 {
 	int rc = 0;
 	struct device_node *pnode;
-	const u32 *addr;
-	void *trim_codes = NULL;
+	const __be32 *addr;
+	void __iomem *trim_codes = NULL;
 	u64 size;
 	u32 offsets[2];
 
