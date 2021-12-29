@@ -106,6 +106,12 @@ struct wfd_kms {
 	uint32_t max_sdma_width;
 };
 
+struct wfd_kms_port {
+	WFDDevice wfd_device;
+	WFDPort wfd_port;
+	WFDint wfd_port_id;
+};
+
 #define to_wfd_kms(x)\
 	container_of((x), struct wfd_kms, base)
 
