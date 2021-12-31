@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2018, 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -120,14 +121,11 @@ void sde_fence_helper_signal(
 		struct sde_generic_fence_context *ctx)
 {
 	struct sde_generic_fence *f, *next;
-	struct list_head local_list_head;
 	bool is_signaled = false;
 	unsigned long flags;
 
 	if (!ctx)
 		return;
-
-	INIT_LIST_HEAD(&local_list_head);
 
 	spin_lock(&ctx->list_lock);
 	if (list_empty(&ctx->fence_list_head)) {
@@ -136,11 +134,7 @@ void sde_fence_helper_signal(
 		return;
 	}
 
-	list_for_each_entry_safe(f, next, &ctx->fence_list_head, fence_list)
-		list_move(&f->fence_list, &local_list_head);
-	spin_unlock(&ctx->list_lock);
-
-	list_for_each_entry_safe(f, next, &local_list_head, fence_list) {
+	list_for_each_entry_safe(f, next, &ctx->fence_list_head, fence_list) {
 		spin_lock_irqsave(&ctx->lock, flags);
 		is_signaled = dma_fence_is_signaled_locked(&f->base);
 		spin_unlock_irqrestore(&ctx->lock, flags);
@@ -148,13 +142,9 @@ void sde_fence_helper_signal(
 		if (is_signaled) {
 			list_del_init(&f->fence_list);
 			dma_fence_put(&f->base);
-		} else {
-			spin_lock(&ctx->list_lock);
-			list_move(&f->fence_list,
-				&ctx->fence_list_head);
-			spin_unlock(&ctx->list_lock);
 		}
 	}
+	spin_unlock(&ctx->list_lock);
 }
 EXPORT_SYMBOL(sde_fence_helper_signal);
 
