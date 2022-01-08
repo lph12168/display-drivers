@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -3578,6 +3579,9 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 		_sde_crtc_setup_is_ppsplit(crtc->state);
 		_sde_crtc_setup_lm_bounds(crtc, crtc->state);
 		_sde_crtc_clear_all_blend_stages(sde_crtc);
+	} else if (sde_crtc->num_mixers && sde_crtc->reinit_crtc_mixers) {
+		_sde_crtc_setup_mixers(crtc);
+		sde_crtc->reinit_crtc_mixers = false;
 	}
 
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
@@ -3606,10 +3610,14 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	if (crtc->state->mode_changed || sde_kms->perf.catalog->uidle_cfg.dirty) {
 		sde_core_perf_crtc_update_uidle(crtc, true);
 	} else if (!test_bit(SDE_CRTC_DIRTY_UIDLE, &sde_crtc->revalidate_mask) &&
-			sde_kms->perf.uidle_enabled)
+			!sde_kms->perf.uidle_enabled)
 		sde_core_perf_uidle_setup_ctl(crtc, false);
 
 	test_and_clear_bit(SDE_CRTC_DIRTY_UIDLE, &sde_crtc->revalidate_mask);
+
+	/* update cached_encoder_mask if new conn is added or removed */
+	if (crtc->state->connectors_changed)
+		sde_crtc->cached_encoder_mask = crtc->state->encoder_mask;
 
 	/*
 	 * Since CP properties use AXI buffer to program the
@@ -4587,11 +4595,18 @@ static void sde_crtc_enable(struct drm_crtc *crtc,
 	int ret, i;
 	struct sde_crtc_state *cstate;
 	struct msm_display_mode *msm_mode;
+	struct sde_kms *kms;
 
 	if (!crtc || !crtc->dev || !crtc->dev->dev_private) {
 		SDE_ERROR("invalid crtc\n");
 		return;
 	}
+	kms = _sde_crtc_get_kms(crtc);
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("invalid kms handle\n");
+		return;
+	}
+
 	priv = crtc->dev->dev_private;
 	cstate = to_sde_crtc_state(crtc->state);
 
@@ -4612,7 +4627,8 @@ static void sde_crtc_enable(struct drm_crtc *crtc,
 		/* cache the encoder mask now for vblank work */
 		sde_crtc->cached_encoder_mask = crtc->state->encoder_mask;
 		/* max possible vsync_cnt(atomic_t) soft counter */
-		drm_crtc_set_max_vblank_count(crtc, INT_MAX);
+		if (kms->catalog->has_precise_vsync_ts)
+			drm_crtc_set_max_vblank_count(crtc, INT_MAX);
 		drm_crtc_vblank_on(crtc);
 	}
 
@@ -5506,6 +5522,8 @@ static u32 sde_crtc_get_vblank_counter(struct drm_crtc *crtc)
 {
 	struct drm_encoder *encoder;
 	struct sde_crtc *sde_crtc;
+	bool is_built_in;
+	u32 vblank_cnt;
 
 	if (!crtc)
 		return 0;
@@ -5516,7 +5534,14 @@ static u32 sde_crtc_get_vblank_counter(struct drm_crtc *crtc)
 		if (sde_encoder_in_clone_mode(encoder))
 			continue;
 
-		return sde_encoder_get_frame_count(encoder);
+		is_built_in = sde_encoder_is_built_in_display(encoder);
+		vblank_cnt = sde_encoder_get_frame_count(encoder);
+
+		SDE_EVT32(DRMID(crtc), DRMID(encoder), is_built_in, vblank_cnt);
+		SDE_DEBUG("crtc:%d enc:%d is_built_in:%d vblank_cnt:%d\n",
+				DRMID(crtc), DRMID(encoder), is_built_in, vblank_cnt);
+
+		return vblank_cnt;
 	}
 
 	return 0;
@@ -5798,7 +5823,7 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 		return;
 	}
 
-	info = kzalloc(sizeof(struct sde_kms_info), GFP_KERNEL);
+	info = vzalloc(sizeof(struct sde_kms_info));
 	if (!info) {
 		SDE_ERROR("failed to allocate info memory\n");
 		return;
@@ -5902,7 +5927,7 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 		msm_property_install_range(&sde_crtc->property_info, "frame_data",
 				0x0, 0, ~0, 0, CRTC_PROP_FRAME_DATA_BUF);
 
-	kfree(info);
+	vfree(info);
 }
 
 static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,

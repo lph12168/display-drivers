@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2769,7 +2770,7 @@ static void sde_connector_check_status_work(struct work_struct *work)
 	dev = conn->base.dev->dev;
 
 	if (!conn->ops.check_status || dev->power.is_suspended ||
-			(conn->dpms_mode != DRM_MODE_DPMS_ON)) {
+			(conn->lp_mode == SDE_MODE_DPMS_OFF)) {
 		SDE_DEBUG("dpms mode: %d\n", conn->dpms_mode);
 		mutex_unlock(&conn->lock);
 		return;
@@ -2912,7 +2913,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 		return -EINVAL;
 	}
 
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = vzalloc(sizeof(*info));
 	if (!info)
 		return -ENOMEM;
 
@@ -2970,7 +2971,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 			SDE_KMS_INFO_DATALEN(info),
 			prop_id);
 exit:
-	kfree(info);
+	vfree(info);
 
 	return rc;
 }

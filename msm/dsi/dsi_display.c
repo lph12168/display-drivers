@@ -5381,7 +5381,22 @@ int dsi_display_splash_res_cleanup(struct  dsi_display *display)
 
 static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 {
-	int rc = 0;
+	int rc = 0, i = 0;
+	struct dsi_display_ctrl *ctrl;
+
+	/*
+	 * The force update dsi clock, is the only clock update function that toggles the state of
+	 * DSI clocks without any ref count protection. With the addition of ASYNC command wait,
+	 * there is a need for adding a check for any queued waits before updating these clocks.
+	 */
+	display_for_each_ctrl(i, display) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl || !(ctrl->ctrl->post_tx_queued))
+			continue;
+		flush_workqueue(display->post_cmd_tx_workq);
+		cancel_work_sync(&ctrl->ctrl->post_cmd_tx_work);
+		ctrl->ctrl->post_tx_queued = false;
+	}
 
 	rc = dsi_display_link_clk_force_update_ctrl(display->dsi_clk_handle);
 
@@ -6868,6 +6883,57 @@ static void _dsi_display_populate_bit_clks(struct dsi_display *display, int star
 	}
 }
 
+static int dsi_display_mode_dyn_clk_cpy(struct dsi_display *display,
+		struct dsi_display_mode *src, struct dsi_display_mode *dst)
+{
+	int rc = 0;
+	u32 count = 0;
+	struct dsi_dyn_clk_caps *dyn_clk_caps;
+	struct msm_dyn_clk_list *bit_clk_list;
+
+	dyn_clk_caps = &(display->panel->dyn_clk_caps);
+	if (!dyn_clk_caps->dyn_clk_support)
+		return rc;
+
+	count = dst->priv_info->bit_clk_list.count;
+	bit_clk_list = &dst->priv_info->bit_clk_list;
+	bit_clk_list->front_porches =
+			kcalloc(count, sizeof(u32), GFP_KERNEL);
+	if (!bit_clk_list->front_porches) {
+		DSI_ERR("failed to allocate space for front porch list\n");
+		rc = -ENOMEM;
+		goto error;
+	}
+
+	bit_clk_list->rates =
+			kcalloc(count, sizeof(u32), GFP_KERNEL);
+	if (!bit_clk_list->rates) {
+		DSI_ERR("failed to allocate space for rates list\n");
+		rc = -ENOMEM;
+		goto error;
+	}
+
+	memcpy(bit_clk_list->rates, src->priv_info->bit_clk_list.rates,
+			count*sizeof(u32));
+
+	bit_clk_list->pixel_clks_khz =
+			kcalloc(count, sizeof(u32), GFP_KERNEL);
+	if (!bit_clk_list->pixel_clks_khz) {
+		DSI_ERR("failed to allocate space for pixel clocks list\n");
+		rc = -ENOMEM;
+		goto error;
+	}
+
+	return rc;
+
+error:
+	kfree(bit_clk_list->rates);
+	kfree(bit_clk_list->front_porches);
+	kfree(bit_clk_list->pixel_clks_khz);
+
+	return rc;
+}
+
 int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_mode *mode)
 {
 	int i;
@@ -6967,6 +7033,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 		int topology_override = NO_OVERRIDE;
 		bool is_preferred = false;
 		u32 frame_threshold_us = ctrl->ctrl->frame_threshold_time_us;
+		struct msm_dyn_clk_list *bit_clk_list;
 
 		memset(&display_mode, 0, sizeof(display_mode));
 
@@ -7060,9 +7127,23 @@ int dsi_display_get_modes(struct dsi_display *display,
 			 * Qsync min fps for the mode will be populated in the timing info
 			 * in dsi_panel_get_mode function.
 			 */
-			sub_mode->priv_info->qsync_min_fps = sub_mode->timing.qsync_min_fps;
+			display_mode.priv_info->qsync_min_fps = sub_mode->timing.qsync_min_fps;
 			if (!dfps_caps.dfps_support || !support_video_mode)
 				continue;
+
+			sub_mode->priv_info = kmemdup(display_mode.priv_info,
+					sizeof(*sub_mode->priv_info), GFP_KERNEL);
+			if (!sub_mode->priv_info) {
+				rc = -ENOMEM;
+				goto error;
+			}
+
+			rc = dsi_display_mode_dyn_clk_cpy(display,
+					&display_mode, sub_mode);
+			if (rc) {
+				DSI_ERR("unable to copy dyn clock list\n");
+				goto error;
+			}
 
 			sub_mode->mode_idx += (array_idx - 1);
 			curr_refresh_rate = sub_mode->timing.refresh_rate;
@@ -7085,6 +7166,17 @@ int dsi_display_get_modes(struct dsi_display *display,
 		if (is_preferred) {
 			/* Set first timing sub mode as preferred mode */
 			display->modes[start].is_preferred = true;
+		}
+
+		bit_clk_list = &display_mode.priv_info->bit_clk_list;
+		if (support_video_mode && dfps_caps.dfps_support) {
+			if (dyn_clk_caps->dyn_clk_support) {
+				kfree(bit_clk_list->rates);
+				kfree(bit_clk_list->front_porches);
+				kfree(bit_clk_list->pixel_clks_khz);
+			}
+
+			kfree(display_mode.priv_info);
 		}
 	}
 

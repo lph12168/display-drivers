@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -116,6 +117,7 @@ struct sde_plane {
 	struct sde_csc_cfg *csc_usr_ptr;
 	struct sde_csc_cfg *csc_ptr;
 
+	uint32_t cached_lut_flag;
 	struct sde_hw_scaler3_cfg scaler3_cfg;
 	struct sde_hw_pixel_ext pixel_ext;
 
@@ -3235,6 +3237,20 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 	pstate->dirty = 0x0;
 }
 
+static void _sde_plane_check_lut_dirty(struct sde_plane *psde,
+	struct sde_plane_state *pstate)
+{
+	/**
+	 * Valid configuration if scaler is not enabled or
+	 * lut flag is set
+	 */
+	if (pstate->scaler3_cfg.lut_flag || !pstate->scaler3_cfg.enable)
+		return;
+
+	pstate->scaler3_cfg.lut_flag = psde->cached_lut_flag;
+	SDE_EVT32(DRMID(&psde->base), pstate->scaler3_cfg.lut_flag, SDE_EVTLOG_ERROR);
+}
+
 static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 				struct drm_plane_state *old_state)
 {
@@ -3286,10 +3302,15 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 			state->crtc_w, state->crtc_h,
 			state->crtc_x, state->crtc_y);
 
+	/* Caching the valid lut flag in sde plane */
+	if (pstate->scaler3_cfg.enable && pstate->scaler3_cfg.lut_flag)
+		psde->cached_lut_flag = pstate->scaler3_cfg.lut_flag;
+
 	/* force reprogramming of all the parameters, if the flag is set */
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
+		_sde_plane_check_lut_dirty(psde, pstate);
 		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}
@@ -3797,7 +3818,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 	psde->catalog = catalog;
 	is_master = !psde->is_virtual;
 
-	info = kzalloc(sizeof(struct sde_kms_info), GFP_KERNEL);
+	info = vzalloc(sizeof(struct sde_kms_info));
 	if (!info) {
 		SDE_ERROR("failed to allocate info memory\n");
 		return;
@@ -3879,7 +3900,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 	if (psde->pipe_hw->ops.set_ubwc_stats_roi)
 		msm_property_install_range(&psde->property_info, "ubwc_stats_roi",
 				0, 0, 0xFFFFFFFF, 0, PLANE_PROP_UBWC_STATS_ROI);
-	kfree(info);
+	vfree(info);
 }
 
 static inline void _sde_plane_set_csc_v1(struct sde_plane *psde,
