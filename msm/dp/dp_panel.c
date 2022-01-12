@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -3207,6 +3208,7 @@ static int dp_panel_update_edid(struct dp_panel *dp_panel, struct edid *edid)
 
 	rc = _sde_edid_update_modes(dp_panel->connector, dp_panel->edid_ctrl);
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = false;
 
 	return rc;
 }

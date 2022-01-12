@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -772,7 +773,9 @@ static int dp_aux_configure_aux_switch(struct dp_aux *dp_aux,
 
 	if (!aux->aux_switch_node) {
 		DP_DEBUG("undefined fsa4480 handle\n");
+#if IS_ENABLED(CONFIG_QCOM_FSA4480_I2C)
 		rc = -EINVAL;
+#endif
 		goto end;
 	}
 
@@ -808,10 +811,14 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 	struct dp_aux_private *aux;
 	struct dp_aux *dp_aux;
 
+#if IS_ENABLED(CONFIG_QCOM_FSA4480_I2C)
 	if (!catalog || !parser ||
 			(!parser->no_aux_switch &&
 				!aux_switch &&
 				!parser->gpio_aux_switch)) {
+#else
+	if (!catalog || !parser) {
+#endif
 		DP_ERR("invalid input\n");
 		rc = -ENODEV;
 		goto error;
