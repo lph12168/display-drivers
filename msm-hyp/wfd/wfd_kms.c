@@ -121,6 +121,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_helper.h>
+#include "msm_hyp_trace.h"
 #include "msm_hyp_utils.h"
 #include "wfd_kms.h"
 
@@ -417,7 +418,7 @@ static bool _wfd_kms_plane_is_csc_matrix_changed(
 		0x7F9B800000,	/* WFD_COLOR_SPACE_BT601 */
 		0x7fa8000000,	/* WFD_COLOR_SPACE_BT601_FULL */
 		0x7fc9800000,	/* WFD_COLOR_SPACE_BT709 */
-		0x0		/* WFD_COLOR_SPACE_BT709_FULL */
+		0x7fd0000000 	/* WFD_COLOR_SPACE_BT709_FULL */
 	};
 
 	/* ctm_coeff[4] is unique for each matrix */
@@ -443,6 +444,9 @@ static bool _wfd_kms_plane_is_csc_matrix_changed(
 		else if (msm_hyp_csc_unique_coeffs[WFD_COLOR_SPACE_BT709] ==
 				cur->csc.ctm_coeff[unique_coeff_idx])
 			*color_space = WFD_COLOR_SPACE_BT709;
+		else if (msm_hyp_csc_unique_coeffs[WFD_COLOR_SPACE_BT709_FULL] ==
+                                cur->csc.ctm_coeff[unique_coeff_idx])
+			*color_space = WFD_COLOR_SPACE_BT709_FULL;
 		else
 			*color_space = WFD_COLOR_SPACE_BT601;
 	}
@@ -530,26 +534,16 @@ static int _wfd_kms_create_image(struct msm_hyp_framebuffer *fb)
 		return -EINVAL;
 	}
 
-	dma_buf = fb->bo->dma_buf;
-
-	if (!dma_buf) {
-		mutex_lock(&fb->base.dev->object_name_lock);
-
+	if (fb->bo->import_attach) {
+		dma_buf = fb->bo->import_attach->dmabuf;
+		get_dma_buf(dma_buf);
+	} else if (fb->bo->dma_buf) {
+		dma_buf = fb->bo->dma_buf;
+		get_dma_buf(dma_buf);
+	} else {
 		dma_buf = drm_gem_prime_export(fb->bo, 0);
-		if (IS_ERR(dma_buf)) {
-			ret = PTR_ERR(dma_buf);
-			dma_buf = NULL;
-		} else {
-			fb->bo->dma_buf = dma_buf;
-			get_dma_buf(dma_buf);
-		}
-
-		mutex_unlock(&fb->base.dev->object_name_lock);
-
-		if (!dma_buf) {
-			pr_err("failed to create dma buf\n");
-			return ret;
-		}
+		if (IS_ERR(dma_buf))
+			return PTR_ERR(dma_buf);
 	}
 
 	wfd_err = wfdCreateWFDEGLImagesPreAlloc_User(
@@ -569,6 +563,8 @@ static int _wfd_kms_create_image(struct msm_hyp_framebuffer *fb)
 		pr_err("failed to create wfd image\n");
 		ret = -EINVAL;
 	}
+
+	dma_buf_put(dma_buf);
 
 	return ret;
 }
@@ -656,6 +652,17 @@ static void _wfd_kms_pipeline_init(struct wfd_kms *kms,
 	}
 }
 
+static int wfd_kms_port_cmp(const void *a, const void *b)
+{
+	struct wfd_kms_port *pa = (struct wfd_kms_port *)a;
+	struct wfd_kms_port *pb = (struct wfd_kms_port *)b;
+	int rc = 0;
+
+	rc = pa->wfd_port_id - pb->wfd_port_id;
+
+	return rc;
+}
+
 static int _wfd_kms_hw_init(struct wfd_kms *kms)
 {
 	WFDint wfd_ids[MAX_DEVICE_CNT];
@@ -666,6 +673,9 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	WFDPort port;
 	int i, j, num_port, port_idx;
 	int rc;
+	int all_ports_cnt = 0;
+	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {0};
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	attribs[0] = WFD_DEVICE_CLIENT_TYPE;
 	attribs[1] = kms->client_id;
@@ -677,11 +687,16 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 		return rc;
 	}
 
+	snprintf(marker_buff, sizeof(marker_buff),
+		"kernel_fe: wire client %x ready", kms->client_id);
+	place_marker(marker_buff);
+
 	/* open a open WFD device */
 	num_dev = wfdEnumerateDevices_User(NULL, 0, attribs);
 	if (!num_dev) {
-		pr_err("wfdEnumerateDevices_User - failed!\n");
-		return -ENODEV;
+		pr_info("wfdEnumerateDevices_User - failed for client %x!\n",
+				kms->client_id);
+		/* TODO: Debug and add back wire_user_deinit(kms->client_id, 0x00) */
 	}
 
 	wfdEnumerateDevices_User(wfd_ids, num_dev, attribs);
@@ -706,19 +721,29 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 			if (port == WFD_INVALID_HANDLE)
 				continue;
 
-			port_idx = kms->port_cnt;
-			kms->ports[port_idx] = port;
-			kms->port_ids[port_idx] = wfd_port_ids[i];
-			kms->port_devs[port_idx] = wfd_dev;
-			kms->port_cnt++;
-
-			_wfd_kms_pipeline_init(kms, wfd_dev, port, port_idx);
+			wfd_kms_ports[all_ports_cnt].wfd_port = port;
+			wfd_kms_ports[all_ports_cnt].wfd_device = wfd_dev;
+			wfd_kms_ports[all_ports_cnt].wfd_port_id = wfd_port_ids[i];
+			all_ports_cnt++;
 		}
 	}
 
-	if (!kms->wfd_device_cnt) {
-		pr_err("can't find valid WFD device\n");
-		return -ENODEV;
+	if (!kms->wfd_device_cnt)
+		pr_info("can't find valid WFD device\n");
+
+	/* Sort wfd_kms_port by wfd_port_id */
+	if (all_ports_cnt > 1)
+		sort(wfd_kms_ports, all_ports_cnt, sizeof(wfd_kms_ports[0]),
+				wfd_kms_port_cmp, NULL);
+
+	for (port_idx = 0; port_idx < all_ports_cnt; port_idx++) {
+		kms->ports[port_idx] = wfd_kms_ports[port_idx].wfd_port;
+		kms->port_ids[port_idx] = wfd_kms_ports[port_idx].wfd_port_id;
+		kms->port_devs[port_idx] = wfd_kms_ports[port_idx].wfd_device;
+		kms->port_cnt++;
+
+		 _wfd_kms_pipeline_init(kms, kms->port_devs[port_idx],
+				kms->ports[port_idx], port_idx);
 	}
 
 	return 0;
@@ -801,11 +826,17 @@ static void wfd_kms_bridge_enable(struct drm_bridge *drm_bridge)
 			struct msm_hyp_connector, bridge);
 	struct wfd_connector_info_priv *priv = container_of(connector->info,
 			struct wfd_connector_info_priv, base);
+	static bool first_frame = true;
 
 	wfdSetPortAttribi_User(priv->wfd_device,
 			priv->wfd_port,
 			WFD_PORT_POWER_MODE,
 			WFD_POWER_MODE_ON);
+
+	if (first_frame) {
+		place_marker("kernel_fe: Set port attribute POWER ON");
+		first_frame = false;
+	}
 }
 
 static void wfd_kms_bridge_disable(struct drm_bridge *drm_bridge)
@@ -851,6 +882,9 @@ static int wfd_kms_get_connector_infos(struct msm_hyp_kms *kms,
 		*connector_num = wfd_kms->port_cnt;
 		return 0;
 	}
+
+	if (!wfd_kms->wfd_device_cnt)
+		return 0;
 
 	wfdGetDeviceAttribiv_User(wfd_kms->wfd_device[0],
 		WFD_DEVICE_MIN_MAX_WIDTH_HEIGHT, 4, data);
@@ -1392,12 +1426,18 @@ static void *wfd_kms_complete_handler_cb(enum event_types type,
 	struct display_event *disp_event = (struct display_event *)info;
 	struct msm_hyp_crtc *c = to_msm_hyp_crtc(crtc);
 	struct wfd_crtc_info_priv *priv;
+	static bool first_frame = true;
 
 	if (type != DISPLAY_EVENT || !info || !params)
 		return NULL;
 
 	if (disp_event->type == COMMIT_COMPLETE) {
 		msm_hyp_crtc_commit_done(crtc);
+
+		if (first_frame) {
+			place_marker("kernel_fe: Fisrt commit envent done");
+			first_frame = false;
+		}
 	} else if (disp_event->type == VSYNC) {
 		msm_hyp_crtc_vblank_done(crtc);
 
@@ -1446,9 +1486,17 @@ static void wfd_kms_commit(struct msm_hyp_kms *kms,
 	struct display_event disp_event;
 	struct cb_info cb_info;
 	int i;
+	static bool first_frame = true;
 
 	if (!old_state)
 		return;
+
+	HYP_ATRACE_BEGIN(__func__);
+
+	if (first_frame) {
+		place_marker("kernel_fe: First commit kickoff");
+		first_frame = false;
+	}
 
 	for_each_new_crtc_in_state(old_state, crtc, crtc_state, i) {
 		c = to_msm_hyp_crtc(crtc);
@@ -1474,6 +1522,7 @@ static void wfd_kms_commit(struct msm_hyp_kms *kms,
 				priv->wfd_port,
 				WFD_COMMIT_ASYNC);
 	}
+	HYP_ATRACE_END(__func__);
 }
 
 static void wfd_kms_enable_vblank(struct msm_hyp_kms *kms,
@@ -1546,6 +1595,7 @@ static int wfd_kms_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct wfd_kms *kms;
 	int ret;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	kms = devm_kzalloc(dev, sizeof(*kms), GFP_KERNEL);
 	if (!kms)
@@ -1568,6 +1618,10 @@ static int wfd_kms_probe(struct platform_device *pdev)
 		pr_err("component add failed, rc=%d\n", ret);
 		return ret;
 	}
+
+	snprintf(marker_buff, sizeof(marker_buff),
+		"kernel_fe: wfd_kms probe client %x", kms->client_id);
+	place_marker(marker_buff);
 
 	return 0;
 }

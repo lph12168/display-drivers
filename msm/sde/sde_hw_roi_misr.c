@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "sde_hwio.h"
@@ -38,15 +38,15 @@ static void sde_hw_roi_misr_setup(struct sde_hw_roi_misr *ctx,
 	uint32_t ctrl_val = 0;
 	int i;
 
-	ctrl_val = ROI_MISR_CTRL_RUN_MODE
-			| ROI_MISR_CTRL_ENABLE
-			| ROI_MISR_CTRL_STATUS_CLEAR;
-
 	spin_lock(&ctx->spin_lock);
 
 	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_MISR; ++i) {
 		if (roi_info->roi_mask & BIT(i)) {
-			ctrl_val |= cfg->frame_count[i];
+			ctrl_val = ROI_MISR_CTRL_RUN_MODE
+				| ROI_MISR_CTRL_ENABLE
+				| ROI_MISR_CTRL_STATUS_CLEAR
+				| cfg->frame_count[i];
+
 			SDE_REG_WRITE(roi_misr_c, ROI_MISR_POSITION(i),
 				ROI_POSITION_VAL(roi_info->misr_roi_rect[i].x,
 				roi_info->misr_roi_rect[i].y));

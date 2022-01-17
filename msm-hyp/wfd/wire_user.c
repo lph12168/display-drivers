@@ -11,7 +11,7 @@
 #include <linux/atomic.h>
 #include <linux/kthread.h>
 #include <linux/ktime.h>
-
+#include "msm_hyp_trace.h"
 #include "wire_user.h"
 #include "wire_format.h"
 #include "user_os_utils.h"
@@ -335,6 +335,8 @@ wire_user_profile_begin(
 
 	time_start[index] = ktime_get();
 
+	HYP_ATRACE_BEGIN(func_name[index]);
+
 	return 0;
 }
 
@@ -357,6 +359,8 @@ wire_user_profile_end(
 		WIRE_LOG_INFO("%s execution time: %lld us",
 			func_name[index], (long long)time_exec);
 	}
+
+	HYP_ATRACE_END(func_name[index]);
 
 	return 0;
 }
@@ -688,6 +692,18 @@ wfdEnumerateDevices_User(
 
 	enum_devs->req.dev_ids_cnt = (deviceIds) ? (u32)deviceIdsCount : 0;
 
+	/* loop through attribList and copy items, one at a time, until WFD_NONE
+	 * or NULL is found
+	 */
+	tmp = (WFDint *)filterList;
+	i = 0;
+	while ((tmp) && (*tmp != WFD_NONE) && (i < MAX_CREATE_DEVICE_ATTRIBS - 1)) {
+		enum_devs->req.filter_list[i] = *tmp;
+		i++; tmp++;
+	}
+	/* server expects last item to be WFD_NONE */
+	enum_devs->req.filter_list[i] = WFD_NONE;
+
 	if (user_os_utils_send_recv(handle, &req, &resp, 0x00)) {
 		WIRE_LOG_ERROR("RPC call failed");
 		goto end;
@@ -803,6 +819,9 @@ wfdCreateDevice_User(
 		goto end;
 
 	wire_dev = kzalloc(sizeof(*wire_dev), GFP_KERNEL);
+	if (!wire_dev)
+		goto end;
+
 	wire_dev->device = dev_hdl;
 	wire_dev->ctx = ctx;
 end:
@@ -883,6 +902,8 @@ wfdDeviceCommitExt_User(
 	union msg_device_commit_ext *dev_commit_ext = NULL;
 	WFDErrorCode sts = WFD_ERROR_NONE;
 
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
+
 	wire_user_profile_begin(WFD_DEVICE_COMMIT_EXT_PROFILING);
 
 	if (type != WFD_COMMIT_ENTIRE_PORT) {
@@ -911,10 +932,16 @@ wfdDeviceCommitExt_User(
 	dev_commit_ext->req.hdl = (u32)(uintptr_t)wire_port->port;
 	dev_commit_ext->req.flags = (u32)flags;
 
+	snprintf(marker_buff, sizeof(marker_buff),
+		"Commit SEND, dev=%p type=%d hdl=%p timestamp=%lu",
+		device, type, hdl, req.hdr.timestamp);
+	HYP_ATRACE_BEGIN(marker_buff);
+
 	if (wire_port_send_recv(wire_dev, wire_port, &req, &resp, 0x00)) {
 		WIRE_LOG_ERROR("RPC call failed");
 		goto end;
 	}
+	HYP_ATRACE_END(marker_buff);
 
 	/* reset batch commit */
 	if (wire_port->commit.size) {
@@ -3326,44 +3353,61 @@ static int event_listener(void *param)
 {
 	struct wire_context *ctx = param;
 	void *handle = ctx->init_info.context;
-	WIRE_HEAP struct wire_packet req;
+	struct wire_packet *req;
 	int rc;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
+
+	req = kzalloc(sizeof(struct wire_packet), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
 
 	while (ctx->wire_isr_enable) {
-		memset((char *)&req, 0x00, sizeof(struct wire_packet));
+		memset((char *)req, 0x00, sizeof(struct wire_packet));
 
-		if (prep_hdr(EVENT_NOTIFICATION, &req)) {
+		if (prep_hdr(EVENT_NOTIFICATION, req)) {
 			WIRE_LOG_ERROR("prep_hdr failed");
 			continue;
 		}
 
-		rc = user_os_utils_recv(handle, &req, 0x00);
+		rc = user_os_utils_recv(handle, req, 0x00);
 		if (rc && !ctx->wire_isr_stop) {
 			WIRE_LOG_ERROR("user_os_utils_recv (EVENT_NOTIFICATION) failed");
 			break;
 		}
 
 		/* validate packet */
-		if (req.hdr.magic_num != WIRE_FORMAT_MAGIC) {
-			WIRE_LOG_ERROR("Invalid magic_num=0x%x", req.hdr.magic_num);
+		if (req->hdr.magic_num != WIRE_FORMAT_MAGIC) {
+			WIRE_LOG_ERROR("Invalid magic_num=0x%x", req->hdr.magic_num);
 			rc = -1;
 		}
-		if (req.hdr.version != DISPLAY_SHIM_EVENT_VERSION) {
+		if (req->hdr.version != DISPLAY_SHIM_EVENT_VERSION) {
 			WIRE_LOG_ERROR("version mismatch should_be=0x%x req=0x%x",
-				DISPLAY_SHIM_EVENT_VERSION, req.hdr.version);
+				DISPLAY_SHIM_EVENT_VERSION, req->hdr.version);
 			rc = -1;
 		}
-		if (req.hdr.payload_type != EVENT_NOTIFICATION) {
+		if (req->hdr.payload_type != EVENT_NOTIFICATION) {
 			WIRE_LOG_ERROR("wrong payload type %d",
-				req.hdr.payload_type);
+				req->hdr.payload_type);
 			rc = -1;
 		}
 
 		if (!rc) {
+			snprintf(marker_buff, sizeof(marker_buff),
+				"Event RECV'D, type=%d disp_id=%d timestamp=%lu",
+				req->payload.ev_req.info.disp_event,
+				req->payload.ev_req.info.disp_event.display_id,
+				req->hdr.timestamp);
+
+			HYP_ATRACE_BEGIN(marker_buff);
+
 			/* Need to handle event callbacks outside of channel lock */
-			event_handler(ctx, &req.payload.ev_req);
+			event_handler(ctx, &req->payload.ev_req);
+
+			HYP_ATRACE_END(marker_buff);
 		}
 	}
+
+	kfree(req);
 
 	return 0;
 }
@@ -3452,6 +3496,7 @@ wire_user_request_cb(
 	struct wire_context *ctx = wire_dev->ctx;
 	void *handle = ctx->init_info.context;
 	int rc = 0;
+	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	/* Request/Response */
 	WIRE_HEAP struct wire_packet req;
@@ -3492,6 +3537,13 @@ wire_user_request_cb(
 
 	ev_req->type = (enum e_types)type;
 
+	snprintf(marker_buff, sizeof(marker_buff),
+		"Event REQ, type=%d disp_id=%d timestamp=%lu",
+		req.payload.ev_req.info.disp_event.type,
+		req.payload.ev_req.info.disp_event.display_id,
+		req.hdr.timestamp);
+	HYP_ATRACE_BEGIN(marker_buff);
+
 	if (type == DISPLAY_EVENT) {
 		ev_req->info.disp_event.type = (enum e_display_types)
 						info->disp_event.type;
@@ -3506,6 +3558,8 @@ wire_user_request_cb(
 		WIRE_LOG_ERROR("RPC call failed");
 		goto end;
 	}
+
+	HYP_ATRACE_END(marker_buff);
 
 	rc = ev_resp->status;
 

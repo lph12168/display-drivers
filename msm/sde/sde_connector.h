@@ -15,6 +15,7 @@
 #include "msm_prop.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
+#include "sde_roi_misr.h"
 
 #define SDE_CONNECTOR_NAME_SIZE	16
 
@@ -142,6 +143,19 @@ struct sde_connector_ops {
 			const struct drm_display_mode *drm_mode,
 			struct msm_mode_info *mode_info,
 			u32 max_mixer_width, void *display);
+
+	/**
+	 * get_roi_misr_mode_info - retrieve roi misr mode information
+	 * @connector: Pointer to drm connector structure
+	 * @mode_info: Information of the display mode
+	 * @misr_mode_info: Out parameter, information of the roi misr mode
+	 * @display: Pointer to private display structure
+	 * Returns: Zero on success
+	 */
+	int (*get_roi_misr_mode_info)(struct drm_connector *connector,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display);
 
 	/**
 	 * enable_event - notify display of event registration/unregistration

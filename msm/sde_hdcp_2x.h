@@ -161,7 +161,7 @@ struct hdcp_transport_wakeup_data {
 	u32 transaction_delay;
 	u32 transaction_timeout;
 	u8 abort_mask;
-	const struct sde_hdcp_2x_msg_data *message_data;
+	struct sde_hdcp_2x_msg_data *message_data;
 };
 
 static inline const char *sde_hdcp_2x_cmd_to_str(

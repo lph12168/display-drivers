@@ -302,6 +302,7 @@ static int _sde_encoder_phys_shd_rm_reserve(
 				struct sde_shd_hw_roi_misr, base);
 		hw_roi_misr->base = *(struct sde_hw_roi_misr *)roi_misr_iter.hw;
 		hw_roi_misr->orig = roi_misr_iter.hw;
+		hw_roi_misr->roi_mask = display->misr_roi_mask;
 		sde_shd_hw_roi_misr_init_op(&hw_roi_misr->base);
 
 		SDE_DEBUG("reserve ROI_MISR%d from enc %d to %d\n",
