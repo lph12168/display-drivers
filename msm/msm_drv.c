@@ -1299,7 +1299,7 @@ int msm_drm_notify_components(struct drm_device *dev,
 
 static int msm_release(struct inode *inode, struct file *filp)
 {
-	struct drm_file *file_priv = filp->private_data;
+	struct drm_file *file_priv;
 	struct drm_minor *minor;
 	struct drm_device *dev;
 	struct msm_drm_private *priv;
@@ -1311,6 +1311,7 @@ static int msm_release(struct inode *inode, struct file *filp)
 
 	mutex_lock(&msm_release_lock);
 
+	file_priv = filp->private_data;
 	if (!file_priv) {
 		ret = -EINVAL;
 		goto end;
@@ -1921,8 +1922,8 @@ static int __init msm_drm_register(void)
 	sde_rsc_register();
 	dsi_display_register();
 	msm_hdcp_register();
-	dp_display_register();
 	dp_sim_register();
+	dp_display_register();
 	msm_smmu_driver_init();
 	sde_wb_register();
 	sde_shd_register();
@@ -1940,8 +1941,8 @@ static void __exit msm_drm_unregister(void)
 	sde_shd_unregister();
 	sde_wb_unregister();
 	msm_smmu_driver_cleanup();
-	dp_sim_unregister();
 	dp_display_unregister();
+	dp_sim_unregister();
 	msm_hdcp_unregister();
 	dsi_display_unregister();
 	sde_rsc_unregister();

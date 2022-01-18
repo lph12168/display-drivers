@@ -652,6 +652,17 @@ static void _wfd_kms_pipeline_init(struct wfd_kms *kms,
 	}
 }
 
+static int wfd_kms_port_cmp(const void *a, const void *b)
+{
+	struct wfd_kms_port *pa = (struct wfd_kms_port *)a;
+	struct wfd_kms_port *pb = (struct wfd_kms_port *)b;
+	int rc = 0;
+
+	rc = pa->wfd_port_id - pb->wfd_port_id;
+
+	return rc;
+}
+
 static int _wfd_kms_hw_init(struct wfd_kms *kms)
 {
 	WFDint wfd_ids[MAX_DEVICE_CNT];
@@ -662,6 +673,8 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	WFDPort port;
 	int i, j, num_port, port_idx;
 	int rc;
+	int all_ports_cnt = 0;
+	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {0};
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	attribs[0] = WFD_DEVICE_CLIENT_TYPE;
@@ -683,7 +696,7 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	if (!num_dev) {
 		pr_info("wfdEnumerateDevices_User - failed for client %x!\n",
 				kms->client_id);
-		wire_user_deinit(kms->client_id, 0x00);
+		/* TODO: Debug and add back wire_user_deinit(kms->client_id, 0x00) */
 	}
 
 	wfdEnumerateDevices_User(wfd_ids, num_dev, attribs);
@@ -708,18 +721,30 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 			if (port == WFD_INVALID_HANDLE)
 				continue;
 
-			port_idx = kms->port_cnt;
-			kms->ports[port_idx] = port;
-			kms->port_ids[port_idx] = wfd_port_ids[i];
-			kms->port_devs[port_idx] = wfd_dev;
-			kms->port_cnt++;
-
-			_wfd_kms_pipeline_init(kms, wfd_dev, port, port_idx);
+			wfd_kms_ports[all_ports_cnt].wfd_port = port;
+			wfd_kms_ports[all_ports_cnt].wfd_device = wfd_dev;
+			wfd_kms_ports[all_ports_cnt].wfd_port_id = wfd_port_ids[i];
+			all_ports_cnt++;
 		}
 	}
 
 	if (!kms->wfd_device_cnt)
 		pr_info("can't find valid WFD device\n");
+
+	/* Sort wfd_kms_port by wfd_port_id */
+	if (all_ports_cnt > 1)
+		sort(wfd_kms_ports, all_ports_cnt, sizeof(wfd_kms_ports[0]),
+				wfd_kms_port_cmp, NULL);
+
+	for (port_idx = 0; port_idx < all_ports_cnt; port_idx++) {
+		kms->ports[port_idx] = wfd_kms_ports[port_idx].wfd_port;
+		kms->port_ids[port_idx] = wfd_kms_ports[port_idx].wfd_port_id;
+		kms->port_devs[port_idx] = wfd_kms_ports[port_idx].wfd_device;
+		kms->port_cnt++;
+
+		 _wfd_kms_pipeline_init(kms, kms->port_devs[port_idx],
+				kms->ports[port_idx], port_idx);
+	}
 
 	return 0;
 }
