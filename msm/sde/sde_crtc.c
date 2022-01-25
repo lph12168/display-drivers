@@ -68,6 +68,8 @@ static int sde_crtc_mmrm_interrupt_handler(struct drm_crtc *crtc_drm,
 	bool en, struct sde_irq_callback *idle_irq);
 static int sde_crtc_pm_event_handler(struct drm_crtc *crtc, bool en,
 		struct sde_irq_callback *noirq);
+static int sde_crtc_frame_data_interrupt_handler(struct drm_crtc *crtc_drm,
+	bool en, struct sde_irq_callback *idle_irq);
 static int _sde_crtc_set_noise_layer(struct sde_crtc *sde_crtc,
 				struct sde_crtc_state *cstate,
 				void __user *usr_ptr);
@@ -86,6 +88,7 @@ static struct sde_crtc_custom_events custom_events[] = {
 	{DRM_EVENT_LTM_OFF, sde_cp_ltm_off_event_handler},
 	{DRM_EVENT_MMRM_CB, sde_crtc_mmrm_interrupt_handler},
 	{DRM_EVENT_VM_RELEASE, sde_crtc_vm_release_handler},
+	{DRM_EVENT_FRAME_DATA, sde_crtc_frame_data_interrupt_handler},
 };
 
 /* default input fence timeout, in ms */
@@ -459,9 +462,10 @@ static const struct attribute_group *sde_crtc_attr_groups[] = {
 	NULL,
 };
 
-static void sde_crtc_event_notify(struct drm_crtc *crtc, uint32_t type, uint32_t len, uint64_t val)
+static void sde_crtc_event_notify(struct drm_crtc *crtc, uint32_t type, void *payload, uint32_t len)
 {
 	struct drm_event event;
+	uint32_t *data = (uint32_t *)payload;
 
 	if (!crtc) {
 		SDE_ERROR("invalid crtc\n");
@@ -470,10 +474,12 @@ static void sde_crtc_event_notify(struct drm_crtc *crtc, uint32_t type, uint32_t
 
 	event.type = type;
 	event.length = len;
-	msm_mode_object_event_notify(&crtc->base, crtc->dev, &event, (u8 *)&val);
+	msm_mode_object_event_notify(&crtc->base, crtc->dev, &event, (u8 *)payload);
 
-	SDE_EVT32(DRMID(crtc), type, len, val >> 32, val & 0xFFFFFFFF);
-	SDE_DEBUG("crtc:%d event(%d) value(%llu) notified\n", DRMID(crtc), type, val);
+	SDE_EVT32(DRMID(crtc), type, len, *data,
+			((uint64_t)payload) >> 32, ((uint64_t)payload) & 0xFFFFFFFF);
+	SDE_DEBUG("crtc:%d event(%lu) ptr(%pK) value(%lu) notified\n",
+			DRMID(crtc), type, payload, *data);
 }
 
 static void sde_crtc_destroy(struct drm_crtc *crtc)
@@ -2365,6 +2371,7 @@ static int _sde_crtc_get_frame_data_buffer(struct drm_crtc *crtc, uint32_t fd)
 		return -ENOMEM;
 
 	sde_crtc->frame_data.buf[cur_buf] = buf;
+	buf->fd = fd;
 	buf->fb = drm_framebuffer_lookup(crtc->dev, NULL, fd);
 	if (!buf->fb) {
 		SDE_ERROR("unable to get fb");
@@ -2438,8 +2445,8 @@ static void _sde_crtc_frame_data_notify(struct drm_crtc *crtc,
 	buf.fd = sde_crtc->frame_data.buf[cur_buf]->fd;
 	buf.offset = msm_gem->offset;
 
-	sde_crtc_event_notify(crtc, DRM_EVENT_FRAME_DATA, sizeof(struct sde_drm_frame_data_buf),
-			(uint64_t)(&buf));
+	sde_crtc_event_notify(crtc, DRM_EVENT_FRAME_DATA, &buf,
+			sizeof(struct sde_drm_frame_data_buf));
 
 	sde_crtc->frame_data.idx = ++sde_crtc->frame_data.idx % sde_crtc->frame_data.cnt;
 }
@@ -2830,6 +2837,10 @@ void sde_crtc_complete_commit(struct drm_crtc *crtc,
 		struct drm_crtc_state *old_state)
 {
 	struct sde_crtc *sde_crtc;
+	struct sde_splash_display *splash_display = NULL;
+	struct sde_kms *sde_kms;
+	bool cont_splash_enabled = false;
+	int i;
 	u32 power_on = 1;
 
 	if (!crtc || !crtc->state) {
@@ -2840,8 +2851,17 @@ void sde_crtc_complete_commit(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	SDE_EVT32_VERBOSE(DRMID(crtc));
 
-	if (crtc->state->active_changed && crtc->state->active)
-		sde_crtc_event_notify(crtc, DRM_EVENT_CRTC_POWER, sizeof(u32), power_on);
+	sde_kms = _sde_crtc_get_kms(crtc);
+
+	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+		splash_display = &sde_kms->splash_data.splash_display[i];
+		if (splash_display->cont_splash_enabled &&
+				crtc == splash_display->encoder->crtc)
+			cont_splash_enabled = true;
+	}
+
+	if ((crtc->state->active_changed || cont_splash_enabled) && crtc->state->active)
+		sde_crtc_event_notify(crtc, DRM_EVENT_CRTC_POWER, &power_on, sizeof(u32));
 
 	sde_core_perf_crtc_update(crtc, 0, false);
 }
@@ -3607,13 +3627,8 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	_sde_crtc_dest_scaler_setup(crtc);
 	sde_cp_crtc_apply_noise(crtc, old_state);
 
-	if (crtc->state->mode_changed || sde_kms->perf.catalog->uidle_cfg.dirty) {
+	if (crtc->state->mode_changed || sde_kms->perf.catalog->uidle_cfg.dirty)
 		sde_core_perf_crtc_update_uidle(crtc, true);
-	} else if (!test_bit(SDE_CRTC_DIRTY_UIDLE, &sde_crtc->revalidate_mask) &&
-			!sde_kms->perf.uidle_enabled)
-		sde_core_perf_uidle_setup_ctl(crtc, false);
-
-	test_and_clear_bit(SDE_CRTC_DIRTY_UIDLE, &sde_crtc->revalidate_mask);
 
 	/* update cached_encoder_mask if new conn is added or removed */
 	if (crtc->state->connectors_changed)
@@ -4301,7 +4316,6 @@ void sde_crtc_reset_sw_state(struct drm_crtc *crtc)
 
 	/* mark other properties which need to be dirty for next update */
 	set_bit(SDE_CRTC_DIRTY_DIM_LAYERS, &sde_crtc->revalidate_mask);
-	set_bit(SDE_CRTC_DIRTY_UIDLE, &sde_crtc->revalidate_mask);
 	if (cstate->num_ds_enabled)
 		set_bit(SDE_CRTC_DIRTY_DEST_SCALER, cstate->dirty);
 }
@@ -4346,7 +4360,7 @@ static void sde_crtc_mmrm_cb_notification(struct drm_crtc *crtc)
 			kms->perf.clk_name);
 
 	/* notify user space the reduced clk rate */
-	sde_crtc_event_notify(crtc, DRM_EVENT_MMRM_CB, sizeof(unsigned long), requested_clk);
+	sde_crtc_event_notify(crtc, DRM_EVENT_MMRM_CB, &requested_clk, sizeof(unsigned long));
 
 	SDE_DEBUG("crtc[%d]: MMRM cb notified clk:%d\n",
 		crtc->base.id, requested_clk);
@@ -4420,7 +4434,7 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 		sde_crtc_reset_sw_state(crtc);
 		sde_cp_crtc_suspend(crtc);
 		power_on = 0;
-		sde_crtc_event_notify(crtc, DRM_EVENT_SDE_POWER, sizeof(u32), power_on);
+		sde_crtc_event_notify(crtc, DRM_EVENT_SDE_POWER, &power_on, sizeof(u32));
 		break;
 	case SDE_POWER_EVENT_MMRM_CALLBACK:
 		sde_crtc_mmrm_cb_notification(crtc);
@@ -4579,7 +4593,7 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	sde_cp_crtc_disable(crtc);
 
 	power_on = 0;
-	sde_crtc_event_notify(crtc, DRM_EVENT_CRTC_POWER, sizeof(u32), power_on);
+	sde_crtc_event_notify(crtc, DRM_EVENT_CRTC_POWER, &power_on, sizeof(u32));
 
 	mutex_unlock(&sde_crtc->crtc_lock);
 }
@@ -7478,6 +7492,13 @@ static int sde_crtc_vm_release_handler(struct drm_crtc *crtc_drm,
 {
 	return 0;
 }
+
+static int sde_crtc_frame_data_interrupt_handler(struct drm_crtc *crtc_drm,
+	bool en, struct sde_irq_callback *irq)
+{
+	return 0;
+}
+
 /**
  * sde_crtc_update_cont_splash_settings - update mixer settings
  *	and initial clk during device bootup for cont_splash use case
@@ -7637,5 +7658,7 @@ void sde_crtc_disable_cp_features(struct drm_crtc *crtc)
 
 void _sde_crtc_vm_release_notify(struct drm_crtc *crtc)
 {
-	sde_crtc_event_notify(crtc, DRM_EVENT_VM_RELEASE, sizeof(uint32_t), 1);
+	uint32_t val = 1;
+
+	sde_crtc_event_notify(crtc, DRM_EVENT_VM_RELEASE, &val, sizeof(uint32_t));
 }

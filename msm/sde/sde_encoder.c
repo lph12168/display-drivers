@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -213,6 +213,36 @@ ktime_t sde_encoder_calc_last_vsync_timestamp(struct drm_encoder *drm_enc)
 			ktime_to_us(tvblank), ktime_to_us(cur_time), fps, SDE_EVTLOG_FUNC_CASE2);
 
 	return tvblank;
+}
+
+static void _sde_encoder_control_fal10_veto(struct drm_encoder *drm_enc, bool veto)
+{
+	bool clone_mode;
+	struct sde_kms *sde_kms = sde_encoder_get_kms(drm_enc);
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
+	struct sde_uidle_cfg *uidle_cfg;
+
+	if (!sde_kms->catalog || !sde_kms->hw_uidle ||
+			!sde_kms->hw_uidle->ops.uidle_fal10_override) {
+		SDE_ERROR("invalid args\n");
+		return;
+	}
+
+	/*
+	 * clone mode is the only scenario where we want to enable software override
+	 * of fal10 veto.
+	 */
+	uidle_cfg = &sde_kms->catalog->uidle_cfg;
+	clone_mode = sde_encoder_in_clone_mode(drm_enc);
+	SDE_EVT32(DRMID(drm_enc), clone_mode, veto);
+
+	if (clone_mode && veto) {
+		sde_kms->hw_uidle->ops.uidle_fal10_override(sde_kms->hw_uidle, veto);
+		sde_enc->fal10_veto_override = true;
+	} else if (sde_enc->fal10_veto_override && !veto) {
+		sde_kms->hw_uidle->ops.uidle_fal10_override(sde_kms->hw_uidle, veto);
+		sde_enc->fal10_veto_override = false;
+	}
 }
 
 static void _sde_encoder_pm_qos_add_request(struct drm_encoder *drm_enc)
@@ -2428,17 +2458,37 @@ static void _sde_encoder_virt_populate_hw_res(struct drm_encoder *drm_enc)
 }
 
 static int sde_encoder_virt_modeset_rc(struct drm_encoder *drm_enc,
-		struct msm_display_mode *msm_mode, bool pre_modeset)
+	struct drm_display_mode *adj_mode, struct msm_display_mode *msm_mode, bool pre_modeset)
 {
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	enum sde_intf_mode intf_mode;
+	struct drm_display_mode *old_adj_mode = NULL;
 	int ret;
-	bool is_cmd_mode = false;
+	bool is_cmd_mode = false, res_switch = false;
 
 	if (sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE))
 		is_cmd_mode = true;
 
 	if (pre_modeset) {
+		if (sde_enc->cur_master)
+			old_adj_mode = &sde_enc->cur_master->cached_mode;
+		if (old_adj_mode && is_cmd_mode)
+			res_switch = !drm_mode_match(old_adj_mode, adj_mode,
+					DRM_MODE_MATCH_TIMINGS);
+
+		if (res_switch && sde_enc->disp_info.is_te_using_watchdog_timer) {
+			/*
+			 * add tx wait for sim panel to avoid wd timer getting
+			 * updated in middle of frame to avoid early vsync
+			 */
+			ret = sde_encoder_wait_for_event(drm_enc, MSM_ENC_TX_COMPLETE);
+			if (ret && ret != -EWOULDBLOCK) {
+				SDE_ERROR_ENC(sde_enc, "wait for idle failed %d\n", ret);
+				SDE_EVT32(DRMID(drm_enc), ret, SDE_EVTLOG_ERROR);
+				return ret;
+			}
+		}
+
 		intf_mode = sde_encoder_get_intf_mode(drm_enc);
 		if (msm_is_mode_seamless_dms(msm_mode) ||
 				(msm_is_mode_seamless_dyn_clk(msm_mode) &&
@@ -2545,7 +2595,7 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 
 	/* release resources before seamless mode change */
 	msm_mode = &c_state->msm_mode;
-	ret = sde_encoder_virt_modeset_rc(drm_enc, msm_mode, true);
+	ret = sde_encoder_virt_modeset_rc(drm_enc, adj_mode, msm_mode, true);
 	if (ret)
 		return;
 
@@ -2585,7 +2635,7 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	}
 
 	/* update resources after seamless mode change */
-	sde_encoder_virt_modeset_rc(drm_enc, msm_mode, false);
+	sde_encoder_virt_modeset_rc(drm_enc, adj_mode, msm_mode, false);
 }
 
 void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
@@ -2782,6 +2832,7 @@ static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 
 	memset(&sde_enc->prv_conn_roi, 0, sizeof(sde_enc->prv_conn_roi));
 	memset(&sde_enc->cur_conn_roi, 0, sizeof(sde_enc->cur_conn_roi));
+	_sde_encoder_control_fal10_veto(drm_enc, true);
 }
 
 static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
@@ -3044,6 +3095,8 @@ void sde_encoder_virt_reset(struct drm_encoder *drm_enc)
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	struct sde_kms *sde_kms = sde_encoder_get_kms(drm_enc);
 	int i = 0;
+
+	_sde_encoder_control_fal10_veto(drm_enc, false);
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++) {
 		if (sde_enc->phys_encs[i]) {
