@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright (C) 2014 Red Hat
@@ -1355,9 +1356,9 @@ static int wfd_kms_get_mode_info(struct msm_hyp_kms *kms,
 
 static int wfd_kms_plane_cmp(const void *a, const void *b)
 {
-	struct msm_hyp_plane_state *pa = (struct msm_hyp_plane_state *)a;
-	struct msm_hyp_plane_state *pb = (struct msm_hyp_plane_state *)b;
-	int rc;
+	struct msm_hyp_plane_state *pa = *(struct msm_hyp_plane_state **)a;
+	struct msm_hyp_plane_state *pb = *(struct msm_hyp_plane_state **)b;
+	int rc = 0;
 
 	if (pa->zpos != pb->zpos)
 		rc = pa->zpos - pb->zpos;
