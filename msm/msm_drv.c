@@ -369,6 +369,7 @@ static int msm_drm_uninit(struct device *dev)
 
 	drm_kms_helper_poll_fini(ddev);
 
+	drm_client_dev_unregister(ddev);
 	drm_mode_config_cleanup(ddev);
 
 	if (priv->registered) {
