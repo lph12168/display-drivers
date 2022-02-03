@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,6 +53,7 @@ struct shd_display_base {
 	int intf_idx;
 	bool mst_port;
 	bool dynamic_mode;
+	bool is_dspp_used;
 };
 
 struct shd_display {
@@ -78,6 +80,7 @@ struct shd_display {
 
 	int handoff_count;
 	int handoff_mask;
+	bool is_dspp_enable;
 };
 
 /* drm internal header */

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -339,15 +340,28 @@ static int shd_crtc_atomic_set_property(struct drm_crtc *crtc,
 	struct shd_crtc *shd_crtc = sde_crtc->priv_handle;
 	struct sde_cp_node_dummy *prop_node;
 
+	struct shd_display *display             = shd_crtc->display;
+	struct shd_display_base *base           = display->base;
+	struct sde_crtc *sde_crtc_base          = to_sde_crtc(base->crtc);
+	const struct drm_crtc_funcs *orig_funcs = shd_crtc->orig_funcs;
+
 	if (!crtc || !state || !property) {
 		SDE_ERROR("invalid argument(s)\n");
 		return -EINVAL;
 	}
 
-	/* ignore all the dspp properties */
+	/* For the PA properties assign the dspp */
 	list_for_each_entry(prop_node, &sde_crtc->feature_list, feature_list) {
-		if (property->base.id == prop_node->property_id)
-			return 0;
+		if (property->base.id == prop_node->property_id) {
+			if (display->is_dspp_enable) {
+				sde_crtc->mixers[0].hw_dspp =
+					sde_crtc_base->mixers[0].hw_dspp;
+				return orig_funcs->atomic_set_property(crtc,
+							state, property, val);
+			} else {
+				return 0;
+			}
+		}
 	}
 
 	return shd_crtc->orig_funcs->atomic_set_property(crtc,
@@ -1486,6 +1500,8 @@ next:
 	if (!display->display_type)
 		display->display_type = "unknown";
 
+	display->is_dspp_enable = of_property_read_bool(of_node,
+							"qcom,dspp-enable");
 error:
 	return rc;
 }
@@ -1675,6 +1691,8 @@ static int shd_display_notifier(struct notifier_block *nb,
 	INIT_LIST_HEAD(&base->disp_list);
 	base->of_node = shd_dev->base_of;
 
+	base->is_dspp_used = false;
+
 	rc = shd_parse_base(shd_dev->drm_dev, base);
 	if (rc) {
 		SDE_ERROR("failed to parse shared display base\n");
@@ -1690,6 +1708,18 @@ static int shd_display_notifier(struct notifier_block *nb,
 	list_add_tail(&base->head, &g_base_list);
 
 next:
+	if (shd_dev->is_dspp_enable) {
+		/**
+		 * Check if the dspp is already allocated for other shared
+		 * display of this base display
+		 */
+		if (base->is_dspp_used) {
+			SDE_ERROR("DSPP is already allocated\n");
+			return -EINVAL;
+		}
+		base->is_dspp_used = true;
+	}
+
 	shd_dev->base = base;
 	rc = shd_drm_obj_init(shd_dev);
 	if (rc) {
