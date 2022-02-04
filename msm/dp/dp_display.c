@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
@@ -3250,6 +3251,9 @@ static int dp_pm_prepare(struct device *dev)
 
 	dp->suspended = true;
 
+	if (!dp->dp_display.base_connector)
+		return 0;
+
 	dp_display_set_mst_state(&dp->dp_display, PM_SUSPEND);
 
 	/*
@@ -3288,9 +3292,12 @@ static void dp_pm_complete(struct device *dev)
 
 	dp = dev_get_drvdata(dev);
 
-	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
-
 	dp->suspended = false;
+
+	if (!dp->dp_display.base_connector)
+		return;
+
+	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
 
 	/*
 	 * There are multiple PM suspend entry and exits observed before
@@ -3314,6 +3321,9 @@ static int dp_pm_freeze(struct device *dev)
 		return -EINVAL;
 
 	dp = dev_get_drvdata(dev);
+
+	if (!dp->dp_display.base_connector)
+		return 0;
 
 	dp_display_set_mst_state(&dp->dp_display, PM_FREEZE);
 
