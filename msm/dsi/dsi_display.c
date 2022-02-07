@@ -3397,9 +3397,6 @@ int dsi_post_clkon_cb(void *priv,
 			}
 		}
 
-		if (display->panel->host_config.force_hs_clk_lane)
-			_dsi_display_continuous_clk_ctrl(display, true);
-
 		rc = dsi_display_config_clk_gating(display, true);
 		if (rc) {
 			pr_err("[%s] failed to enable clk gating %d\n",
@@ -7121,6 +7118,9 @@ int dsi_display_prepare(struct dsi_display *display)
 					display->name, rc);
 			goto error_ctrl_link_off;
 		}
+
+		if (display->panel->host_config.force_hs_clk_lane)
+			_dsi_display_continuous_clk_ctrl(display, true);
 
 		rc = dsi_panel_prepare(display->panel);
 		if (rc) {
