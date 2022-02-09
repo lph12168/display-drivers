@@ -230,50 +230,72 @@ static void dp_aux_cmd_fifo_rx(struct dp_aux_private *aux,
 static void dp_aux_native_handler(struct dp_aux_private *aux)
 {
 	u32 isr = aux->catalog->isr;
+	bool aux_comp = false;
 
-	if (isr & DP_INTR_AUX_I2C_DONE)
+	if (isr & DP_INTR_AUX_I2C_DONE) {
 		aux->aux_error_num = DP_AUX_ERR_NONE;
-	else if (isr & DP_INTR_WRONG_ADDR)
+		aux_comp = true;
+	} else if (isr & DP_INTR_WRONG_ADDR) {
 		aux->aux_error_num = DP_AUX_ERR_ADDR;
-	else if (isr & DP_INTR_TIMEOUT)
+		aux_comp = true;
+	} else if (isr & DP_INTR_TIMEOUT) {
 		aux->aux_error_num = DP_AUX_ERR_TOUT;
-	if (isr & DP_INTR_NACK_DEFER)
+		aux_comp = true;
+	}
+	if (isr & DP_INTR_NACK_DEFER) {
 		aux->aux_error_num = DP_AUX_ERR_NACK;
+		aux_comp = true;
+	}
 	if (isr & DP_INTR_AUX_ERROR) {
 		aux->aux_error_num = DP_AUX_ERR_PHY;
 		aux->catalog->clear_hw_interrupts(aux->catalog);
+		aux_comp = true;
 	}
 
-	complete(&aux->comp);
+	if (aux_comp)
+		complete(&aux->comp);
 }
 
 static void dp_aux_i2c_handler(struct dp_aux_private *aux)
 {
 	u32 isr = aux->catalog->isr;
+	bool aux_comp = false;
 
 	if (isr & DP_INTR_AUX_I2C_DONE) {
 		if (isr & (DP_INTR_I2C_NACK | DP_INTR_I2C_DEFER))
 			aux->aux_error_num = DP_AUX_ERR_NACK;
 		else
 			aux->aux_error_num = DP_AUX_ERR_NONE;
+		aux_comp = true;
 	} else {
-		if (isr & DP_INTR_WRONG_ADDR)
+		if (isr & DP_INTR_WRONG_ADDR) {
 			aux->aux_error_num = DP_AUX_ERR_ADDR;
-		else if (isr & DP_INTR_TIMEOUT)
+			aux_comp = true;
+		} else if (isr & DP_INTR_TIMEOUT) {
 			aux->aux_error_num = DP_AUX_ERR_TOUT;
-		if (isr & DP_INTR_NACK_DEFER)
+			aux_comp = true;
+		}
+		if (isr & DP_INTR_NACK_DEFER) {
 			aux->aux_error_num = DP_AUX_ERR_NACK_DEFER;
-		if (isr & DP_INTR_I2C_NACK)
+			aux_comp = true;
+		}
+		if (isr & DP_INTR_I2C_NACK) {
 			aux->aux_error_num = DP_AUX_ERR_NACK;
-		if (isr & DP_INTR_I2C_DEFER)
+			aux_comp = true;
+		}
+		if (isr & DP_INTR_I2C_DEFER) {
 			aux->aux_error_num = DP_AUX_ERR_DEFER;
+			aux_comp = true;
+		}
 		if (isr & DP_INTR_AUX_ERROR) {
 			aux->aux_error_num = DP_AUX_ERR_PHY;
 			aux->catalog->clear_hw_interrupts(aux->catalog);
+			aux_comp = true;
 		}
 	}
 
-	complete(&aux->comp);
+	if (aux_comp)
+		complete(&aux->comp);
 }
 
 static void dp_aux_isr(struct dp_aux *dp_aux)
