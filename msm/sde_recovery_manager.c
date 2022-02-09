@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018, 2020, 2022 The Linux Foundation. All rights reserved.
  */
 
 #include "sde_recovery_manager.h"
@@ -226,6 +226,9 @@ static void sde_recovery_mgr_notify(struct recovery_mgr_info *rec_mgr,
 
 	evt.type = event;
 	evt.length = sizeof(u32);
+
+	SDE_EVT32_IRQ(DRMID(crtc), event);
+
 	msm_mode_object_event_notify(&crtc->base, crtc->dev, &evt,
 				(u8 *)&payload);
 }
@@ -383,6 +386,8 @@ int sde_recovery_set_event(struct drm_device *dev, u32 event,
 	rec_mgr = sde_kms->recovery_mgr;
 	if (rec_mgr == NULL)
 		return -ENOENT;
+
+	SDE_EVT32_IRQ(DRMID(crtc), event);
 
 	if (crtc) {
 		rc = sde_recovery_queue_event(rec_mgr, event, crtc);
