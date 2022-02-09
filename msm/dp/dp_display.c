@@ -1070,7 +1070,21 @@ static void dp_display_handle_disconnect(struct dp_display_private *dp)
 		mutex_lock(&dp->session_lock);
 		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
 		mutex_unlock(&dp->session_lock);
+
+		/*
+		 * Get out of abort status, so that link training and
+		 * stream enabling can be performed for simulation mode.
+		 */
+		dp->aux->abort(dp->aux, true);
+		dp->ctrl->abort(dp->ctrl, true);
+		atomic_set(&dp->aborted, 0);
+
 		dp_display_process_hpd_high(dp);
+
+		/* If stream isn't running, started here */
+		if (!dp->power_on && dp->dp_display.base_connector)
+			sde_connector_helper_mode_change_commit(
+					dp->dp_display.base_connector);
 		return;
 	}
 
@@ -1123,9 +1137,6 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 		rc = -ENODEV;
 		goto end;
 	}
-
-	if (dp->debug->psm_enabled && dp->core_initialized)
-		dp->link->psm_config(dp->link, &dp->panel->link_info, true);
 
 	dp_display_disconnect_sync(dp);
 
