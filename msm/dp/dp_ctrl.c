@@ -928,6 +928,7 @@ static int dp_ctrl_link_maintenance(struct dp_ctrl *dp_ctrl)
 {
 	int ret = 0;
 	struct dp_ctrl_private *ctrl;
+	int retry = 100;
 
 	if (!dp_ctrl) {
 		pr_err("Invalid input data\n");
@@ -945,12 +946,14 @@ static int dp_ctrl_link_maintenance(struct dp_ctrl *dp_ctrl)
 		goto end;
 	}
 
-	if (atomic_read(&ctrl->aborted))
-		goto end;
+	do {
+		if (atomic_read(&ctrl->aborted))
+			goto end;
 
-	ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_STARTED;
-	ret = dp_ctrl_setup_main_link(ctrl);
-	ctrl->aux->state &= ~DP_STATE_LINK_MAINTENANCE_STARTED;
+		ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_STARTED;
+		ret = dp_ctrl_setup_main_link(ctrl);
+		ctrl->aux->state &= ~DP_STATE_LINK_MAINTENANCE_STARTED;
+	} while (ret && ctrl->parser->force_connect_mode && --retry);
 
 	if (ret) {
 		ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_FAILED;
@@ -1345,7 +1348,7 @@ static void dp_ctrl_stream_off(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 }
 
 static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
-		bool fec_mode, bool dsc_mode, bool shallow)
+		bool fec_mode, bool dsc_mode, int training_mode)
 {
 	int rc = 0;
 	struct dp_ctrl_private *ctrl;
@@ -1358,7 +1361,9 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
-	if (ctrl->power_on)
+	pr_debug("power %d, mode %d\n", ctrl->power_on, training_mode);
+
+	if (ctrl->power_on && (training_mode != LINK_TRAINING_MODE_FORCE))
 		goto end;
 
 	if (atomic_read(&ctrl->aborted)) {
@@ -1391,7 +1396,7 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 	ctrl->initial_lane_count = ctrl->link->link_params.lane_count;
 	ctrl->initial_bw_code = ctrl->link->link_params.bw_code;
 
-	rc = dp_ctrl_link_setup(ctrl, shallow);
+	rc = dp_ctrl_link_setup(ctrl, training_mode == LINK_TRAINING_MODE_SHALLOW);
 	if (rc)
 		goto end;
 

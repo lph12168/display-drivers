@@ -871,7 +871,9 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	dp_display_process_mst_hpd_high(dp, false);
 
 	rc = dp->ctrl->on(dp->ctrl, dp->mst.mst_active,
-			dp->panel->fec_en, dp->panel->dsc_en, false);
+			dp->panel->fec_en, dp->panel->dsc_en,
+			dp->parser->force_connect_mode ?
+			LINK_TRAINING_MODE_FORCE : LINK_TRAINING_MODE_NORMAL);
 	if (rc) {
 		dp->is_connected = false;
 		goto end;
@@ -1808,7 +1810,9 @@ static int dp_display_prepare(struct dp_display *dp_display, void *panel)
 	 * and required things.
 	 */
 	rc = dp->ctrl->on(dp->ctrl, dp->mst.mst_active, dp_panel->fec_en,
-			dp_panel->dsc_en, true);
+			dp_panel->dsc_en,
+			dp->parser->force_connect_mode ?
+			LINK_TRAINING_MODE_NORMAL : LINK_TRAINING_MODE_SHALLOW);
 	if (rc)
 		goto end;
 
