@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/math64.h>
@@ -399,8 +399,8 @@ static void dsi_phy_hw_dphy_enable(struct dsi_phy_hw *phy,
 		glbl_rescode_top_ctrl = less_than_1500_mhz ? 0x3d : 0x01;
 
 	if (phy->version == DSI_PHY_VERSION_4_3_2){
-		vreg_ctrl_0 = 0x19;
-		vreg_ctrl_1 = 0x44;
+		vreg_ctrl_0 = 0x44;
+		vreg_ctrl_1 = 0x19;
 	}
 
 	split_link_enabled = cfg->split_link.enabled;
