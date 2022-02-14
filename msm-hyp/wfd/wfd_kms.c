@@ -779,6 +779,13 @@ static int wfd_kms_connector_get_modes(struct drm_connector *connector)
 
 	msm_hyp_connector_init_edid(connector, priv->panel_name);
 
+	if (c_conn->info->display_info.width_mm > 0 &&
+				c_conn->info->display_info.height_mm > 0) {
+		connector->display_info.width_mm =
+					c_conn->info->display_info.width_mm;
+		connector->display_info.height_mm =
+					c_conn->info->display_info.height_mm;
+	}
 	return priv->mode_count;
 }
 
