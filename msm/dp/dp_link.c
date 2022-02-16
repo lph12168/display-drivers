@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -906,13 +907,14 @@ static int dp_link_process_link_training_request(struct dp_link_private *link)
 	if (!dp_link_is_link_training_requested(link))
 		return -EINVAL;
 
-	DP_DEBUG("%s link rate = 0x%x, lane count = 0x%x\n",
+	DP_INFO("%s link rate = 0x%x, lane count = 0x%x bw_code=0x%x\n",
 			dp_link_get_test_name(DP_TEST_LINK_TRAINING),
 			link->request.test_link_rate,
-			link->request.test_lane_count);
+			link->request.test_lane_count,
+			drm_dp_bw_code_to_link_rate(link->request.test_link_rate));
 
 	link->dp_link.link_params.lane_count = link->request.test_lane_count;
-	link->dp_link.link_params.bw_code = link->request.test_link_rate;
+	link->dp_link.link_params.bw_code = drm_dp_bw_code_to_link_rate(link->request.test_link_rate);
 
 	return 0;
 }
@@ -1113,19 +1115,15 @@ static u8 get_link_status(const u8 link_status[DP_LINK_STATUS_SIZE], int r)
  */
 static int dp_link_process_link_status_update(struct dp_link_private *link)
 {
-	if (!(get_link_status(link->link_status, DP_LANE_ALIGN_STATUS_UPDATED) &
-		DP_LINK_STATUS_UPDATED) || /* link status updated */
-		(drm_dp_clock_recovery_ok(link->link_status,
-			link->dp_link.link_params.lane_count) &&
-	     drm_dp_channel_eq_ok(link->link_status,
-			link->dp_link.link_params.lane_count)))
-		return -EINVAL;
+	bool channel_eq_done = drm_dp_channel_eq_ok(link->link_status,
+			link->dp_link.link_params.lane_count);
+	bool clock_recovery_done = drm_dp_clock_recovery_ok(link->link_status,
+			link->dp_link.link_params.lane_count);
+	DP_INFO("channel_eq_done = %d, clock_recovery_done = %d\n",
+			channel_eq_done, clock_recovery_done);
 
-	DP_DEBUG("channel_eq_done = %d, clock_recovery_done = %d\n",
-			drm_dp_channel_eq_ok(link->link_status,
-			link->dp_link.link_params.lane_count),
-			drm_dp_clock_recovery_ok(link->link_status,
-			link->dp_link.link_params.lane_count));
+	if (channel_eq_done && clock_recovery_done)
+		return -EINVAL;
 
 	return 0;
 }

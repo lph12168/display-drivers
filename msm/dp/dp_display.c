@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -712,7 +713,7 @@ static void dp_display_send_hpd_event(struct dp_display_private *dp)
 	snprintf(pattern, HPD_STRING_SIZE, "pattern=%d",
 		dp->link->test_video.test_video_pattern);
 
-	DP_DEBUG("[%s]:[%s] [%s] [%s]\n", name, status, bpp, pattern);
+	DP_INFO("[%s]:[%s] [%s] [%s]\n", name, status, bpp, pattern);
 	envp[0] = name;
 	envp[1] = status;
 	envp[2] = bpp;
@@ -1334,7 +1335,6 @@ static void dp_display_attention_work(struct work_struct *work)
 {
 	struct dp_display_private *dp = container_of(work,
 			struct dp_display_private, attention_work);
-	int rc = 0;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
 	mutex_lock(&dp->session_lock);
@@ -1398,20 +1398,16 @@ static void dp_display_attention_work(struct work_struct *work)
 		if (dp->link->sink_request & DP_TEST_LINK_TRAINING) {
 			SDE_EVT32_EXTERNAL(dp->state, DP_TEST_LINK_TRAINING);
 			dp->link->send_test_response(dp->link);
-			rc = dp->ctrl->link_maintenance(dp->ctrl);
+			dp->ctrl->link_maintenance(dp->ctrl);
 		}
 
 		if (dp->link->sink_request & DP_LINK_STATUS_UPDATED) {
 			SDE_EVT32_EXTERNAL(dp->state, DP_LINK_STATUS_UPDATED);
-			rc = dp->ctrl->link_maintenance(dp->ctrl);
+			dp->ctrl->link_maintenance(dp->ctrl);
 		}
 
-		if (!rc)
-			dp_audio_enable(dp, true);
-
+		dp_audio_enable(dp, true);
 		mutex_unlock(&dp->session_lock);
-		if (rc)
-			goto end;
 
 		if (dp->link->sink_request & (DP_TEST_LINK_PHY_TEST_PATTERN |
 			DP_TEST_LINK_TRAINING))
@@ -1435,8 +1431,6 @@ cp_irq:
 
 mst_attention:
 	dp_display_mst_attention(dp);
-
-end:
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
 }
 
@@ -1584,6 +1578,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	g_dp_display->is_mst_supported = dp->parser->has_mst;
+	g_dp_display->no_mst_encoder = dp->parser->no_mst_encoder;
 
 	dp->catalog = dp_catalog_get(dev, dp->parser);
 	if (IS_ERR(dp->catalog)) {
@@ -1899,7 +1894,7 @@ end:
 	mutex_unlock(&dp->session_lock);
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
-	return rc;
+	return 0;
 }
 
 static int dp_display_set_stream_info(struct dp_display *dp_display,
@@ -2315,6 +2310,7 @@ static enum drm_mode_status dp_display_validate_mode(
 		const struct msm_resource_caps_info *avail_res)
 {
 	struct dp_display_private *dp;
+	struct drm_dp_link *link_info;
 	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
 	struct dp_panel *dp_panel;
 	struct dp_debug *debug;
@@ -2343,6 +2339,8 @@ static enum drm_mode_status dp_display_validate_mode(
 		goto end;
 	}
 
+	link_info = &dp->panel->link_info;
+
 	debug = dp->debug;
 	if (!debug)
 		goto end;
@@ -2355,7 +2353,7 @@ static enum drm_mode_status dp_display_validate_mode(
 
 	mode_rate_khz = mode->clock * mode_bpp;
 	rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
-	supported_rate_khz = dp->link->link_params.lane_count * rate * 8;
+	supported_rate_khz = link_info->num_lanes * rate * 8;
 	tmds_max_clock = dp_panel->connector->display_info.max_tmds_clock;
 
 	if (mode_rate_khz > supported_rate_khz) {
@@ -2542,11 +2540,6 @@ static int dp_display_config_hdr(struct dp_display *dp_display, void *panel,
 		return -EINVAL;
 	}
 
-	if (!dp_display_state_is(DP_STATE_ENABLED)) {
-		dp_display_state_show("[not enabled]");
-		return 0;
-	}
-
 	/*
 	 * In rare cases where HDR metadata is updated independently
 	 * flush the HDR metadata immediately instead of relying on
@@ -2568,18 +2561,10 @@ static int dp_display_setup_colospace(struct dp_display *dp_display,
 		u32 colorspace)
 {
 	struct dp_panel *dp_panel;
-	struct dp_display_private *dp;
 
 	if (!dp_display || !panel) {
 		pr_err("invalid input\n");
 		return -EINVAL;
-	}
-
-	dp = container_of(dp_display, struct dp_display_private, dp_display);
-
-	if (!dp_display_state_is(DP_STATE_ENABLED)) {
-		dp_display_state_show("[not enabled]");
-		return 0;
 	}
 
 	dp_panel = panel;
@@ -2914,11 +2899,6 @@ static int dp_display_update_pps(struct dp_display *dp_display,
 		return -EINVAL;
 	}
 
-	if (!dp_display_state_is(DP_STATE_ENABLED)) {
-		dp_display_state_show("[not enabled]");
-		return 0;
-	}
-
 	dp_panel = sde_conn->drv_panel;
 	dp_panel->update_pps(dp_panel, pps_cmd);
 	return 0;
@@ -3153,6 +3133,9 @@ int dp_display_get_num_of_displays(void)
 
 int dp_display_get_num_of_streams(void)
 {
+	if (g_dp_display->no_mst_encoder)
+		return 0;
+
 	return DP_STREAM_MAX;
 }
 

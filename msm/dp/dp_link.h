@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -16,7 +17,8 @@ enum dp_link_voltage_level {
 	DP_LINK_VOLTAGE_LEVEL_0,
 	DP_LINK_VOLTAGE_LEVEL_1,
 	DP_LINK_VOLTAGE_LEVEL_2,
-	DP_LINK_VOLTAGE_MAX = DP_LINK_VOLTAGE_LEVEL_2,
+	DP_LINK_VOLTAGE_LEVEL_3,
+	DP_LINK_VOLTAGE_MAX = DP_LINK_VOLTAGE_LEVEL_3,
 };
 
 enum dp_link_preemaphasis_level {

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #include "dp_panel.h"
 #include <linux/unistd.h>
 #include <drm/drm_fixed.h>
-#include <drm/drm_edid.h>
 #include "dp_debug.h"
 
 #define DP_KHZ_TO_HZ 1000
@@ -1356,11 +1356,8 @@ static void _dp_panel_dsc_bw_overhead_calc(struct dp_panel *dp_panel,
 	int tot_num_hor_bytes, tot_num_dummy_bytes;
 	int dwidth_dsc_bytes, eoc_bytes;
 	u32 num_lanes;
-	struct dp_panel_private *panel;
 
-	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
-
-	num_lanes = panel->link->link_params.lane_count;
+	num_lanes = dp_panel->link_info.num_lanes;
 	num_slices = dsc->slice_per_pkt;
 
 	eoc_bytes = dsc_byte_cnt % num_lanes;
@@ -1938,24 +1935,7 @@ static int dp_panel_set_default_link_params(struct dp_panel *dp_panel)
 	return 0;
 }
 
-static int dp_panel_validate_edid(struct edid *edid, size_t edid_size)
-{
-	if (!edid || (edid_size < EDID_LENGTH))
-		return false;
-
-	if (EDID_LENGTH * (edid->extensions + 1) > edid_size) {
-		pr_err("edid size does not match allocated.\n");
-		return false;
-	}
-	if (!drm_edid_is_valid(edid)) {
-		pr_err("invalid edid.\n");
-		return false;
-	}
-	return true;
-}
-
-static int dp_panel_set_edid(struct dp_panel *dp_panel, u8 *edid,
-		size_t edid_size)
+static int dp_panel_set_edid(struct dp_panel *dp_panel, u8 *edid)
 {
 	struct dp_panel_private *panel;
 
@@ -1966,7 +1946,7 @@ static int dp_panel_set_edid(struct dp_panel *dp_panel, u8 *edid,
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
-	if (edid && dp_panel_validate_edid((struct edid *)edid, edid_size)) {
+	if (edid) {
 		dp_panel->edid_ctrl->edid = (struct edid *)edid;
 		panel->custom_edid = true;
 	} else {
@@ -2034,6 +2014,7 @@ static int dp_panel_read_edid(struct dp_panel *dp_panel,
 end:
 	edid = dp_panel->edid_ctrl->edid;
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = false;
 
 	return ret;
 }
@@ -2192,11 +2173,11 @@ end:
 static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 		u32 mode_edid_bpp, u32 mode_pclk_khz)
 {
-	struct dp_link_params *link_params;
+	struct drm_dp_link *link_info;
 	struct dp_panel_private *panel;
 	const u32 max_supported_bpp = 30;
 	u32 min_supported_bpp = 18;
-	u32 bpp = 0, data_rate_khz = 0, tmds_max_clock = 0;
+	u32 bpp = 0, data_rate_khz = 0, tmds_max_clock = 0, max_pclk_khz = 0;
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
@@ -2205,11 +2186,13 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 
 	bpp = min_t(u32, mode_edid_bpp, max_supported_bpp);
 
-	link_params = &panel->link->link_params;
-
-	data_rate_khz = link_params->lane_count *
-		drm_dp_bw_code_to_link_rate(link_params->bw_code) * 8;
+	link_info = &dp_panel->link_info;
+	data_rate_khz = link_info->num_lanes * link_info->rate * 8;
 	tmds_max_clock = dp_panel->connector->display_info.max_tmds_clock;
+	max_pclk_khz = panel->parser->max_pclk_khz;
+
+	DP_DEBUG("tmds_max(%d) max_pclk_khz(%d) mode_pclk_khz(%d) data_rate_khz(%d)\n",
+		tmds_max_clock, max_pclk_khz, mode_pclk_khz, data_rate_khz);
 
 	for (; bpp > min_supported_bpp; bpp -= 6) {
 		if (dp_panel->dsc_en) {
@@ -2228,6 +2211,10 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 
 		if (tmds_max_clock > 0 &&
 		    mult_frac(mode_pclk_khz, bpp, 24)  > tmds_max_clock)
+			continue;
+
+		if (max_pclk_khz > 0 &&
+		    mult_frac(mode_pclk_khz, bpp, 24)  > max_pclk_khz)
 			continue;
 
 		if (mode_pclk_khz * bpp <= data_rate_khz)
@@ -2706,6 +2693,32 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel, u32 flags)
 	return rc;
 }
 
+static u32 dp_panel_get_min_req_link_rate(struct dp_panel *dp_panel)
+{
+	const u32 encoding_factx10 = 8;
+	u32 min_link_rate_khz = 0, lane_cnt;
+	struct dp_panel_info *pinfo;
+
+	if (!dp_panel) {
+		DP_ERR("invalid input\n");
+		goto end;
+	}
+
+	lane_cnt = dp_panel->link_info.num_lanes;
+	pinfo = &dp_panel->pinfo;
+
+	/* num_lanes * lane_count * 8 >= pclk * bpp * 10 */
+	min_link_rate_khz = pinfo->pixel_clk_khz /
+				(lane_cnt * encoding_factx10);
+	min_link_rate_khz *= pinfo->bpp;
+
+	DP_DEBUG("min lclk req=%d khz for pclk=%d khz, lanes=%d, bpp=%d\n",
+		min_link_rate_khz, pinfo->pixel_clk_khz, lane_cnt,
+		pinfo->bpp);
+end:
+	return min_link_rate_khz;
+}
+
 static bool dp_panel_hdr_supported(struct dp_panel *dp_panel)
 {
 	struct dp_panel_private *panel;
@@ -2966,9 +2979,8 @@ cached:
 		dp_panel_setup_dhdr_vsif(panel);
 
 		input.mdp_clk = core_clk_rate;
-		input.lclk = drm_dp_bw_code_to_link_rate(
-				panel->link->link_params.bw_code);
-		input.nlanes = panel->link->link_params.lane_count;
+		input.lclk = dp_panel->link_info.rate;
+		input.nlanes = dp_panel->link_info.num_lanes;
 		input.pclk = dp_panel->pinfo.pixel_clk_khz;
 		input.h_active = dp_panel->pinfo.h_active;
 		input.mst_target_sc = dp_panel->mst_target_sc;
@@ -3372,6 +3384,7 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->deinit = dp_panel_deinit_panel_info;
 	dp_panel->hw_cfg = dp_panel_hw_cfg;
 	dp_panel->read_sink_caps = dp_panel_read_sink_caps;
+	dp_panel->get_min_req_link_rate = dp_panel_get_min_req_link_rate;
 	dp_panel->get_mode_bpp = dp_panel_get_mode_bpp;
 	dp_panel->get_modes = dp_panel_get_modes;
 	dp_panel->handle_sink_request = dp_panel_handle_sink_request;
