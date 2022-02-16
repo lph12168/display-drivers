@@ -2034,6 +2034,8 @@ static int dp_panel_read_edid(struct dp_panel *dp_panel,
 end:
 	edid = dp_panel->edid_ctrl->edid;
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = dp_panel->audio_supported
+				&& !panel->parser->no_audio_support;
 
 	return ret;
 }
@@ -3208,12 +3210,16 @@ static int dp_panel_read_sink_sts(struct dp_panel *dp_panel, u8 *sts, u32 size)
 static int dp_panel_update_edid(struct dp_panel *dp_panel, struct edid *edid)
 {
 	int rc;
+	struct dp_panel_private *panel;
 
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	dp_panel->edid_ctrl->edid = edid;
 	sde_parse_edid(dp_panel->edid_ctrl);
 
 	rc = _sde_edid_update_modes(dp_panel->connector, dp_panel->edid_ctrl);
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = dp_panel->audio_supported
+				&& !panel->parser->no_audio_support;
 
 	return rc;
 }
