@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/list.h>
@@ -5384,6 +5385,11 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	if (!strcmp(display->display_type, "secondary"))
 		index = DSI_SECONDARY;
+
+	if (of_get_property(pdev->dev.of_node, "boot-panel-param", NULL)) {
+		boot_displays[index].boot_disp_en = false;
+		DSI_DEBUG("boot_displays[%d].boot_disp_en false!\n", index);
+	}
 
 	boot_disp = &boot_displays[index];
 	node = pdev->dev.of_node;
