@@ -142,13 +142,12 @@ struct dp_panel {
 	int (*hw_cfg)(struct dp_panel *dp_panel, bool enable);
 	int (*read_sink_caps)(struct dp_panel *dp_panel,
 		struct drm_connector *connector, bool multi_func);
-	u32 (*get_min_req_link_rate)(struct dp_panel *dp_panel);
 	u32 (*get_mode_bpp)(struct dp_panel *dp_panel, u32 mode_max_bpp,
 			u32 mode_pclk_khz);
 	int (*get_modes)(struct dp_panel *dp_panel,
 		struct drm_connector *connector, struct dp_display_mode *mode);
 	void (*handle_sink_request)(struct dp_panel *dp_panel);
-	int (*set_edid)(struct dp_panel *dp_panel, u8 *edid);
+	int (*set_edid)(struct dp_panel *dp_panel, u8 *edid, size_t edid_size);
 	int (*set_dpcd)(struct dp_panel *dp_panel, u8 *dpcd);
 	int (*setup_hdr)(struct dp_panel *dp_panel,
 		struct drm_msm_ext_hdr_metadata *hdr_meta,
