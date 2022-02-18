@@ -794,6 +794,25 @@ end:
 	return rc;
 }
 
+int msm_ext_soundcard_register_notify_dp(struct platform_device *pdev, struct msm_ext_disp_codec_id *codec)
+{
+        struct dp_audio *dp_audio;
+        struct msm_ext_disp_data *ext_data;
+        int ret = -1;
+
+        ext_data = platform_get_drvdata(pdev);
+        dp_audio = ext_data->intf_data;
+
+        if (IS_ERR(dp_audio)) {
+                DP_ERR("dp_audio is invailed");
+        } else {
+                DP_DEBUG("dp audio on");
+                ret = dp_audio_on(dp_audio);
+        }
+        return ret;
+}
+EXPORT_SYMBOL(msm_ext_soundcard_register_notify_dp);
+
 static void dp_audio_notify_work_fn(struct work_struct *work)
 {
 	struct dp_audio_private *audio;
