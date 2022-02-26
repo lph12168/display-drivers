@@ -2,6 +2,7 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1447,10 +1448,12 @@ static int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 		else
 			pm_runtime_put_sync(dev->dev);
 
-		if (rc < 0)
+		if (rc < 0) {
+			pm_runtime_put_noidle(dev->dev);
 			ctx->enable_refcnt = old_cnt;
-		else
+		} else {
 			rc = 0;
+		}
 	}
 
 	pr_debug("pid %d enable %d, refcnt %d, vote_req %d\n",
