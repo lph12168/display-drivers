@@ -45,6 +45,7 @@
 #include <drm/drm_fb_helper.h>
 #include <drm/msm_drm.h>
 #include <drm/drm_gem.h>
+#include <drm/drm_client.h>
 
 #include "sde_power_handle.h"
 
