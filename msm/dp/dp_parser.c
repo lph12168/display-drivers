@@ -170,6 +170,12 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (!parser->display_type)
 		parser->display_type = "unknown";
 
+	parser->no_audio_support = of_property_read_bool(of_node,
+		"qcom,no-audio-support");
+
+	DP_DEBUG("Audio parsing successful. Audio support:%d\n",
+		!parser->no_audio_support);
+
 	return 0;
 }
 

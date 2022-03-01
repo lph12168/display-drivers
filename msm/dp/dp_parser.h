@@ -202,6 +202,7 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @get_io: function to be called by client to get io data.
  * @get_io_buf: function to be called by client to get io buffers.
  * @clear_io_buf: function to be called by client to clear io buffers.
+ * @no_audio_support: audio support disable status
  */
 struct dp_parser {
 	struct platform_device *pdev;
@@ -228,6 +229,7 @@ struct dp_parser {
 	u32 max_dp_dsc_input_width_pixs;
 	bool lphw_hpd;
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
+	bool no_audio_support;
 
 	const char *display_type;
 
