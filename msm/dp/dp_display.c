@@ -3353,6 +3353,9 @@ static int dp_pm_prepare(struct device *dev)
 
 	dp->suspended = true;
 
+	if (!dp->dp_display.base_connector)
+		return 0;
+
 	dp_display_set_mst_state(&dp->dp_display, PM_SUSPEND);
 
 	/*
@@ -3394,9 +3397,12 @@ static void dp_pm_complete(struct device *dev)
 
 	dp = dev_get_drvdata(dev);
 
-	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
-
 	dp->suspended = false;
+
+	if (!dp->dp_display.base_connector)
+		return;
+
+	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
 
 	/*
 	 * There are multiple PM suspend entry and exits observed before
