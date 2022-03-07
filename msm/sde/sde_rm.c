@@ -1140,7 +1140,7 @@ static bool _sde_rm_check_lm_and_get_connected_blks(
 			SDE_DEBUG("fail: dcwb supported dummy lm incorrectly allocated\n");
 			return false;
 		} else if (RM_RQ_DCWB(reqs) && dcwb_pref &&
-!				((ffs(conn_lm_mask) % 2) ==  ((lm_cfg->id + 1) % 2))) {
+				((ffs(conn_lm_mask) % 2) ==  ((lm_cfg->id + 1) % 2))) {
 			SDE_DEBUG("fail: dcwb:%d trying to match lm:%d\n",
 					lm_cfg->id, ffs(conn_lm_mask));
 			return false;
@@ -1330,7 +1330,7 @@ static int _sde_rm_reserve_ctls(
 		u8 *_ctl_ids)
 {
 	struct sde_rm_hw_blk *ctls[MAX_BLOCKS];
-	struct sde_rm_hw_iter iter;
+	struct sde_rm_hw_iter iter, curr;
 	int i = 0;
 
 	if (!top->num_ctl) {
@@ -1340,6 +1340,7 @@ static int _sde_rm_reserve_ctls(
 
 	memset(&ctls, 0, sizeof(ctls));
 
+	sde_rm_init_hw_iter(&curr, rsvp->enc_id, SDE_HW_BLK_CTL);
 	sde_rm_init_hw_iter(&iter, 0, SDE_HW_BLK_CTL);
 	while (_sde_rm_get_hw_locked(rm, &iter)) {
 		const struct sde_hw_ctl *ctl = to_sde_hw_ctl(iter.blk->hw);
@@ -1371,6 +1372,12 @@ static int _sde_rm_reserve_ctls(
 			SDE_DEBUG(
 				"display pref not met. display_type: %d primary_pref: %d\n",
 				reqs->hw_res.display_type, primary_pref);
+			continue;
+		}
+
+		if (_sde_rm_get_hw_locked(rm, &curr) && (curr.blk->id != iter.blk->id)) {
+			SDE_EVT32(curr.blk->id, iter.blk->id, SDE_EVTLOG_FUNC_CASE1);
+			SDE_DEBUG("ctl in use:%d avoiding new:%d\n", curr.blk->id, iter.blk->id);
 			continue;
 		}
 
@@ -2293,13 +2300,13 @@ static int _sde_rm_populate_requirements(
 
 	SDE_DEBUG("top_ctrl: 0x%llX num_h_tiles: %d\n", reqs->top_ctrl,
 			reqs->hw_res.display_num_of_h_tiles);
-	SDE_DEBUG("num_lm: %d num_ctl: %d topology: %d split_display: %d\n",
+	SDE_DEBUG("num_lm: %d num_ctl: %d topology: %d split_display: %d mask: 0x%llX\n",
 			reqs->topology->num_lm, reqs->topology->num_ctl,
 			reqs->topology->top_name,
-			reqs->topology->needs_split_display);
+			reqs->topology->needs_split_display, reqs->conn_lm_mask);
 	SDE_EVT32(mode->hdisplay, rm->lm_max_width, reqs->topology->num_lm,
 			reqs->top_ctrl, reqs->topology->top_name,
-			reqs->topology->num_ctl);
+			reqs->topology->num_ctl, reqs->conn_lm_mask);
 
 	return 0;
 }
