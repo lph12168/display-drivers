@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_CTRL_H_
@@ -39,6 +40,11 @@ struct dp_ctrl {
 			u32 ch_start_slot, u32 ch_tot_slots);
 	void (*set_phy_bond_mode)(struct dp_ctrl *dp_ctrl,
 			enum dp_phy_bond_mode mode);
+	void (*setup_misr)(struct dp_ctrl *dp_ctrl,
+			bool enable, u32 frame_count);
+	int (*collect_misr)(struct dp_ctrl *dp_ctrl, u32 *misr);
+	int (*collect_crc)(struct dp_ctrl *dp_ctrl,
+			u32 *r, u32 *g, u32 *b, struct dp_panel *panel);
 };
 
 struct dp_ctrl_in {
