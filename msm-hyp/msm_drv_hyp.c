@@ -2147,6 +2147,7 @@ static int msm_hyp_bind(struct device *dev)
 	platform_set_drvdata(pdev, ddev);
 
 	ddev->dev_private = priv;
+	ddev->irq_enabled = true;
 	priv->dev = ddev;
 
 	ret = component_bind_all(dev, ddev);
