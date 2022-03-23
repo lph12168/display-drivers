@@ -1451,10 +1451,12 @@ static int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 			pm_runtime_put_sync(dev->dev);
 		}
 
-		if (rc < 0)
+		if (rc < 0) {
+			pm_runtime_put_noidle(dev->dev);
 			ctx->enable_refcnt = old_cnt;
-		else
+		} else {
 			rc = 0;
+		}
 	}
 
 	pr_debug("pid %d enable %d, refcnt %d, vote_req %d\n",

@@ -2030,7 +2030,7 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		goto end;
 
 	if (!dp_display_is_ready(dp) || !dp->core_initialized) {
-		pr_err("DP%d display not ready\n", dp->cell_idx);
+		pr_debug("DP%d display not ready\n", dp->cell_idx);
 		goto end;
 	}
 
@@ -3426,6 +3426,9 @@ static int dp_pm_freeze(struct device *dev)
 		return -EINVAL;
 
 	dp = dev_get_drvdata(dev);
+
+	if (!dp->dp_display.base_connector)
+		return 0;
 
 	dp_display_set_mst_state(&dp->dp_display, PM_FREEZE);
 
