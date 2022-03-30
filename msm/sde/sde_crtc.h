@@ -492,6 +492,7 @@ struct sde_line_insertion_param {
  * @connectors    : Currently associated drm connectors
  * @num_connectors: Number of associated drm connectors
  * @rsc_client    : sde rsc client when mode is valid
+ * @topology_name : Current topology name
  * @is_ppsplit    : Whether current topology requires PPSplit special handling
  * @bw_control    : true if bw/clk controlled by core bw/clk properties
  * @bw_split_vote : true if bw controlled by llcc/dram bw properties
@@ -534,6 +535,7 @@ struct sde_crtc_state {
 	bool bw_control;
 	bool bw_split_vote;
 
+	enum sde_rm_topology_name topology_name;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
 	struct sde_rect lm_bounds[MAX_MIXERS_PER_CRTC];
@@ -1150,5 +1152,23 @@ bool sde_crtc_is_line_insertion_supported(struct drm_crtc *crtc);
  */
 void sde_crtc_calc_vpadding_param(struct drm_crtc_state *state, u32 crtc_y, u32 crtc_h,
 				  u32 *padding_y, u32 *padding_start, u32 *padding_height);
+
+/**
+ * sde_crtc_state_set_topology_name - set current topology name
+ * @state: Pointer to crtc_state
+ */
+static inline void sde_crtc_state_set_topology_name(
+		struct drm_crtc_state *state,
+		enum sde_rm_topology_name topology_name)
+{
+	struct sde_crtc_state *cstate;
+
+	if (!state)
+		return;
+
+	cstate = to_sde_crtc_state(state);
+
+	cstate->topology_name = topology_name;
+}
 
 #endif /* _SDE_CRTC_H_ */

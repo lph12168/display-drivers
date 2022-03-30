@@ -3973,19 +3973,12 @@ static void _sde_crtc_setup_mixers(struct drm_crtc *crtc)
 
 static void _sde_crtc_setup_is_ppsplit(struct drm_crtc_state *state)
 {
-	int i;
 	struct sde_crtc_state *cstate;
 
 	cstate = to_sde_crtc_state(state);
 
-	cstate->is_ppsplit = false;
-	for (i = 0; i < cstate->num_connectors; i++) {
-		struct drm_connector *conn = cstate->connectors[i];
-
-		if (sde_connector_get_topology_name(conn) ==
-				SDE_RM_TOPOLOGY_PPSPLIT)
-			cstate->is_ppsplit = true;
-	}
+	cstate->is_ppsplit = (cstate->topology_name ==
+			SDE_RM_TOPOLOGY_PPSPLIT);
 }
 
 static void _sde_crtc_setup_lm_bounds(struct drm_crtc *crtc, struct drm_crtc_state *state)
