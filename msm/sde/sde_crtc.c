@@ -998,8 +998,8 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *crtc_state;
 	struct sde_rect *crtc_roi;
-	struct msm_mode_info mode_info;
-	int i = 0, rc;
+	struct msm_mode_info *mode_info;
+	int i = 0;
 	bool is_crtc_roi_dirty, is_conn_roi_dirty;
 	u32 crtc_width, crtc_height;
 	struct drm_display_mode *adj_mode;
@@ -1010,6 +1010,7 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	crtc_state = to_sde_crtc_state(state);
 	crtc_roi = &crtc_state->crtc_roi;
+	mode_info = &crtc_state->mode_info;
 
 	is_crtc_roi_dirty = sde_crtc_is_crtc_roi_dirty(state);
 
@@ -1020,12 +1021,6 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 
 		if (!conn_state || conn_state->crtc != crtc)
 			continue;
-
-		rc = sde_connector_state_get_mode_info(conn_state, &mode_info);
-		if (rc) {
-			SDE_ERROR("failed to get mode info\n");
-			return -EINVAL;
-		}
 
 		sde_conn = to_sde_connector(conn_state->connector);
 		sde_conn_state = to_sde_connector_state(conn_state);
@@ -1045,7 +1040,7 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 			return -EINVAL;
 		}
 
-		if (!mode_info.roi_caps.enabled)
+		if (!mode_info->roi_caps.enabled)
 			continue;
 
 		/*
@@ -1356,66 +1351,48 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 {
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *sde_crtc_state;
-	struct msm_mode_info mode_info;
-	int rc, lm_idx, i;
+	struct msm_mode_info *mode_info;
+	int rc, lm_idx;
 
 	if (!crtc || !state)
 		return -EINVAL;
 
-	memset(&mode_info, 0, sizeof(mode_info));
-
 	sde_crtc = to_sde_crtc(crtc);
 	sde_crtc_state = to_sde_crtc_state(state);
+	mode_info = &sde_crtc_state->mode_info;
 
-	/*
-	 * check connector array cached at modeset time since incoming atomic
-	 * state may not include any connectors if they aren't modified
-	 */
-	for (i = 0; i < sde_crtc_state->num_connectors; i++) {
-		struct drm_connector *conn = sde_crtc_state->connectors[i];
+	if (!mode_info->roi_caps.enabled)
+		return 0;
 
-		if (!conn || !conn->state)
-			continue;
+	if (sde_crtc_state->user_roi_list.num_rects >
+			mode_info->roi_caps.num_roi) {
+		SDE_ERROR("roi count is exceeding limit, %d > %d\n",
+				sde_crtc_state->user_roi_list.num_rects,
+				mode_info->roi_caps.num_roi);
+		return -E2BIG;
+	}
 
-		rc = sde_connector_state_get_mode_info(conn->state, &mode_info);
-		if (rc) {
-			SDE_ERROR("failed to get mode info\n");
-			return -EINVAL;
-		}
+	rc = _sde_crtc_set_crtc_roi(crtc, state);
+	if (rc)
+		return rc;
 
-		if (!mode_info.roi_caps.enabled)
-			continue;
+	rc = _sde_crtc_check_autorefresh(crtc, state);
+	if (rc)
+		return rc;
 
-		if (sde_crtc_state->user_roi_list.num_rects >
-				mode_info.roi_caps.num_roi) {
-			SDE_ERROR("roi count is exceeding limit, %d > %d\n",
-					sde_crtc_state->user_roi_list.num_rects,
-					mode_info.roi_caps.num_roi);
-			return -E2BIG;
-		}
-
-		rc = _sde_crtc_set_crtc_roi(crtc, state);
-		if (rc)
-			return rc;
-
-		rc = _sde_crtc_check_autorefresh(crtc, state);
-		if (rc)
-			return rc;
-
-		for (lm_idx = 0; lm_idx < sde_crtc_state->num_mixers; lm_idx++) {
-			rc = _sde_crtc_set_lm_roi(crtc, state, lm_idx);
-			if (rc)
-				return rc;
-		}
-
-		rc = _sde_crtc_check_rois_centered_and_symmetric(crtc, state);
-		if (rc)
-			return rc;
-
-		rc = _sde_crtc_check_planes_within_crtc_roi(crtc, state);
+	for (lm_idx = 0; lm_idx < sde_crtc_state->num_mixers; lm_idx++) {
+		rc = _sde_crtc_set_lm_roi(crtc, state, lm_idx);
 		if (rc)
 			return rc;
 	}
+
+	rc = _sde_crtc_check_rois_centered_and_symmetric(crtc, state);
+	if (rc)
+		return rc;
+
+	rc = _sde_crtc_check_planes_within_crtc_roi(crtc, state);
+	if (rc)
+		return rc;
 
 	return 0;
 }

@@ -493,6 +493,7 @@ struct sde_line_insertion_param {
  * @num_connectors: Number of associated drm connectors
  * @rsc_client    : sde rsc client when mode is valid
  * @topology_name : Current topology name
+ * @mode_info     : Local copy of msm_mode_info struct
  * @num_mixers    : Number of mixers in current topology
  * @is_ppsplit    : Whether current topology requires PPSplit special handling
  * @bw_control    : true if bw/clk controlled by core bw/clk properties
@@ -537,6 +538,7 @@ struct sde_crtc_state {
 	bool bw_split_vote;
 
 	enum sde_rm_topology_name topology_name;
+	struct msm_mode_info mode_info;
 	u32 num_mixers;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
