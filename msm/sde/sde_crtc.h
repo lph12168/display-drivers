@@ -493,6 +493,7 @@ struct sde_line_insertion_param {
  * @num_connectors: Number of associated drm connectors
  * @rsc_client    : sde rsc client when mode is valid
  * @topology_name : Current topology name
+ * @num_mixers    : Number of mixers in current topology
  * @is_ppsplit    : Whether current topology requires PPSplit special handling
  * @bw_control    : true if bw/clk controlled by core bw/clk properties
  * @bw_split_vote : true if bw controlled by llcc/dram bw properties
@@ -536,6 +537,7 @@ struct sde_crtc_state {
 	bool bw_split_vote;
 
 	enum sde_rm_topology_name topology_name;
+	u32 num_mixers;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
 	struct sde_rect lm_bounds[MAX_MIXERS_PER_CRTC];
@@ -1169,6 +1171,26 @@ static inline void sde_crtc_state_set_topology_name(
 	cstate = to_sde_crtc_state(state);
 
 	cstate->topology_name = topology_name;
+
+	switch (topology_name) {
+	case SDE_RM_TOPOLOGY_DUALPIPE:
+	case SDE_RM_TOPOLOGY_DUALPIPE_DSC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE:
+		cstate->num_mixers = 2;
+		break;
+	case SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE:
+	case SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC:
+	case SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE:
+	case SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE:
+		cstate->num_mixers = 4;
+		break;
+	default:
+		cstate->num_mixers = 1;
+		break;
+	}
 }
 
 #endif /* _SDE_CRTC_H_ */
