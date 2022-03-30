@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2012 Google, Inc.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -49,6 +51,7 @@ static void sde_file_check_cb_func(struct dma_fence *fence,
 static __poll_t sde_file_poll(struct file *file, poll_table *wait)
 {
 	struct sde_fence_file *fence_file = file->private_data;
+	__poll_t ret = 0;
 
 	poll_wait(file, &fence_file->wq, wait);
 
@@ -58,7 +61,10 @@ static __poll_t sde_file_poll(struct file *file, poll_table *wait)
 			&fence_file->cb, sde_file_check_cb_func) < 0)
 			wake_up_all(&fence_file->wq);
 
-	return dma_fence_is_signaled(fence_file->fence) ? POLLIN : 0x0;
+	if (dma_fence_is_signaled(fence_file->fence))
+		ret = EPOLLIN;
+
+	return ret;
 }
 
 static int sde_file_release(struct inode *inode, struct file *file)

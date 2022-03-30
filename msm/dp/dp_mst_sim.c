@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +23,7 @@
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_displayid.h>
 #include "dp_mst_sim.h"
+#include "msm_drv.h"
 
 struct dp_sim_dpcd_reg {
 	struct list_head head;

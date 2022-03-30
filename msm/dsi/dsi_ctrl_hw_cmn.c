@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "dsi-hw:" fmt
@@ -848,7 +849,8 @@ u32 dsi_ctrl_hw_cmn_get_cmd_read_data(struct dsi_ctrl_hw *ctrl,
 				     u32 pkt_size,
 				     u32 *hw_read_cnt)
 {
-	u32 *lp, *temp, data;
+	u32 *lp, *temp;
+	__be32 data;
 	int i, j = 0, cnt, off;
 	u32 read_cnt;
 	u32 repeated_bytes = 0;
@@ -889,7 +891,7 @@ u32 dsi_ctrl_hw_cmn_get_cmd_read_data(struct dsi_ctrl_hw *ctrl,
 	off += ((cnt - 1) * 4);
 
 	for (i = 0; i < cnt; i++) {
-		data = DSI_R32(ctrl, off);
+		data = (__force __be32)(DSI_R32(ctrl, off));
 		if (!repeated_bytes)
 			*lp++ = ntohl(data);
 		else
