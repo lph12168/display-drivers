@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -551,8 +552,9 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 {
 	struct dp_mst_sim_port *port;
 	struct drm_display_mode mode_buf, *mode = &mode_buf;
-	u16 h_front_porch, h_pulse_width, h_back_porch;
-	u16 v_front_porch, v_pulse_width, v_back_porch;
+	u32 hdisplay, vdisplay;
+	u32 h_front_porch, h_pulse_width, h_back_porch;
+	u32 v_front_porch, v_pulse_width, v_back_porch;
 	bool h_active_high, v_active_high;
 	u32 flags = 0;
 	int rc;
@@ -567,28 +569,28 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 		0x01, 0x01, 0x01, 0x01,
 	};
 
-	rc = of_property_read_u16(node, "qcom,mode-h-active",
-					&mode->hdisplay);
+	rc = of_property_read_u32(node, "qcom,mode-h-active",
+					&hdisplay);
 	if (rc) {
 		DP_ERR("failed to read h-active, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-h-front-porch",
+	rc = of_property_read_u32(node, "qcom,mode-h-front-porch",
 					&h_front_porch);
 	if (rc) {
 		DP_ERR("failed to read h-front-porch, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-h-pulse-width",
+	rc = of_property_read_u32(node, "qcom,mode-h-pulse-width",
 					&h_pulse_width);
 	if (rc) {
 		DP_ERR("failed to read h-pulse-width, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-h-back-porch",
+	rc = of_property_read_u32(node, "qcom,mode-h-back-porch",
 					&h_back_porch);
 	if (rc) {
 		DP_ERR("failed to read h-back-porch, rc=%d\n", rc);
@@ -598,28 +600,28 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	h_active_high = of_property_read_bool(node,
 					"qcom,mode-h-active-high");
 
-	rc = of_property_read_u16(node, "qcom,mode-v-active",
-					&mode->vdisplay);
+	rc = of_property_read_u32(node, "qcom,mode-v-active",
+					&vdisplay);
 	if (rc) {
 		DP_ERR("failed to read v-active, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-v-front-porch",
+	rc = of_property_read_u32(node, "qcom,mode-v-front-porch",
 					&v_front_porch);
 	if (rc) {
 		DP_ERR("failed to read v-front-porch, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-v-pulse-width",
+	rc = of_property_read_u32(node, "qcom,mode-v-pulse-width",
 					&v_pulse_width);
 	if (rc) {
 		DP_ERR("failed to read v-pulse-width, rc=%d\n", rc);
 		goto fail;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-v-back-porch",
+	rc = of_property_read_u32(node, "qcom,mode-v-back-porch",
 					&v_back_porch);
 	if (rc) {
 		DP_ERR("failed to read v-back-porch, rc=%d\n", rc);
@@ -1684,3 +1686,29 @@ int dp_sim_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+static const struct of_device_id dt_match[] = {
+	{ .compatible = "qcom,dp-mst-sim"},
+	{},
+};
+
+static struct platform_driver dp_sim_driver = {
+	.probe = dp_sim_probe,
+	.remove = dp_sim_remove,
+	.driver = {
+		.name = "dp_sim",
+		.of_match_table = dt_match,
+		.suppress_bind_attrs = true,
+	},
+};
+
+void __init dp_sim_register(void)
+{
+	platform_driver_register(&dp_sim_driver);
+}
+
+void __exit dp_sim_unregister(void)
+{
+	platform_driver_unregister(&dp_sim_driver);
+}
+

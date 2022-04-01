@@ -2337,6 +2337,7 @@ static int __init msm_drm_register(void)
 	platform_driver_register(&msm_platform_driver);
 	dsi_display_register();
 	msm_hdcp_register();
+	dp_sim_register();
 	dp_display_register();
 	msm_dsi_register();
 	msm_edp_register();
@@ -2359,6 +2360,7 @@ static void __exit msm_drm_unregister(void)
 	sde_rotator_unregister();
 	msm_smmu_driver_cleanup();
 	msm_hdcp_unregister();
+	dp_sim_unregister();
 	dp_display_unregister();
 	dsi_display_unregister();
 	sde_rsc_unregister();
