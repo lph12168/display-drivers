@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -41,9 +42,8 @@ static void sde_post_commit_fence_release(struct dma_fence *fence)
 			|| !ctx->sub_fence_ctx[i]->ops->release)
 			continue;
 
-		if (ctx->sub_fence_ctx[i]->ops->release)
-			ctx->sub_fence_ctx[i]->ops->release(
-					post_commit_fence->sub_fence[i]);
+		ctx->sub_fence_ctx[i]->ops->release(
+				post_commit_fence->sub_fence[i]);
 	}
 
 	kfree(post_commit_fence);
@@ -67,6 +67,7 @@ int sde_post_commit_fence_ctx_init(
 	if (sde_fence_helper_ctx_init(&ctx->base, name))
 		return -EINVAL;
 
+	spin_lock_init(&ctx->lock);
 	ctx->done_count = done_count;
 
 	return 0;
@@ -112,7 +113,7 @@ void sde_post_commit_fence_create(
 	ret = sde_fence_helper_init(&ctx->base,
 			&post_commit_fence->base, &fence_ops, val);
 	if (ret) {
-		pr_err("create post-commit fence failed\n");
+		pr_err("create post-commit fence failed, ret: %d\n", ret);
 		kfree(post_commit_fence);
 		return;
 	}
@@ -129,10 +130,9 @@ void sde_post_commit_fence_create(
 			|| !ctx->sub_fence_ctx[i]->ops->prepare)
 			continue;
 
-		if (ctx->sub_fence_ctx[i]->ops->prepare	&&
-				ctx->sub_fence_ctx[i]->ops->prepare(
-				post_commit_fence)) {
-			pr_err("prepare sub-fence(%d) failed\n", i);
+		ret = ctx->sub_fence_ctx[i]->ops->prepare(post_commit_fence);
+		if (ret) {
+			pr_err("prepare sub-fence(%d) failed, ret: %d\n", i, ret);
 			return;
 		}
 	}
@@ -208,8 +208,7 @@ int sde_post_commit_fence_update(
 			|| !ctx->sub_fence_ctx[i]->ops->update)
 			continue;
 
-		if (!ctx->sub_fence_ctx[i]->ops->update
-			|| !ctx->sub_fence_ctx[i]->ops->update(
+		if (!ctx->sub_fence_ctx[i]->ops->update(
 					post_commit_fence->sub_fence[i])) {
 			pr_err("update sub_fence(%d) failed\n", i);
 			return -EINVAL;
@@ -275,12 +274,16 @@ static void sde_post_commit_trigger_fence(
 
 void sde_post_commit_signal_fence(struct sde_post_commit_fence_context *ctx)
 {
+	unsigned long flags;
+
 	if (!ctx)
 		return;
 
+	spin_lock_irqsave(&ctx->lock, flags);
 	sde_post_commit_trigger_fence(ctx);
 
 	sde_fence_helper_signal(&ctx->base);
+	spin_unlock_irqrestore(&ctx->lock, flags);
 }
 EXPORT_SYMBOL(sde_post_commit_signal_fence);
 
@@ -289,24 +292,28 @@ void sde_post_commit_signal_sub_fence(
 		enum sde_sub_fence_type type)
 {
 	struct sde_post_commit_fence *post_commit_fence;
+	unsigned long flags;
 
-	if (!ctx || !ctx->sub_fence_ctx[type]
-		|| !ctx->sub_fence_ctx[type]->ops)
+	if (!ctx
+		|| !ctx->sub_fence_ctx[type]
+		|| !ctx->sub_fence_ctx[type]->ops
+		|| !ctx->sub_fence_ctx[type]->ops->fill_data)
 		return;
 
+	spin_lock_irqsave(&ctx->lock, flags);
 	post_commit_fence = sde_post_commit_get_current_locked(ctx);
-	if (!post_commit_fence)
+	if (!post_commit_fence
+		|| !(post_commit_fence->sub_fence_mask | BIT(type))) {
+		spin_unlock_irqrestore(&ctx->lock, flags);
 		return;
+	}
 
-	if (!(post_commit_fence->sub_fence_mask | BIT(type)))
-		return;
-
-	if (ctx->sub_fence_ctx[type]->ops->fill_data
-		&& ctx->sub_fence_ctx[type]->ops->fill_data(
-		post_commit_fence->sub_fence[type], false)) {
+	if (ctx->sub_fence_ctx[type]->ops->fill_data(
+			post_commit_fence->sub_fence[type], false)) {
 		post_commit_fence->trigger_mask |= BIT(type);
 		sde_fence_helper_signal(&ctx->base);
 	}
+	spin_unlock_irqrestore(&ctx->lock, flags);
 }
 EXPORT_SYMBOL(sde_post_commit_signal_sub_fence);
 
