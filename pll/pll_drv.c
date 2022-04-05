@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -14,6 +15,7 @@
 #include "pll_drv.h"
 #include "dsi_pll.h"
 #include "dp_pll.h"
+#include "msm_drv.h"
 
 int mdss_pll_resource_enable(struct mdss_pll_resources *pll_res, bool enable)
 {

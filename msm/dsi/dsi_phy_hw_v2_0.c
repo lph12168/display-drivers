@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "dsi-phy-hw:" fmt
@@ -8,6 +9,7 @@
 #include <linux/delay.h>
 #include "dsi_hw.h"
 #include "dsi_phy_hw.h"
+#include "dsi_catalog.h"
 
 #define DSIPHY_CMN_REVISION_ID0                   0x0000
 #define DSIPHY_CMN_REVISION_ID1                   0x0004

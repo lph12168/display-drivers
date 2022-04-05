@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -316,7 +317,7 @@ static int dp_vco_pll_init_db_14nm(struct dp_pll_db *pdb,
 	return 0;
 }
 
-int dp_config_vco_rate_14nm(struct dp_pll_vco_clk *vco,
+static int dp_config_vco_rate_14nm(struct dp_pll_vco_clk *vco,
 		unsigned long rate)
 {
 	u32 res = 0;

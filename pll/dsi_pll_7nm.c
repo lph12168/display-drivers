@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -1104,7 +1105,7 @@ static void dsi_pll_disable(struct dsi_pll_vco_clk *vco)
 	rsc->pll_on = false;
 }
 
-long vco_7nm_round_rate(struct clk_hw *hw, unsigned long rate,
+static long vco_7nm_round_rate(struct clk_hw *hw, unsigned long rate,
 				unsigned long *parent_rate)
 {
 	unsigned long rrate = rate;

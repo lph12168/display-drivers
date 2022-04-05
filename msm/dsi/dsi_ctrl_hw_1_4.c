@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "dsi-hw:" fmt
@@ -10,6 +11,7 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_ctrl_reg.h"
 #include "dsi_hw.h"
+#include "dsi_catalog.h"
 
 #define MMSS_MISC_CLAMP_REG_OFF           0x0014
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[sde_rsc:%s:%d]: " fmt, __func__, __LINE__
@@ -22,6 +23,7 @@
 #include "sde_rsc_priv.h"
 #include "sde_dbg.h"
 #include "sde_trace.h"
+#include "msm_drv.h"
 
 #define SDE_RSC_DRV_DBG_NAME		"sde_rsc_drv"
 #define SDE_RSC_WRAPPER_DBG_NAME	"sde_rsc_wrapper"

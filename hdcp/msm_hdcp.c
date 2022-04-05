@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018,2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[msm-hdcp] %s: " fmt, __func__
@@ -20,6 +21,7 @@
 #include <linux/of_platform.h>
 
 #include "msm_hdcp.h"
+#include "msm_drv.h"
 
 #define CLASS_NAME "hdcp"
 #define DRIVER_NAME "msm_hdcp"
