@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DSI_DEFS_H_
@@ -382,6 +383,7 @@ struct dsi_panel_cmd_set {
  * @v_sync_polarity:  Polarity of VSYNC (false is active low).
  * @refresh_rate:     Refresh rate in Hz.
  * @clk_rate_hz:      DSI bit clock rate per lane in Hz.
+ * @pixel_clk_hz_override: Override pixel clock rate in device tree
  * @mdp_transfer_time_us:   Specifies the mdp transfer time for command mode
  *                    panels in microseconds.
  * @overlap_pixels:   overlap pixels for certain panels.
@@ -405,6 +407,7 @@ struct dsi_mode_info {
 
 	u32 refresh_rate;
 	u64 clk_rate_hz;
+	u64 pixel_clk_hz_override;
 	u32 mdp_transfer_time_us;
 	u32 overlap_pixels;
 	bool dsc_enabled;
@@ -594,6 +597,7 @@ struct dsi_host_config {
  * @mdp_transfer_time_us:   Specifies the mdp transfer time for command mode
  *                          panels in microseconds.
  * @clk_rate_hz:          DSI bit clock per lane in hz.
+ * @pixel_clk_hz_override: Override pixel clock rate in device tree
  * @overlap_pixels:       overlap pixels for certain panels.
  * @topology:             Topology selected for the panel
  * @dsc:                  DSC compression info
@@ -612,6 +616,7 @@ struct dsi_display_mode_priv_info {
 	u32 panel_prefill_lines;
 	u32 mdp_transfer_time_us;
 	u64 clk_rate_hz;
+	u64 pixel_clk_hz_override;
 	u32 overlap_pixels;
 
 	struct msm_display_topology topology;

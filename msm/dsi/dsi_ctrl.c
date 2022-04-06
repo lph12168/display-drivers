@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"dsi-ctrl:[%s] " fmt, __func__
@@ -840,7 +841,11 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 			v_period = DSI_V_TOTAL(timing);
 			refresh_rate = timing->refresh_rate;
 		}
-		bit_rate = h_period * v_period * refresh_rate * bpp;
+
+		if (timing->pixel_clk_hz_override)
+			bit_rate = timing->pixel_clk_hz_override * bpp;
+		else
+			bit_rate = h_period * v_period * refresh_rate * bpp;
 	} else {
 		bit_rate = config->bit_clk_rate_hz_override * num_of_lanes;
 		if (host_cfg->phy_type == DSI_PHY_TYPE_CPHY) {
