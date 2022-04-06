@@ -20,6 +20,7 @@
 #include "sde_hw_vdc.h"
 #include "sde_crtc.h"
 #include "sde_hw_qdss.h"
+#include "sde_vbif.h"
 
 #define RESERVED_BY_OTHER(h, r) \
 	(((h)->rsvp && ((h)->rsvp->enc_id != (r)->enc_id)) ||\
@@ -600,10 +601,25 @@ static int _sde_rm_hw_blk_create(
 		uint32_t id,
 		void *hw_catalog_info)
 {
+	int rc;
 	struct sde_rm_hw_blk *blk;
 	struct sde_hw_mdp *hw_mdp;
 	void *hw;
+	struct sde_kms *sde_kms;
+	struct sde_vbif_clk_client clk_client;
 
+	if (!rm) {
+		SDE_ERROR("invalid rm\n");
+		return -EINVAL;
+	}
+
+	sde_kms = to_sde_kms(ddev_to_msm_kms(rm->dev));
+	if (!sde_kms || !sde_kms->catalog) {
+		SDE_ERROR("invalid kms\n");
+		return -EINVAL;
+	}
+
+	memset(&clk_client, 0, sizeof(clk_client));
 	hw_mdp = rm->hw_mdp;
 
 	switch (type) {
@@ -629,7 +645,7 @@ static int _sde_rm_hw_blk_create(
 		hw = sde_hw_intf_init(id, mmio, cat);
 		break;
 	case SDE_HW_BLK_WB:
-		hw = sde_hw_wb_init(id, mmio, cat, hw_mdp);
+		hw = sde_hw_wb_init(id, mmio, cat, hw_mdp, &clk_client);
 		break;
 	case SDE_HW_BLK_DSC:
 		hw = sde_hw_dsc_init(id, mmio, cat);
@@ -668,6 +684,15 @@ static int _sde_rm_hw_blk_create(
 	list_add_tail(&blk->list, &rm->hw_blks[type]);
 
 	_sde_rm_inc_resource_info(rm, &rm->avail_res, blk);
+
+	if (sde_kms->catalog->has_vbif_clk_split &&
+			SDE_CLK_CTRL_VALID(clk_client.clk_ctrl)) {
+		rc = sde_vbif_clk_register(sde_kms, &clk_client);
+		if (rc) {
+			SDE_ERROR("failed to register vbif client %d\n", clk_client.clk_ctrl);
+			return -EFAULT;
+		}
+	}
 
 	return 0;
 }
@@ -1139,7 +1164,7 @@ static bool _sde_rm_check_lm_and_get_connected_blks(
 		} else if (!RM_RQ_DCWB(reqs) && dcwb_pref) {
 			SDE_DEBUG("fail: dcwb supported dummy lm incorrectly allocated\n");
 			return false;
-		} else if (RM_RQ_DCWB(reqs) && dcwb_pref &&
+		} else if (RM_RQ_DCWB(reqs) && dcwb_pref && conn_lm_mask &&
 				((ffs(conn_lm_mask) % 2) ==  ((lm_cfg->id + 1) % 2))) {
 			SDE_DEBUG("fail: dcwb:%d trying to match lm:%d\n",
 					lm_cfg->id, ffs(conn_lm_mask));
@@ -2577,6 +2602,35 @@ static void _sde_rm_commit_rsvp(struct sde_rm *rm, struct sde_rm_rsvp *rsvp,
 	SDE_EVT32(rsvp->enc_id, rsvp->topology);
 }
 
+static void _sde_rm_populate_dp_lm_mask(struct sde_rm *rm,
+		struct drm_connector *conn)
+{
+	struct sde_connector *c_conn = NULL;
+	struct sde_rm_hw_blk *blk;
+
+	if (!rm || !conn) {
+		SDE_ERROR("invalid arguments\n");
+		return;
+	}
+	if (conn->connector_type != DRM_MODE_CONNECTOR_DisplayPort)
+		return;
+
+	c_conn =  to_sde_connector(conn);
+	if (!c_conn || !c_conn->encoder)
+		return;
+
+	list_for_each_entry(blk, &rm->hw_blks[SDE_HW_BLK_LM], list) {
+		if (!blk->rsvp)
+			continue;
+		if (blk->rsvp->enc_id == c_conn->encoder->base.id)
+			c_conn->lm_mask |= BIT(blk->id - 1);
+	}
+
+	SDE_DEBUG("conn lm_mask %d for conn %d enc %d\n", c_conn->lm_mask,
+			conn->base.id, c_conn->encoder->base.id);
+	SDE_EVT32(c_conn->encoder->base.id, conn->base.id, c_conn->lm_mask);
+}
+
 /* call this only after rm_mutex held */
 struct sde_rm_rsvp *_sde_rm_poll_get_rsvp_nxt_locked(struct sde_rm *rm,
 		struct drm_encoder *enc)
@@ -2743,6 +2797,7 @@ int sde_rm_reserve(
 commit_rsvp:
 	_sde_rm_release_rsvp(rm, rsvp_cur, conn_state->connector);
 	_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
+	_sde_rm_populate_dp_lm_mask(rm, conn_state->connector);
 
 end:
 	kfree(comp_info);

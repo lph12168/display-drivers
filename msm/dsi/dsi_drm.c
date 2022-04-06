@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -33,9 +34,14 @@ static struct dsi_display_mode_priv_info default_priv_info = {
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
 {
+	/* TBD: update fsc_mode dynamically */
+	bool fsc_mode = false;
+
 	memset(dsi_mode, 0, sizeof(*dsi_mode));
 
-	dsi_mode->timing.h_active = drm_mode->hdisplay;
+	dsi_mode->timing.fsc_mode = fsc_mode;
+	dsi_mode->timing.h_active = fsc_mode ?
+		(drm_mode->hdisplay / 3) : drm_mode->hdisplay;
 	dsi_mode->timing.h_back_porch = drm_mode->htotal - drm_mode->hsync_end;
 	dsi_mode->timing.h_sync_width = drm_mode->htotal -
 			(drm_mode->hsync_start + dsi_mode->timing.h_back_porch);
@@ -43,7 +49,8 @@ static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 					 drm_mode->hdisplay;
 	dsi_mode->timing.h_skew = drm_mode->hskew;
 
-	dsi_mode->timing.v_active = drm_mode->vdisplay;
+	dsi_mode->timing.v_active = fsc_mode ?
+		drm_mode->vdisplay * 3 : drm_mode->vdisplay;
 	dsi_mode->timing.v_back_porch = drm_mode->vtotal - drm_mode->vsync_end;
 	dsi_mode->timing.v_sync_width = drm_mode->vtotal -
 		(drm_mode->vsync_start + dsi_mode->timing.v_back_porch);
@@ -96,6 +103,7 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 				struct drm_display_mode *drm_mode)
 {
 	char *panel_caps = "vid";
+	bool fsc_mode = dsi_mode->timing.fsc_mode;
 
 	if ((dsi_mode->panel_mode_caps & DSI_OP_VIDEO_MODE) &&
 		(dsi_mode->panel_mode_caps & DSI_OP_CMD_MODE))
@@ -107,7 +115,8 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 
 	memset(drm_mode, 0, sizeof(*drm_mode));
 
-	drm_mode->hdisplay = dsi_mode->timing.h_active;
+	drm_mode->hdisplay = fsc_mode ?
+		(dsi_mode->timing.h_active * 3) : dsi_mode->timing.h_active;
 	drm_mode->hsync_start = drm_mode->hdisplay +
 				dsi_mode->timing.h_front_porch;
 	drm_mode->hsync_end = drm_mode->hsync_start +
@@ -115,7 +124,8 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 	drm_mode->htotal = drm_mode->hsync_end + dsi_mode->timing.h_back_porch;
 	drm_mode->hskew = dsi_mode->timing.h_skew;
 
-	drm_mode->vdisplay = dsi_mode->timing.v_active;
+	drm_mode->vdisplay = fsc_mode ?
+		(dsi_mode->timing.v_active / 3) : dsi_mode->timing.v_active;
 	drm_mode->vsync_start = drm_mode->vdisplay +
 				dsi_mode->timing.v_front_porch;
 	drm_mode->vsync_end = drm_mode->vsync_start +
@@ -139,6 +149,8 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 static void dsi_convert_to_msm_mode(const struct dsi_display_mode *dsi_mode,
 				struct msm_display_mode *msm_mode)
 {
+	bool fsc_mode = dsi_mode->timing.fsc_mode;
+
 	msm_mode->private_flags = 0;
 	msm_mode->private = (int *)dsi_mode->priv_info;
 
@@ -158,6 +170,8 @@ static void dsi_convert_to_msm_mode(const struct dsi_display_mode *dsi_mode,
 		msm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_POMS_CMD;
 	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)
 		msm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_DYN_CLK;
+	if (fsc_mode)
+		msm_mode->private_flags |= MSM_MODE_FLAG_FSC_MODE;
 }
 
 static int dsi_bridge_attach(struct drm_bridge *bridge,
@@ -459,6 +473,7 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	dsi_mode.priv_info = panel_dsi_mode->priv_info;
 	dsi_mode.dsi_mode_flags = panel_dsi_mode->dsi_mode_flags;
 	dsi_mode.panel_mode_caps = panel_dsi_mode->panel_mode_caps;
+	dsi_mode.timing = panel_dsi_mode->timing;
 	dsi_mode.timing.dsc_enabled = dsi_mode.priv_info->dsc_enabled;
 	dsi_mode.timing.dsc = &dsi_mode.priv_info->dsc;
 
@@ -865,6 +880,10 @@ int dsi_conn_set_info_blob(struct drm_connector *connector,
 		sde_kms_info_add_keyint(info, "partial_update_roimerge",
 				mode_info->roi_caps.merge_rois);
 	}
+
+	if (DSI_IS_FSC_PANEL(panel->fsc_rgb_order))
+		sde_kms_info_add_keystr(info, "fsc rgb color order",
+			panel->fsc_rgb_order);
 
 	fmt = dsi_display->config.common_config.dst_format;
 	bpp = dsi_ctrl_pixel_format_to_bpp(fmt);
