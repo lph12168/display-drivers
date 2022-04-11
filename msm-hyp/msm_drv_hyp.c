@@ -3,6 +3,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  *
  * Copyright (c) 2017-2018,2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1592,11 +1593,18 @@ void msm_hyp_crtc_commit_done(struct drm_crtc *crtc)
 	struct drm_connector_list_iter conn_iter;
 	struct drm_connector *connector;
 	struct msm_hyp_connector *conn;
+	unsigned int pipe;
+	struct drm_device *dev;
+	struct drm_vblank_crtc *vblank;
 
 	if (!crtc)
 		return;
 
 	HYP_ATRACE_BEGIN(__func__);
+
+	pipe = drm_crtc_index(crtc);
+	dev = crtc->dev;
+	vblank = &dev->vblank[pipe];
 
 	complete_all(&c->commit_done);
 
@@ -1612,6 +1620,16 @@ void msm_hyp_crtc_commit_done(struct drm_crtc *crtc)
 			msm_hyp_fence_signal(conn->retire_fence);
 		}
 	drm_connector_list_iter_end(&conn_iter);
+
+	spin_lock(&dev->vblank_time_lock);
+	vblank->last = vblank->time;
+
+	write_seqlock(&vblank->seqlock);
+	vblank->time = ktime_get();
+	vblank->count++;
+	write_sequnlock(&vblank->seqlock);
+
+	spin_unlock(&dev->vblank_time_lock);
 
 	HYP_ATRACE_END(__func__);
 
@@ -2104,12 +2122,20 @@ static int msm_hyp_bind(struct device *dev)
 	struct drm_device *ddev;
 	struct msm_hyp_drm_private *priv;
 	int ret;
+	const char *dev_name;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	priv->driver = msm_hyp_driver;
+
+	ret = of_property_read_string(pdev->dev.of_node,
+			"qcom,dev-name", &dev_name);
+	if (ret == 0) {
+		strlcpy(priv->dev_name_from_dt, dev_name, DRM_DRI_NAME_SIZE);
+		priv->driver.name = priv->dev_name_from_dt;
+	}
 
 	ddev = drm_dev_alloc(&priv->driver, dev);
 	if (IS_ERR_OR_NULL(ddev)) {

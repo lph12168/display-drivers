@@ -2,6 +2,7 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -802,7 +803,10 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 	struct msm_file_private *ctx = file->driver_priv;
 	struct msm_kms *kms = priv->kms;
 
-	if (kms && kms->funcs && kms->funcs->postclose)
+	if (!kms)
+		return;
+
+	if (kms->funcs && kms->funcs->postclose)
 		kms->funcs->postclose(kms, file);
 
 	mutex_lock(&dev->struct_mutex);
@@ -826,11 +830,14 @@ static void msm_lastclose(struct drm_device *dev)
 	struct msm_kms *kms = priv->kms;
 	int i, rc;
 
+	if (!kms)
+		return;
+
 	/* check for splash status before triggering cleanup
 	 * if we end up here with splash status ON i.e before first
 	 * commit then ignore the last close call
 	 */
-	if (kms && kms->funcs && kms->funcs->check_for_splash
+	if (kms->funcs && kms->funcs->check_for_splash
 		&& kms->funcs->check_for_splash(kms))
 		return;
 
@@ -858,7 +865,7 @@ static void msm_lastclose(struct drm_device *dev)
 			DRM_ERROR("client modeset commit failed: %d\n", rc);
 	}
 
-	if (kms && kms->funcs && kms->funcs->lastclose)
+	if (kms->funcs && kms->funcs->lastclose)
 		kms->funcs->lastclose(kms);
 }
 
@@ -1447,8 +1454,12 @@ static int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 		else
 			pm_runtime_put_sync(dev->dev);
 
-		if (rc < 0)
+		if (rc < 0) {
+			pm_runtime_put_noidle(dev->dev);
 			ctx->enable_refcnt = old_cnt;
+		} else {
+			rc = 0;
+		}
 	}
 
 	pr_debug("pid %d enable %d, refcnt %d, vote_req %d\n",

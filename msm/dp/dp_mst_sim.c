@@ -20,6 +20,7 @@
 #include <linux/debugfs.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_dp_helper.h>
+#include <drm/drm_displayid.h>
 #include "dp_mst_sim.h"
 
 struct dp_sim_dpcd_reg {
@@ -536,15 +537,115 @@ static void dp_sim_update_dtd(struct edid *edid,
 	pd->misc = 0;
 }
 
-static void dp_sim_update_checksum(struct edid *edid)
+static void dp_sim_update_display_id(u8 *block,
+		struct drm_display_mode *mode, u32 num_h_tile, u32 h_tile_loc,
+		u32 num_v_tile, u32 v_tile_loc, u32 tile_sn)
 {
-	u8 *data = (u8 *)edid;
+	struct displayid_tiled_block *tile = (struct displayid_tiled_block *)block;
+
+	tile->base.tag = DATA_BLOCK_TILED_DISPLAY;
+	tile->base.rev = 0x00;
+	tile->base.num_bytes = sizeof(struct displayid_tiled_block)
+			- sizeof(struct displayid_block);
+	/* Hardcode, single physical enclosure, not described, scale to fit */
+	tile->tile_cap = 0x82;
+
+	/* All fields are minus-one */
+	num_h_tile--;
+	h_tile_loc--;
+	num_v_tile--;
+	v_tile_loc--;
+
+	tile->topo[0] = (num_v_tile & 0xf) | ((num_h_tile & 0xf) << 4);
+	tile->topo[1] = (v_tile_loc & 0xf) | ((h_tile_loc & 0xf) << 4);
+	tile->topo[2] = (((num_h_tile >> 4) & 0x3) << 6) |
+			(((num_v_tile >> 4) & 0x3) << 4) |
+			(((h_tile_loc >> 4) & 0x3) << 2) |
+			(((v_tile_loc >> 4) & 0x3) << 0);
+
+	tile->tile_size[0] = (mode->hdisplay - 1) & 0xff;
+	tile->tile_size[1] = ((mode->hdisplay - 1) >> 8) & 0xff;
+	tile->tile_size[2] = (mode->vdisplay - 1) & 0xff;
+	tile->tile_size[3] = ((mode->vdisplay - 1) >> 8) & 0xff;
+
+	/* No tile bezel information */
+	memset(tile->tile_pixel_bezel, 0, sizeof(tile->tile_pixel_bezel));
+
+	memset(tile->topology_id, 0x20, 3);	/* Vendor ID/OUI */
+	memset(tile->topology_id + 3, 0, 2);	/* Product ID */
+	memcpy(tile->topology_id + 5, &tile_sn, 4);	/* Serial number */
+}
+
+static void dp_sim_update_display_id_detail_timing(u8 *block,
+		struct drm_display_mode *mode)
+{
+	struct displayid_detailed_timing_block *timing =
+			(struct displayid_detailed_timing_block *)block;
+
+	timing->base.tag = DATA_BLOCK_TYPE_1_DETAILED_TIMING;
+	timing->base.rev = 1;
+	timing->base.num_bytes = sizeof(struct displayid_detailed_timings_1);
+
+	timing->timings[0].pixel_clock[0] = (mode->clock / 10 - 1) & 0xFF;
+	timing->timings[0].pixel_clock[1] = ((mode->clock / 10 - 1) >> 8) & 0xFF;
+	timing->timings[0].pixel_clock[2] = ((mode->clock / 10 - 1) >> 16) & 0xFF;
+
+	/* Hardcode, monoscopic, 16:9, preferred, progressive */
+	timing->timings[0].flags = 0x84;
+
+	timing->timings[0].hactive[0] = (mode->hdisplay - 1) & 0xFF;
+	timing->timings[0].hactive[1] = ((mode->hdisplay - 1) >> 8) & 0xFF;
+
+	timing->timings[0].hblank[0] = (mode->htotal - mode->hdisplay - 1) & 0xFF;
+	timing->timings[0].hblank[1] =
+			((mode->htotal - mode->hdisplay - 1) >> 8) & 0xFF;
+
+	timing->timings[0].hsync[0] =
+			(mode->hsync_start - mode->hdisplay - 1) & 0xFF;
+	timing->timings[0].hsync[1] =
+			((mode->hsync_start - mode->hdisplay - 1) >> 8) & 0xFF;
+
+	if (mode->flags & DRM_MODE_FLAG_PHSYNC)
+		timing->timings[0].hsync[1] |= 0x80;
+	if (mode->flags & DRM_MODE_FLAG_NHSYNC)
+		timing->timings[0].hsync[1] |= 0x00;
+
+	timing->timings[0].hsw[0] =
+			(mode->hsync_end - mode->hsync_start - 1) & 0xFF;
+	timing->timings[0].hsw[1] =
+			((mode->hsync_end - mode->hsync_start - 1) >> 8) & 0xFF;
+
+	timing->timings[0].vactive[0] = (mode->vdisplay - 1) & 0xFF;
+	timing->timings[0].vactive[1] = ((mode->vdisplay - 1) >> 8) & 0xFF;
+
+	timing->timings[0].vblank[0] = (mode->vtotal - mode->vdisplay - 1) & 0xFF;
+	timing->timings[0].vblank[1] =
+			((mode->vtotal - mode->vdisplay - 1) >> 8) & 0xFF;
+
+	timing->timings[0].vsync[0] =
+			(mode->vsync_start - mode->vdisplay - 1) & 0xFF;
+	timing->timings[0].vsync[1] =
+			((mode->vsync_start - mode->vdisplay - 1) >> 8) & 0xFF;
+
+	if (mode->flags & DRM_MODE_FLAG_PVSYNC)
+		timing->timings[0].vsync[1] |= 0x80;
+	if (mode->flags & DRM_MODE_FLAG_NVSYNC)
+		timing->timings[0].vsync[1] |= 0x00;
+
+	timing->timings[0].vsw[0] =
+			(mode->vsync_end - mode->vsync_start - 1) & 0xFF;
+	timing->timings[0].vsw[1] =
+			((mode->vsync_end - mode->vsync_start - 1) >> 8) & 0xFF;
+}
+
+static void dp_sim_update_checksum(u8 *data, u8 size)
+{
 	u32 i, sum = 0;
 
-	for (i = 0; i < EDID_LENGTH - 1; i++)
+	for (i = 0; i < size - 1; i++)
 		sum += data[i];
 
-	edid->checksum = 0x100 - (sum & 0xFF);
+	data[i] = 0x100 - (sum & 0xFF);
 }
 
 static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
@@ -559,6 +660,11 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	u32 flags = 0;
 	int rc;
 	struct edid *edid;
+	u32 num_h_tile = 0, h_tile_loc = 0;
+	u32 num_v_tile = 0, v_tile_loc = 0;
+	u32 tile_sn = 0;
+	u32 edid_size = 0;
+	u8 *pedid;
 
 	const u8 edid_buf[EDID_LENGTH] = {
 		0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x44, 0x6D,
@@ -568,6 +674,16 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 		0x01, 0x01, 0x01, 0x01,
 	};
+	const u8 edid_display_id_ext_buf[EDID_LENGTH] = {
+		0x70, 0x12, 0x30, 0x00, 0x00, 0x12, 0x00, 0x16, 0x80, 0x10,
+		0x00, 0x00, 0xFF, 0x0E, 0x6F, 0x08, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x03, 0x01, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00,
+	};
+
+	pr_err("Parsing EDID\n");
 
 	rc = of_property_read_u32(node, "qcom,mode-h-active",
 					&mode->hdisplay);
@@ -651,6 +767,19 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	of_property_read_u32(node, "qcom,mode-height-mm",
 			&height_mm);
 
+	of_property_read_u32(node, "qcom,mode-num-h-tile",
+			&num_h_tile);
+	of_property_read_u32(node, "qcom,mode-h-tile-loc",
+			&h_tile_loc);
+	of_property_read_u32(node, "qcom,mode-num-v-tile",
+			&num_v_tile);
+	of_property_read_u32(node, "qcom,mode-v-tile-loc",
+			&v_tile_loc);
+	of_property_read_u32(node, "qcom,mode-v-tile-loc",
+			&v_tile_loc);
+	of_property_read_u32(node, "qcom,mode-tile-sn",
+			&tile_sn);
+
 	mode->hsync_start = mode->hdisplay + h_front_porch;
 	mode->hsync_end = mode->hsync_start + h_pulse_width;
 	mode->htotal = mode->hsync_end + h_back_porch;
@@ -667,17 +796,52 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 		flags |= DRM_MODE_FLAG_NVSYNC;
 	mode->flags = flags;
 
-	edid = devm_kzalloc(sim_dev->dev, sizeof(*edid), GFP_KERNEL);
+	edid_size = sizeof(edid_buf);
+	if (num_h_tile && h_tile_loc && num_v_tile && v_tile_loc)
+		edid_size += sizeof(edid_display_id_ext_buf);
+	edid = devm_kzalloc(sim_dev->dev, edid_size, GFP_KERNEL);
 	if (!edid) {
 		rc = -ENOMEM;
 		goto fail;
 	}
+	pedid = (u8 *)edid;
+	memcpy(pedid, edid_buf, sizeof(edid_buf));
 
-	memcpy(edid, edid_buf, sizeof(edid_buf));
 	dp_sim_update_dtd(edid, mode);
 	edid->width_cm = width_mm / 10;
 	edid->height_cm = height_mm / 10;
-	dp_sim_update_checksum(edid);
+
+	if (num_h_tile && h_tile_loc && num_v_tile && v_tile_loc)
+		edid->extensions += 1;
+	dp_sim_update_checksum(pedid, EDID_LENGTH);
+	pedid += sizeof(edid_buf);
+
+	/* DisplayID Ext block */
+	if (num_h_tile && h_tile_loc && num_v_tile && v_tile_loc) {
+		struct displayid_hdr *hdr = (struct displayid_hdr *)(pedid + 1);
+
+		memcpy(pedid, edid_display_id_ext_buf,
+				sizeof(edid_display_id_ext_buf));
+
+		hdr->rev = 0x12;
+		hdr->bytes = sizeof(struct displayid_tiled_block) +
+				sizeof(struct displayid_block) +
+				sizeof(struct displayid_detailed_timings_1);
+		hdr->prod_id = 0;	// Extension
+		hdr->ext_count = 0;
+
+		dp_sim_update_display_id(pedid + 1 + sizeof(struct displayid_hdr),
+				mode, num_h_tile, h_tile_loc,
+				num_v_tile, v_tile_loc, tile_sn);
+		dp_sim_update_display_id_detail_timing(pedid + 1 +
+				sizeof(struct displayid_hdr) +
+				sizeof(struct displayid_tiled_block),
+				mode);
+		dp_sim_update_checksum(pedid + 1, sizeof(struct displayid_hdr) +
+				hdr->bytes + 1);
+		dp_sim_update_checksum(pedid, EDID_LENGTH);
+		pedid += sizeof(edid_display_id_ext_buf);
+	}
 
 	port = &sim_dev->ports[index];
 	memcpy(port, &output_port, sizeof(*port));
@@ -687,7 +851,7 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 		devm_kfree(sim_dev->dev, (u8 *)port->edid);
 
 	port->edid = (u8 *)edid;
-	port->edid_size = sizeof(*edid);
+	port->edid_size = edid_size;
 
 fail:
 	return rc;
