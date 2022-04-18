@@ -31,22 +31,26 @@
 #define LC_INIT                9
 #define LC_SEND_L_PRIME       10
 #define SKE_SEND_EKS          11
-#define REP_SEND_RECV_ID_LIST 12
+#define REP_SEND_RECV_RX_INFO 12
 #define REP_SEND_ACK          15
 #define REP_STREAM_MANAGE     16
 #define REP_STREAM_READY      17
 #define SKE_SEND_TYPE_ID      18
-#define HDCP2P2_MAX_MESSAGES  19
+#define REP_SEND_RECV_ID_LIST 19
+#define HDCP2P2_MAX_MESSAGES  20
 
 #define REAUTH_REQ BIT(3)
 #define LINK_INTEGRITY_FAILURE BIT(4)
-
 #define HDCP_2X_EXECUTE(x) { \
 		kthread_queue_work(&hdcp->worker, &hdcp->wk_##x); \
 }
 
 /* Temporary define to override wrong TZ value */
 #define AKE_SEND_CERT_MSG_DELAY 100
+
+#define DEVICE_ID_SIZE 5
+#define RXINFO_LENGTH 2
+#define RECEIVE_ID_OFFSET 21
 
 struct sde_hdcp_2x_ctrl {
 	struct hdcp2_app_data app_data;
@@ -106,6 +110,7 @@ static const char *sde_hdcp_2x_message_name(int msg_id)
 	case LC_SEND_L_PRIME:       return TO_STR(LC_SEND_L_PRIME);
 	case SKE_SEND_EKS:          return TO_STR(SKE_SEND_EKS);
 	case REP_SEND_RECV_ID_LIST: return TO_STR(REP_SEND_RECV_ID_LIST);
+	case REP_SEND_RECV_RX_INFO: return TO_STR(REP_SEND_RECV_RX_INFO);
 	case REP_STREAM_MANAGE:     return TO_STR(REP_STREAM_MANAGE);
 	case REP_STREAM_READY:      return TO_STR(REP_STREAM_READY);
 	case SKE_SEND_TYPE_ID:      return TO_STR(SKE_SEND_TYPE_ID);
@@ -113,7 +118,7 @@ static const char *sde_hdcp_2x_message_name(int msg_id)
 	}
 }
 
-static const struct sde_hdcp_2x_msg_data
+static struct sde_hdcp_2x_msg_data
 				hdcp_msg_lookup[HDCP2P2_MAX_MESSAGES] = {
 	[AKE_INIT] = { 2,
 		{ {"rtx", 0x69000, 8}, {"TxCaps", 0x69008, 3} },
@@ -146,10 +151,13 @@ static const struct sde_hdcp_2x_msg_data
 	[SKE_SEND_TYPE_ID] = { 1,
 		{ {"type", 0x69494, 1} },
 		0, 0 },
-	[REP_SEND_RECV_ID_LIST] = { 4,
+	[REP_SEND_RECV_RX_INFO] = { 3,
 		{ {"RxInfo", 0x69330, 2}, {"seq_num_V", 0x69332, 3},
 			{"V'", 0x69335, 16}, {"ridlist", 0x69345, 155} },
 		(1 << 0), 0 },
+	[REP_SEND_RECV_ID_LIST] = {1,
+		{ {"ridlist", 0x69345, 155} },
+		0, 0 },
 	[REP_SEND_ACK] = { 1,
 		{ {"V", 0x693E0, 16} },
 		0, 0 },
@@ -245,7 +253,9 @@ static int sde_hdcp_2x_get_next_message(struct sde_hdcp_2x_ctrl *hdcp,
 		if (data->cmd == HDCP_TRANSPORT_CMD_SEND_MESSAGE)
 			return REP_STREAM_MANAGE;
 		else
-			return REP_SEND_RECV_ID_LIST;
+			return REP_SEND_RECV_RX_INFO;
+	case REP_SEND_RECV_RX_INFO:
+		return REP_SEND_RECV_ID_LIST;
 	case REP_SEND_RECV_ID_LIST:
 		return REP_SEND_ACK;
 	case REP_STREAM_MANAGE:
@@ -270,6 +280,7 @@ static void sde_hdcp_2x_wait_for_response(struct sde_hdcp_2x_ctrl *hdcp)
 		hdcp->wait_timeout_ms = HZ / 4;
 		break;
 	case REP_SEND_RECV_ID_LIST:
+	case REP_SEND_RECV_RX_INFO:
 		if (!hdcp->authenticated)
 			hdcp->wait_timeout_ms = HZ * 3;
 		else
@@ -293,6 +304,12 @@ static void sde_hdcp_2x_adjust_transaction_params(
 		break;
 	case REP_STREAM_READY:
 		break;
+	case REP_SEND_RECV_ID_LIST:
+		data->transaction_delay = 0;
+		data->message_data->messages[0].length =
+			((((hdcp->rx_info[0]<<8) | hdcp->rx_info[1]) &
+			  0x01f0) >> 4) * DEVICE_ID_SIZE;
+		break;
 	default:
 		data->transaction_delay = 0;
 		break;
@@ -309,7 +326,7 @@ static void sde_hdcp_2x_adjust_transaction_params(
 static void sde_hdcp_2x_wakeup_client(struct sde_hdcp_2x_ctrl *hdcp,
 				struct hdcp_transport_wakeup_data *data)
 {
-	int rc = 0;
+	int rc = 0, last_msg;
 
 	if (!hdcp || !hdcp->client_ops || !hdcp->client_ops->wakeup ||
 			!data || (data->cmd == HDCP_TRANSPORT_CMD_INVALID))
@@ -320,6 +337,7 @@ static void sde_hdcp_2x_wakeup_client(struct sde_hdcp_2x_ctrl *hdcp,
 	if (data->cmd == HDCP_TRANSPORT_CMD_SEND_MESSAGE ||
 			data->cmd == HDCP_TRANSPORT_CMD_RECV_MESSAGE ||
 			data->cmd == HDCP_TRANSPORT_CMD_LINK_POLL) {
+		last_msg = hdcp->last_msg;
 		hdcp->last_msg =
 			sde_hdcp_2x_get_next_message(hdcp, data);
 		if (hdcp->last_msg <= INVALID_MESSAGE) {
@@ -330,7 +348,13 @@ static void sde_hdcp_2x_wakeup_client(struct sde_hdcp_2x_ctrl *hdcp,
 		data->message_data = &hdcp_msg_lookup[hdcp->last_msg];
 	}
 
-	sde_hdcp_2x_adjust_transaction_params(hdcp, data);
+	pr_debug("cmd %s  msg %s next msg %s\n",
+			hdcp_transport_cmd_to_str(data->cmd),
+			sde_hdcp_2x_message_name(last_msg),
+			sde_hdcp_2x_message_name(hdcp->last_msg));
+
+	if (data->message_data)
+		sde_hdcp_2x_adjust_transaction_params(hdcp, data);
 
 	rc = hdcp->client_ops->wakeup(data);
 	if (rc)
@@ -554,7 +578,7 @@ static void sde_hdcp_2x_send_rx_info(struct sde_hdcp_2x_ctrl *hdcp)
 
 	cdata.context = hdcp->client_data;
 	cdata.cmd = HDCP_TRANSPORT_CMD_RX_INFO;
-	cdata.buf_len = sizeof(hdcp->rx_info);
+	cdata.buf_len = RXINFO_LENGTH;
 	cdata.buf = hdcp->rx_info;
 	sde_hdcp_2x_wakeup_client(hdcp, &cdata);
 }
@@ -777,12 +801,27 @@ static void sde_hdcp_2x_msg_recvd(struct sde_hdcp_2x_ctrl *hdcp)
 		message_id_bytes = 1;
 	}
 
-	request_length += message_id_bytes;
-
 	pr_debug("message received from SINK: %s\n",
 			sde_hdcp_2x_message_name(msg[0]));
 
+	if (msg[0] == REP_SEND_RECV_RX_INFO) {
+		cdata.cmd = HDCP_TRANSPORT_CMD_RECV_MESSAGE;
+		cdata.transaction_delay = hdcp->app_data.timeout;
+		cdata.buf = hdcp->app_data.request.data + 1 + RECEIVE_ID_OFFSET;
+		pr_debug(" rxinfo %x %x\n", msg[1], msg[2]);
+		memcpy(hdcp->rx_info, &msg[1], RXINFO_LENGTH);
+		goto exit;
+	}
+
+	request_length += message_id_bytes;
+
 	hdcp->app_data.request.length = request_length;
+
+	if (msg[0] == REP_SEND_RECV_ID_LIST) {
+		msg[0] = REP_SEND_RECV_RX_INFO;
+		hdcp->app_data.request.length += RECEIVE_ID_OFFSET;
+	}
+
 	rc = hdcp2_app_comm(hdcp->hdcp2_ctx, HDCP2_CMD_PROCESS_MSG,
 			&hdcp->app_data);
 	if (rc) {
@@ -832,10 +871,8 @@ static void sde_hdcp_2x_msg_recvd(struct sde_hdcp_2x_ctrl *hdcp)
 		hdcp->resend_lc_init = true;
 	}
 
-	if (msg[0] == REP_SEND_RECV_ID_LIST) {
-		memcpy(hdcp->rx_info, &msg[1], 2);
+	if (msg[0] == REP_SEND_RECV_RX_INFO)
 		sde_hdcp_2x_send_rx_info(hdcp);
-	}
 
 	if (msg[0] == REP_STREAM_READY && out_msg == REP_STREAM_MANAGE)
 		pr_debug("resend %s\n", sde_hdcp_2x_message_name(out_msg));
