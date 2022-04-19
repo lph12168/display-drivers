@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -114,6 +115,8 @@ static int _sde_core_irq_enable(struct sde_kms *sde_kms, int irq_idx)
 
 	SDE_EVT32(irq_idx,
 			atomic_read(&sde_kms->irq_obj.enable_counts[irq_idx]));
+
+	spin_lock(&sde_kms->irq_obj.en_lock_arr[irq_idx]);
 	if (atomic_inc_return(&sde_kms->irq_obj.enable_counts[irq_idx]) == 1) {
 		ret = sde_kms->hw_intr->ops.enable_irq(
 				sde_kms->hw_intr,
@@ -131,6 +134,7 @@ static int _sde_core_irq_enable(struct sde_kms *sde_kms, int irq_idx)
 					irq_idx);
 		spin_unlock_irqrestore(&sde_kms->irq_obj.cb_lock, irq_flags);
 	}
+	spin_unlock(&sde_kms->irq_obj.en_lock_arr[irq_idx]);
 
 	return ret;
 }
@@ -181,6 +185,8 @@ static int _sde_core_irq_disable(struct sde_kms *sde_kms, int irq_idx)
 
 	SDE_EVT32(irq_idx,
 			atomic_read(&sde_kms->irq_obj.enable_counts[irq_idx]));
+
+	spin_lock(&sde_kms->irq_obj.en_lock_arr[irq_idx]);
 	if (atomic_dec_return(&sde_kms->irq_obj.enable_counts[irq_idx]) == 0) {
 		ret = sde_kms->hw_intr->ops.disable_irq(
 				sde_kms->hw_intr,
@@ -190,6 +196,7 @@ static int _sde_core_irq_disable(struct sde_kms *sde_kms, int irq_idx)
 					irq_idx);
 		SDE_DEBUG("irq_idx=%d ret=%d\n", irq_idx, ret);
 	}
+	spin_unlock(&sde_kms->irq_obj.en_lock_arr[irq_idx]);
 
 	return ret;
 }
@@ -480,8 +487,12 @@ void sde_core_irq_preinstall(struct sde_kms *sde_kms)
 			sizeof(atomic_t), GFP_KERNEL);
 	sde_kms->irq_obj.irq_counts = kcalloc(sde_kms->irq_obj.total_irqs,
 			sizeof(atomic_t), GFP_KERNEL);
+	sde_kms->irq_obj.en_lock_arr = kcalloc(sde_kms->irq_obj.total_irqs,
+			sizeof(spinlock_t), GFP_KERNEL);
+
 	if (!sde_kms->irq_obj.irq_cb_tbl || !sde_kms->irq_obj.enable_counts
-			|| !sde_kms->irq_obj.irq_counts)
+			|| !sde_kms->irq_obj.irq_counts
+			|| !sde_kms->irq_obj.en_lock_arr)
 		return;
 
 	for (i = 0; i < sde_kms->irq_obj.total_irqs; i++) {
@@ -491,6 +502,8 @@ void sde_core_irq_preinstall(struct sde_kms *sde_kms)
 			atomic_set(&sde_kms->irq_obj.enable_counts[i], 0);
 		if (sde_kms->irq_obj.irq_counts)
 			atomic_set(&sde_kms->irq_obj.irq_counts[i], 0);
+		if (sde_kms->irq_obj.en_lock_arr)
+			spin_lock_init(&sde_kms->irq_obj.en_lock_arr[i]);
 	}
 }
 
@@ -530,10 +543,12 @@ void sde_core_irq_uninstall(struct sde_kms *sde_kms)
 	kfree(sde_kms->irq_obj.irq_cb_tbl);
 	kfree(sde_kms->irq_obj.enable_counts);
 	kfree(sde_kms->irq_obj.irq_counts);
+	kfree(sde_kms->irq_obj.en_lock_arr);
 	sde_kms->irq_obj.irq_cb_tbl = NULL;
 	sde_kms->irq_obj.enable_counts = NULL;
 	sde_kms->irq_obj.irq_counts = NULL;
 	sde_kms->irq_obj.total_irqs = 0;
+	sde_kms->irq_obj.en_lock_arr = NULL;
 	spin_unlock_irqrestore(&sde_kms->irq_obj.cb_lock, irq_flags);
 }
 
