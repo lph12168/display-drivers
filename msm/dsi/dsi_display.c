@@ -5961,7 +5961,6 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, display);
 
-#if 0
 	/* initialize display in firmware callback */
 	if (!(boot_displays[DSI_PRIMARY].boot_disp_en ||
 			boot_displays[DSI_SECONDARY].boot_disp_en) &&
@@ -5979,7 +5978,6 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 				&pdev->dev, GFP_KERNEL, display,
 				dsi_display_firmware_display);
 	}
-#endif
 
 	rc = dsi_display_init(display);
 	if (rc)
