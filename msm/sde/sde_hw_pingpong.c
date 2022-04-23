@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iopoll.h>
@@ -290,6 +291,15 @@ static void sde_hw_pp_dsc_disable(struct sde_hw_pingpong *pp)
 
 	data = SDE_REG_READ(c, PP_DCE_DATA_OUT_SWAP);
 	data &= ~BIT(18); /* disable endian flip */
+	if ((pp->out_byte_order != NULL) && (pp->out_byte_order_size == 6)) {
+		data &= ~REG_MASK(18);
+		data |= (0x00 & REG_MASK(3));/*Byte 0*/
+		data |= (0x01 & REG_MASK(3)) << 3;/*Byte 1*/
+		data |= (0x02 & REG_MASK(3)) << 6;/*Byte 2*/
+		data |= (0x03 & REG_MASK(3)) << 9;/*Byte 3*/
+		data |= (0x04 & REG_MASK(3)) << 12;/*Byte 4*/
+		data |= (0x05 & REG_MASK(3)) << 15;/*Byte 5*/
+	}
 	SDE_REG_WRITE(c, PP_DCE_DATA_OUT_SWAP, data);
 
 	SDE_REG_WRITE(c, PP_DSC_MODE, 0);
@@ -306,6 +316,15 @@ static int sde_hw_pp_setup_dsc(struct sde_hw_pingpong *pp)
 
 	data = SDE_REG_READ(c, PP_DCE_DATA_OUT_SWAP);
 	data |= BIT(18); /* endian flip */
+	if ((pp->out_byte_order != NULL) && (pp->out_byte_order_size == 6)) {
+		data &= ~REG_MASK(18);
+		data |= (pp->out_byte_order[0] & REG_MASK(3));/*Byte 0*/
+		data |= (pp->out_byte_order[1] & REG_MASK(3)) << 3;/*Byte 1*/
+		data |= (pp->out_byte_order[2] & REG_MASK(3)) << 6;/*Byte 2*/
+		data |= (pp->out_byte_order[3] & REG_MASK(3)) << 9;/*Byte 3*/
+		data |= (pp->out_byte_order[4] & REG_MASK(3)) << 12;/*Byte 4*/
+		data |= (pp->out_byte_order[5] & REG_MASK(3)) << 15;/*Byte 5*/
+	}
 	SDE_REG_WRITE(c, PP_DCE_DATA_OUT_SWAP, data);
 	return 0;
 }

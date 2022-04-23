@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -42,6 +43,7 @@
 #include "sde_hw_qdss.h"
 #include "sde_recovery_manager.h"
 #include "sde_roi_misr.h"
+#include "dp_drm.h"
 
 #define SDE_DEBUG_ENC(e, fmt, ...) SDE_DEBUG("enc%d " fmt,\
 		(e) ? (e)->base.base.id : -1, ##__VA_ARGS__)
@@ -1310,6 +1312,8 @@ static void _sde_encoder_dsc_pipe_cfg(struct sde_hw_dsc *hw_dsc,
 		return;
 	}
 
+	hw_dsc_pp->out_byte_order = dsc->out_byte_order;
+	hw_dsc_pp->out_byte_order_size = dsc->out_byte_order_size;
 	if (hw_dsc->ops.dsc_config)
 		hw_dsc->ops.dsc_config(hw_dsc, dsc, common_mode, ich_reset);
 
@@ -2114,6 +2118,7 @@ static int _sde_encoder_dsc_setup(struct sde_encoder_virt *sde_enc,
 	struct drm_connector *drm_conn;
 	struct drm_encoder *drm_enc;
 	struct msm_drm_private *priv;
+	bool is_dsc_passthrough = false;
 	int ret = 0;
 
 	if (!sde_enc || !params || !sde_enc->phys_encs[0] ||
@@ -2151,6 +2156,14 @@ static int _sde_encoder_dsc_setup(struct sde_encoder_virt *sde_enc,
 	if (sde_kms_rect_is_equal(&sde_enc->cur_conn_roi,
 			&sde_enc->prv_conn_roi))
 		return ret;
+	dp_connector_query_mode(to_sde_connector(drm_conn)->display,
+			&is_dsc_passthrough,
+			DSC_PASSTHROUGH_IS_ENABLED);
+	if (is_dsc_passthrough) {
+		dp_connector_query_mode(to_sde_connector(drm_conn)->display,
+				(void *)&sde_enc->cur_conn_roi.w,
+				DSC_PASSTHROUGH_UPDATE_PIC_WIDTH);
+	}
 
 	switch (topology) {
 	case SDE_RM_TOPOLOGY_SINGLEPIPE_DSC:
