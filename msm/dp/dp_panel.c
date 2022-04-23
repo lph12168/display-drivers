@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
 
 #include "dp_panel.h"
 #include <drm/drm_fixed.h>
+#include "dp_parser.h"
 
 #define DP_KHZ_TO_HZ 1000
 #define DP_PANEL_DEFAULT_BPP 24
@@ -868,13 +870,16 @@ static void dp_panel_calc_tu_parameters(struct dp_panel *dp_panel,
 
 	in.lclk = drm_dp_bw_code_to_link_rate(bw_code) / 1000;
 	in.pclk_khz = pinfo->pixel_clk_khz;
+
 	in.hactive = pinfo->h_active;
 	in.hporch = pinfo->h_back_porch + pinfo->h_front_porch +
 				pinfo->h_sync_width;
+
 	in.nlanes = panel->link->link_params.lane_count;
 	in.bpp = pinfo->bpp;
 	in.pixel_enc = 444;
-	in.dsc_en = dp_panel->dsc_en;
+	in.dsc_en = panel->parser->dsc_passthrough.dsc_passthrough_enable ?
+		false : dp_panel->dsc_en;
 	in.async_en = 0;
 	in.fec_en = dp_panel->fec_en;
 	in.num_of_dsc_slices = pinfo->comp_info.dsc_info.slice_per_pkt;
@@ -1876,6 +1881,107 @@ static void dp_panel_decode_dsc_dpcd(struct dp_panel *dp_panel)
 	}
 }
 
+static void dp_panel_overwr_drm_mode_w_dp_msa(
+		struct dp_panel *dp_panel,
+		struct dp_msa_param *msa,
+		struct drm_display_mode *drm_mode)
+{
+	/*
+	 * Overwrite the drm_display_mode values with
+	 * the dp_msa_param values
+	 */
+
+	drm_mode->hdisplay = msa->ovr_visible_width_in_px;
+	drm_mode->htotal = drm_mode->hdisplay +
+			   msa->ovr_h_front_porch_px +
+			   msa->ovr_h_back_porch_px +
+			   msa->ovr_h_sync_pulse_px;
+	//hsync_end = htotal - hbackporch;
+	drm_mode->hsync_end = drm_mode->htotal -
+			      msa->ovr_h_back_porch_px;
+	//hsync_start = htotal - hbackporch - hsyncwidth;
+	drm_mode->hsync_start = drm_mode->htotal -
+				msa->ovr_h_back_porch_px -
+				msa->ovr_h_sync_pulse_px;
+	drm_mode->hskew = msa->ovr_h_sync_skew_px;
+
+	drm_mode->vdisplay = msa->ovr_visible_height_in_px;
+	drm_mode->vtotal = msa->ovr_visible_height_in_px +
+			   msa->ovr_v_front_porch_ln +
+			   msa->ovr_v_back_porch_ln +
+			   msa->ovr_v_sync_pulse_ln;
+	drm_mode->vsync_end = drm_mode->vtotal -
+			      msa->ovr_v_back_porch_ln;
+	drm_mode->vsync_start = drm_mode->vtotal -
+				msa->ovr_v_back_porch_ln -
+				msa->ovr_v_sync_pulse_ln;
+
+	drm_mode->vrefresh = msa->ovr_v_refresh_rate;
+
+	/*
+	 * Calculate the new pixel clock based on the
+	 * msa parameters
+	 */
+	drm_mode->clock = (drm_mode->htotal *
+			  drm_mode->vtotal *
+			  drm_mode->vrefresh)/1000;
+
+	pr_debug("drm_mode->htotal = %d, drm_mode->vtotal = %d, drm_mode->vrefresh= %d\n",
+			drm_mode->htotal, drm_mode->vtotal, drm_mode->vrefresh);
+}
+
+static void dp_panel_read_dsc_passthrough_caps(struct dp_panel *dp_panel,
+		struct dp_display_mode *dp_mode, struct msm_compression_info *comp_info)
+{
+	struct dp_panel_private *panel;
+	u32 ppr = dp_mode->timing.pixel_clk_khz/1000;
+	const struct dp_dsc_slices_per_line *rec;
+	int i;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	memcpy(comp_info, &panel->parser->dsc_passthrough.comp_info,
+			sizeof(struct msm_compression_info));
+
+	comp_info->dsc_info.slice_per_pkt = 0;
+	for (i = 0; i < ARRAY_SIZE(slice_per_line_tbl); i++) {
+		rec = &slice_per_line_tbl[i];
+		if ((ppr > rec->min_ppr) && (ppr <= rec->max_ppr)) {
+			comp_info->dsc_info.slice_per_pkt = rec->num_slices;
+			i++;
+			break;
+		}
+	}
+
+	if (comp_info->dsc_info.slice_per_pkt == 0)
+		pr_err("Invalid slice per pkt = 0\n");
+
+	comp_info->dsc_info.full_frame_slices =
+			DIV_ROUND_UP(dp_mode->timing.h_active,
+					comp_info->dsc_info.slice_width);
+
+	switch (comp_info->dsc_info.slice_width % 3) {
+	case 0:
+		comp_info->dsc_info.slice_last_group_size = 2;
+		break;
+	case 1:
+		comp_info->dsc_info.slice_last_group_size = 0;
+		break;
+	case 2:
+		comp_info->dsc_info.slice_last_group_size = 1;
+		break;
+	default:
+		break;
+	}
+
+	comp_info->dsc_info.det_thresh_flatness = 2 << (comp_info->dsc_info.bpc - 8);
+
+	dp_panel_dsc_pclk_param_calc(dp_panel,
+			&comp_info->dsc_info,
+			comp_info->comp_ratio,
+			dp_mode);
+}
+
 static void dp_panel_read_sink_dsc_caps(struct dp_panel *dp_panel)
 {
 	int rlen;
@@ -1999,9 +2105,15 @@ skip_edid:
 	if (dp_panel->fec_feature_enable) {
 		dp_panel_read_sink_fec_caps(dp_panel);
 
-		if (dp_panel->dsc_feature_enable && dp_panel->fec_en)
-			dp_panel_read_sink_dsc_caps(dp_panel);
+		if (dp_panel->dsc_feature_enable && dp_panel->fec_en) {
+			if (!panel->parser->dsc_passthrough.dsc_passthrough_enable)
+				dp_panel_read_sink_dsc_caps(dp_panel);
+			else
+				dp_panel->dsc_en = true;
+		}
 	}
+	if (panel->parser->dsc_passthrough.dsc_passthrough_enable)
+		dp_panel->dsc_en = true;
 
 	pr_info("fec_en=%d, dsc_en=%d, widebus_en=%d\n", dp_panel->fec_en,
 			dp_panel->dsc_en, dp_panel->widebus_en);
@@ -2196,28 +2308,59 @@ static void dp_panel_tpg_config(struct dp_panel *dp_panel, bool enable)
 		return;
 	}
 
-	/* TPG config */
-	catalog->hsync_period = pinfo->h_sync_width + pinfo->h_back_porch +
-			pinfo->h_active + pinfo->h_front_porch;
-	catalog->vsync_period = pinfo->v_sync_width + pinfo->v_back_porch +
-			pinfo->v_active + pinfo->v_front_porch;
+	if (panel->parser->dsc_passthrough.dsc_passthrough_enable) {
+		/* TPG config when DSC passthru is enabled */
+		struct dp_msa_param *msa = &panel->parser->msa;
 
-	catalog->display_v_start = ((pinfo->v_sync_width +
-			pinfo->v_back_porch) * catalog->hsync_period);
-	catalog->display_v_end = ((catalog->vsync_period -
-			pinfo->v_front_porch) * catalog->hsync_period) - 1;
+		catalog->hsync_period = msa->ovr_h_sync_pulse_px +
+					msa->ovr_h_back_porch_px +
+					msa->ovr_visible_width_in_px +
+					msa->ovr_h_front_porch_px;
+		catalog->vsync_period = msa->ovr_v_sync_pulse_ln +
+					msa->ovr_v_back_porch_ln +
+					msa->ovr_visible_height_in_px +
+					msa->ovr_v_front_porch_ln;
+		catalog->display_v_start = (msa->ovr_v_sync_pulse_ln +
+					    msa->ovr_v_back_porch_ln) *
+					    msa->ovr_h_sync_pulse_px;
+		catalog->display_v_end = (catalog->vsync_period -
+					  msa->ovr_v_front_porch_ln) *
+					  msa->ovr_h_sync_pulse_px;
+		catalog->display_v_start += msa->ovr_h_sync_pulse_px +
+					    msa->ovr_h_back_porch_px;
+		catalog->display_v_end -= msa->ovr_h_front_porch_px;
+		hsync_start_x = msa->ovr_h_back_porch_px +
+				msa->ovr_h_sync_pulse_px;
+		hsync_end_x = catalog->hsync_period -
+			      msa->ovr_h_front_porch_px - 1;
+		catalog->v_sync_width = msa->ovr_v_sync_pulse_ln;
+		catalog->hsync_ctl = (catalog->hsync_period << 16) |
+				msa->ovr_h_sync_pulse_px;
+		catalog->display_hctl = (hsync_end_x << 16) | hsync_start_x;
+	} else {
+		/* TPG config */
+		catalog->hsync_period = pinfo->h_sync_width + pinfo->h_back_porch +
+				pinfo->h_active + pinfo->h_front_porch;
+		catalog->vsync_period = pinfo->v_sync_width + pinfo->v_back_porch +
+				pinfo->v_active + pinfo->v_front_porch;
 
-	catalog->display_v_start += pinfo->h_sync_width + pinfo->h_back_porch;
-	catalog->display_v_end -= pinfo->h_front_porch;
+		catalog->display_v_start = ((pinfo->v_sync_width +
+				pinfo->v_back_porch) * catalog->hsync_period);
+		catalog->display_v_end = ((catalog->vsync_period -
+				pinfo->v_front_porch) * catalog->hsync_period) - 1;
 
-	hsync_start_x = pinfo->h_back_porch + pinfo->h_sync_width;
-	hsync_end_x = catalog->hsync_period - pinfo->h_front_porch - 1;
+		catalog->display_v_start += pinfo->h_sync_width + pinfo->h_back_porch;
+		catalog->display_v_end -= pinfo->h_front_porch;
 
-	catalog->v_sync_width = pinfo->v_sync_width;
+		hsync_start_x = pinfo->h_back_porch + pinfo->h_sync_width;
+		hsync_end_x = catalog->hsync_period - pinfo->h_front_porch - 1;
 
-	catalog->hsync_ctl = (catalog->hsync_period << 16) |
-			pinfo->h_sync_width;
-	catalog->display_hctl = (hsync_end_x << 16) | hsync_start_x;
+		catalog->v_sync_width = pinfo->v_sync_width;
+
+		catalog->hsync_ctl = (catalog->hsync_period << 16) |
+				pinfo->h_sync_width;
+		catalog->display_hctl = (hsync_end_x << 16) | hsync_start_x;
+	}
 
 	panel->catalog->tpg_config(catalog, true);
 }
@@ -2225,6 +2368,8 @@ static void dp_panel_tpg_config(struct dp_panel *dp_panel, bool enable)
 static int dp_panel_config_timing(struct dp_panel *dp_panel)
 {
 	int rc = 0;
+	bool isDscPassthru = false;
+	struct dp_msa_param *msa = NULL;
 	u32 data, total_ver, total_hor;
 	struct dp_catalog_panel *catalog;
 	struct dp_panel_private *panel;
@@ -2240,45 +2385,93 @@ static int dp_panel_config_timing(struct dp_panel *dp_panel)
 	catalog = panel->catalog;
 	pinfo = &panel->dp_panel.pinfo;
 
-	pr_debug("width=%d hporch= %d %d %d\n",
-		pinfo->h_active, pinfo->h_back_porch,
-		pinfo->h_front_porch, pinfo->h_sync_width);
+	/* Check if the dsc-passthu mode is enabled */
+	isDscPassthru = panel->parser->dsc_passthrough.dsc_passthrough_enable;
 
-	pr_debug("height=%d vporch= %d %d %d\n",
-		pinfo->v_active, pinfo->v_back_porch,
-		pinfo->v_front_porch, pinfo->v_sync_width);
+	if (isDscPassthru) {
+		/*
+		 * Update the values written to the dp_catalog_panel
+		 * timing configuration based on the dsc passthru mode
+		 */
+		msa = &panel->parser->msa;
 
-	total_hor = pinfo->h_active + pinfo->h_back_porch +
-		pinfo->h_front_porch + pinfo->h_sync_width;
+		total_hor = msa->ovr_visible_width_in_px +
+			    msa->ovr_h_front_porch_px +
+			    msa->ovr_h_back_porch_px +
+			    msa->ovr_h_sync_pulse_px;
+		total_ver = msa->ovr_visible_height_in_px +
+			    msa->ovr_v_front_porch_ln +
+			    msa->ovr_v_back_porch_ln +
+			    msa->ovr_v_sync_pulse_ln;
 
-	total_ver = pinfo->v_active + pinfo->v_back_porch +
-			pinfo->v_front_porch + pinfo->v_sync_width;
+		data = total_ver;
+		data <<= 16;
+		data |= total_hor;
 
-	data = total_ver;
-	data <<= 16;
-	data |= total_hor;
+		catalog->total = data;
 
-	catalog->total = data;
+		data = (msa->ovr_v_back_porch_ln +
+			msa->ovr_v_sync_pulse_ln);
+		data <<= 16;
+		data |= (msa->ovr_h_back_porch_px +
+			 msa->ovr_h_sync_pulse_px);
 
-	data = (pinfo->v_back_porch + pinfo->v_sync_width);
-	data <<= 16;
-	data |= (pinfo->h_back_porch + pinfo->h_sync_width);
+		catalog->sync_start = data;
 
-	catalog->sync_start = data;
+		data = msa->ovr_v_sync_pulse_ln;
+		data <<= 16;
+		data |= (msa->ovr_v_sync_active_low << 31);
+		data |= msa->ovr_h_sync_pulse_px;
+		data |= (msa->ovr_h_sync_active_low << 15);
 
-	data = pinfo->v_sync_width;
-	data <<= 16;
-	data |= (pinfo->v_active_low << 31);
-	data |= pinfo->h_sync_width;
-	data |= (pinfo->h_active_low << 15);
+		catalog->width_blanking = data;
 
-	catalog->width_blanking = data;
+		data = msa->ovr_visible_height_in_px;
+		data <<= 16;
+		data |= msa->ovr_visible_width_in_px;
 
-	data = pinfo->v_active;
-	data <<= 16;
-	data |= pinfo->h_active;
+		catalog->dp_active = data;
+	} else {
+		pr_debug("width=%d hporch= %d %d %d\n",
+			pinfo->h_active, pinfo->h_back_porch,
+			pinfo->h_front_porch, pinfo->h_sync_width);
 
-	catalog->dp_active = data;
+		pr_debug("height=%d vporch= %d %d %d\n",
+			pinfo->v_active, pinfo->v_back_porch,
+			pinfo->v_front_porch, pinfo->v_sync_width);
+
+		total_hor = pinfo->h_active + pinfo->h_back_porch +
+			pinfo->h_front_porch + pinfo->h_sync_width;
+
+		total_ver = pinfo->v_active + pinfo->v_back_porch +
+				pinfo->v_front_porch + pinfo->v_sync_width;
+
+		data = total_ver;
+		data <<= 16;
+		data |= total_hor;
+
+		catalog->total = data;
+
+		data = (pinfo->v_back_porch + pinfo->v_sync_width);
+		data <<= 16;
+		data |= (pinfo->h_back_porch + pinfo->h_sync_width);
+
+		catalog->sync_start = data;
+
+		data = pinfo->v_sync_width;
+		data <<= 16;
+		data |= (pinfo->v_active_low << 31);
+		data |= pinfo->h_sync_width;
+		data |= (pinfo->h_active_low << 15);
+
+		catalog->width_blanking = data;
+
+		data = pinfo->v_active;
+		data <<= 16;
+		data |= pinfo->h_active;
+
+		catalog->dp_active = data;
+	}
 
 	catalog->widebus_en = pinfo->widebus_en;
 
@@ -2378,9 +2571,9 @@ static void dp_panel_config_dsc(struct dp_panel *dp_panel, bool enable)
 	}
 
 	catalog->stream_id = dp_panel->stream_id;
-	catalog->dsc_cfg(catalog);
+	catalog->dsc_cfg(catalog, panel->parser->dsc_passthrough.dsc_passthrough_enable);
 
-	if (catalog->dsc.dsc_en && enable)
+	if (catalog->dsc.dsc_en && enable && !panel->parser->dsc_passthrough.dsc_passthrough_enable)
 		catalog->pps_flush(catalog);
 }
 
@@ -2847,6 +3040,9 @@ static void dp_panel_convert_to_dp_mode(struct dp_panel *dp_panel,
 	struct msm_compression_info *comp_info;
 	bool dsc_cap = (dp_mode->capabilities & DP_PANEL_CAPS_DSC) ?
 				true : false;
+	struct dp_panel_private *panel;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
 	dp_mode->timing.h_active = drm_mode->hdisplay;
 	dp_mode->timing.h_back_porch = drm_mode->htotal - drm_mode->hsync_end;
@@ -2887,21 +3083,95 @@ static void dp_panel_convert_to_dp_mode(struct dp_panel *dp_panel,
 
 	if (dp_panel->dsc_en && dsc_cap) {
 		comp_info = &dp_mode->timing.comp_info;
-
-		if (dp_panel_dsc_prepare_basic_params(comp_info,
-					dp_mode, dp_panel)) {
-			pr_debug("prepare DSC basic params failed\n");
-			return;
+		if (panel->parser->dsc_passthrough.dsc_passthrough_enable) {
+			dp_panel_read_dsc_passthrough_caps(dp_panel, dp_mode, comp_info);
+		} else {
+			if (dp_panel_dsc_prepare_basic_params(comp_info,
+					dp_mode, dp_panel))
+				return;
+			dp_panel_dsc_populate_static_params(&comp_info->dsc_info,
+					dp_panel);
+			dp_panel_dsc_pclk_param_calc(dp_panel,
+					&comp_info->dsc_info,
+					comp_info->comp_ratio,
+					dp_mode);
 		}
-
-		dp_panel_dsc_populate_static_params(&comp_info->dsc_info,
-				dp_panel);
-		dp_panel_dsc_pclk_param_calc(dp_panel,
-				&comp_info->dsc_info,
-				comp_info->comp_ratio,
-				dp_mode);
 	}
 	dp_mode->fec_overhead_fp = dp_panel->fec_overhead_fp;
+}
+
+static int dp_panel_query_mode(
+		struct dp_panel *dp_panel,
+		void *mode,
+		enum dp_query_mode query)
+{
+	int rc;
+	struct dp_panel_private *panel;
+	struct drm_display_mode drm_mode;
+	struct dp_display_mode *dp_mode;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	if (!panel->parser->dsc_passthrough.dsc_passthrough_enable) {
+		pr_err("requested query mode is not supported\n");
+		rc = -ENOENT;
+		goto error;
+	}
+
+	memset(&drm_mode, 0, sizeof(struct drm_display_mode));
+	dp_panel_overwr_drm_mode_w_dp_msa(dp_panel, &panel->parser->msa, &drm_mode);
+
+	switch (query) {
+	case DSC_PASSTHROUGH_UPDATE_DP_MODE:
+		dp_mode = (struct dp_display_mode *)(mode);
+		dp_mode->timing.h_active = drm_mode.hdisplay;
+		dp_mode->timing.h_back_porch = drm_mode.htotal -
+						drm_mode.hsync_end;
+		dp_mode->timing.h_sync_width = drm_mode.htotal -
+						(drm_mode.hsync_start +
+							dp_mode->timing.h_back_porch);
+		dp_mode->timing.h_front_porch = drm_mode.hsync_start -
+						drm_mode.hdisplay;
+		dp_mode->timing.h_skew = drm_mode.hskew;
+		dp_mode->timing.v_active = drm_mode.vdisplay;
+		dp_mode->timing.v_back_porch = drm_mode.vtotal -
+						drm_mode.vsync_end;
+		dp_mode->timing.v_sync_width = drm_mode.vtotal -
+						(drm_mode.vsync_start +
+							dp_mode->timing.v_back_porch);
+		dp_mode->timing.v_front_porch = drm_mode.vsync_start -
+						drm_mode.vdisplay;
+
+		dp_mode->timing.refresh_rate = drm_mode.vrefresh;
+
+		dp_mode->timing.pixel_clk_khz = drm_mode.clock;
+
+		dp_mode->timing.v_active_low =
+			panel->parser->msa.ovr_v_sync_active_low;
+		dp_mode->timing.h_active_low =
+		panel->parser->msa.ovr_h_sync_active_low;
+		break;
+	case DSC_PASSTHROUGH_UPDATE_PIC_WIDTH:
+		*((u16 *)mode) =
+				(u16)
+				(panel->parser->dsc_passthrough.comp_info.dsc_info.pic_width);
+		break;
+	case DSC_PASSTHROUGH_IS_ENABLED:
+		*((bool *)mode) =
+				panel->parser->dsc_passthrough.dsc_passthrough_enable;
+		break;
+	default:
+		pr_err("requested query mode %d for is not recognised\n", query);
+		rc = -ENOENT;
+		goto error;
+	}
+	return 0;
+
+error:
+	if (query == DSC_PASSTHROUGH_IS_ENABLED)
+		*((bool *)mode) =
+				panel->parser->dsc_passthrough.dsc_passthrough_enable;
+	return rc;
 }
 
 static void dp_panel_update_pps(struct dp_panel *dp_panel, char *pps_cmd)
@@ -2984,6 +3254,7 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->read_mst_cap = dp_panel_read_mst_cap;
 	dp_panel->convert_to_dp_mode = dp_panel_convert_to_dp_mode;
 	dp_panel->update_pps = dp_panel_update_pps;
+	dp_panel->query_mode = dp_panel_query_mode;
 
 	sde_conn = to_sde_connector(dp_panel->connector);
 	sde_conn->drv_panel = dp_panel;

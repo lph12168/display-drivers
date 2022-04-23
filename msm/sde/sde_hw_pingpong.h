@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_HW_PINGPONG_H
@@ -160,6 +161,8 @@ struct sde_hw_pingpong {
 	/* pingpong */
 	enum sde_pingpong idx;
 	const struct sde_pingpong_cfg *caps;
+	char *out_byte_order;
+	size_t out_byte_order_size;
 
 	/* associated 3d_merge */
 	struct sde_hw_merge_3d *merge_3d;

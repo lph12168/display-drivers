@@ -2895,6 +2895,22 @@ static int dp_display_set_phy_bond_mode(struct dp_display *dp_display,
 	return 0;
 }
 
+static int dp_display_get_parser(struct dp_display *dp_display, void **parser)
+{
+	struct dp_display_private *dp;
+
+	if (!dp_display || !parser) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	*parser = dp->parser;
+
+	return 0;
+}
+
 /**
  * dp_display_parse_boot_display_selection()- Parse DP boot display name
  *
@@ -3032,6 +3048,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	dp_display->mst_get_fixed_topology_display_type =
 				dp_display_mst_get_fixed_topology_display_type;
 	dp_display->set_phy_bond_mode = dp_display_set_phy_bond_mode;
+	dp_display->get_parser = dp_display_get_parser;
 
 	rc = component_add(&pdev->dev, &dp_display_comp_ops);
 	if (rc) {

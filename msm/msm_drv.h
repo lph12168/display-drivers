@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -409,6 +410,8 @@ struct msm_display_dsc_info {
 	char *range_min_qp;
 	char *range_max_qp;
 	char *range_bpg_offset;
+	char *out_byte_order;
+	size_t out_byte_order_size;
 
 	u32 extra_width;
 };

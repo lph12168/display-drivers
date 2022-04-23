@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
@@ -137,6 +138,7 @@ struct dp_catalog_io {
 struct dp_catalog_private_v500 {
 	struct device *dev;
 	struct dp_catalog_io *io;
+	struct dp_parser *parser;
 
 	char exe_mode[SZ_4];
 };
@@ -290,7 +292,10 @@ static void dp_catalog_panel_config_msa_v500(struct dp_catalog_panel *panel,
 		nvid_off = DP1_SOFTWARE_NVID - DP_SOFTWARE_NVID;
 	}
 
-	pr_debug("mvid=0x%x, nvid=0x%x\n", mvid, nvid);
+	if (catalog->parser->dsc_passthrough.dsc_passthrough_enable) {
+		mvid = catalog->parser->msa.ovr_sw_mvid;
+		nvid = catalog->parser->msa.ovr_sw_nvid;
+	}
 	dp_write(catalog->exe_mode, io_data, DP_SOFTWARE_MVID + mvid_off, mvid);
 	dp_write(catalog->exe_mode, io_data, DP_SOFTWARE_NVID + nvid_off, nvid);
 }
@@ -496,7 +501,7 @@ static void dp_catalog_set_exe_mode_v500(struct dp_catalog *catalog,
 }
 
 int dp_catalog_get_v500(struct device *dev, struct dp_catalog *catalog,
-		void *io)
+		void *io, struct dp_parser *parser)
 {
 	struct dp_catalog_private_v500 *catalog_priv;
 
@@ -511,6 +516,7 @@ int dp_catalog_get_v500(struct device *dev, struct dp_catalog *catalog,
 
 	catalog_priv->dev = dev;
 	catalog_priv->io = io;
+	catalog_priv->parser = parser;
 	catalog->priv.data = catalog_priv;
 
 	catalog->priv.put          = dp_catalog_put_v500;
