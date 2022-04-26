@@ -5707,6 +5707,25 @@ static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
 	topology->num_enc = 0;
 	topology->num_intf = topology->num_lm;
 
+	if (ext_display->panel->host_config.ext_bridge_custom_topology) {
+		u32 num_lm = topology->num_lm;
+		u32 ctrl_count = ext_display->ctrl_count;
+
+		if (drm_mode->hdisplay == 720 &&
+				drm_mode->vdisplay == 480) {
+			/* no need to change topology */
+		} else {
+			topology->num_lm =
+				(num_lm >= ctrl_count) ? num_lm : ctrl_count;
+			topology->num_enc = 0;
+			topology->num_intf = ctrl_count;
+		}
+	}
+
+	DSI_DEBUG("%dx%d@%d : %d %d %d\n",
+		drm_mode->hdisplay, drm_mode->vdisplay, drm_mode->vrefresh,
+		topology->num_lm, topology->num_enc, topology->num_intf);
+
 	return 0;
 }
 
