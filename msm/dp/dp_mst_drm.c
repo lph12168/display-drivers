@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -385,28 +386,6 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 	}
 }
 
-static void _dp_mst_update_single_timeslot(struct dp_mst_private *mst,
-		struct dp_mst_bridge *mst_bridge)
-{
-	int pbn = 0, start_slot = 0, num_slots = 0;
-
-	if (mst->state == PM_SUSPEND) {
-		if (mst_bridge->vcpi) {
-			mst->mst_fw_cbs->get_vcpi_info(&mst->mst_mgr,
-					mst_bridge->vcpi,
-					&start_slot, &num_slots);
-			pbn = mst_bridge->pbn;
-		}
-
-		mst_bridge->num_slots = num_slots;
-
-		mst->dp_display->set_stream_info(mst->dp_display,
-				mst_bridge->dp_panel,
-				mst_bridge->id, start_slot, num_slots, pbn,
-				mst_bridge->vcpi);
-	}
-}
-
 static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 {
 	struct dp_display *dp_display = dp_bridge->display;
@@ -415,14 +394,7 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	bool ret;
 	int pbn, slots;
 
-	/* skip mst specific disable operations during suspend */
-	if (mst->state == PM_SUSPEND) {
-		dp_display->wakeup_phy_layer(dp_display, true);
-		drm_dp_send_power_updown_phy(&mst->mst_mgr, port, true);
-		dp_display->wakeup_phy_layer(dp_display, false);
-		_dp_mst_update_single_timeslot(mst, dp_bridge);
-		return;
-	}
+	DP_MST_DEBUG("enter\n");
 
 	pbn = mst->mst_fw_cbs->calc_pbn_mode(&dp_bridge->dp_mode);
 
@@ -454,10 +426,6 @@ static void _dp_mst_bridge_pre_enable_part2(struct dp_mst_bridge *dp_bridge)
 
 	DP_MST_DEBUG("enter\n");
 
-	/* skip mst specific disable operations during suspend */
-	if (mst->state == PM_SUSPEND)
-		return;
-
 	mst->mst_fw_cbs->check_act_status(&mst->mst_mgr);
 
 	mst->mst_fw_cbs->update_payload_part2(&mst->mst_mgr);
@@ -473,12 +441,6 @@ static void _dp_mst_bridge_pre_disable_part1(struct dp_mst_bridge *dp_bridge)
 	struct drm_dp_mst_port *port = dp_bridge->mst_port;
 
 	DP_MST_DEBUG("enter\n");
-
-	/* skip mst specific disable operations during suspend */
-	if (mst->state == PM_SUSPEND) {
-		_dp_mst_update_single_timeslot(mst, dp_bridge);
-		return;
-	}
 
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, port);
 
@@ -497,14 +459,6 @@ static void _dp_mst_bridge_pre_disable_part2(struct dp_mst_bridge *dp_bridge)
 	struct drm_dp_mst_port *port = dp_bridge->mst_port;
 
 	DP_MST_DEBUG("enter\n");
-
-	/* skip mst specific disable operations during suspend */
-	if (mst->state == PM_SUSPEND) {
-		dp_display->wakeup_phy_layer(dp_display, true);
-		drm_dp_send_power_updown_phy(&mst->mst_mgr, port, false);
-		dp_display->wakeup_phy_layer(dp_display, false);
-		return;
-	}
 
 	mst->mst_fw_cbs->check_act_status(&mst->mst_mgr);
 
