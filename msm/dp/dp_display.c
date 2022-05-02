@@ -966,11 +966,10 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 end:
 	mutex_unlock(&dp->session_lock);
 
-	if (!rc)
-		dp_display_send_hpd_notification(dp);
-
 	if (dp->parser->force_connect_mode)
 		dp_display_send_force_connect_event(dp);
+	else if (!rc)
+		dp_display_send_hpd_notification(dp);
 
 	return rc;
 }
@@ -1693,6 +1692,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		 */
 		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
 		dp_display_process_hpd_high(dp);
+		dp_display_send_hpd_notification(dp);
 	}
 
 	return rc;
