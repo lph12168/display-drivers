@@ -904,14 +904,15 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 	pr_info("DP%d [OK]\n", dp->cell_idx);
 }
 
-static int dp_display_process_hpd_high(struct dp_display_private *dp)
+static int dp_display_process_hpd_high(struct dp_display_private *dp,
+		bool force)
 {
 	int rc = -EINVAL;
 
 	pr_debug("DP%d\n", dp->cell_idx);
 	mutex_lock(&dp->session_lock);
 
-	if (dp->is_connected) {
+	if (dp->is_connected && !force) {
 		pr_debug("DP%d already connected, skipping hpd high processing\n",
 				dp->cell_idx);
 		mutex_unlock(&dp->session_lock);
@@ -1167,7 +1168,7 @@ static void dp_display_handle_disconnect(struct dp_display_private *dp)
 
 		dp_display_send_force_connect_event(dp);
 
-		dp_display_process_hpd_high(dp);
+		dp_display_process_hpd_high(dp, false);
 
 		/* If stream isn't running, started here */
 		if (!dp->power_on && dp->dp_display.base_connector)
@@ -1436,7 +1437,6 @@ static void dp_display_connect_work(struct work_struct *work)
 			dp_display_clean(dp);
 			dp_display_host_deinit(dp);
 		}
-		dp->is_connected = false;
 		dp_display_process_mst_hpd_low(dp);
 		dp_sim_set_sim_mode(dp->aux_bridge, 0);
 		dp->aux->state = 0;
@@ -1445,7 +1445,7 @@ static void dp_display_connect_work(struct work_struct *work)
 
 	mutex_unlock(&dp->session_lock);
 
-	rc = dp_display_process_hpd_high(dp);
+	rc = dp_display_process_hpd_high(dp, dp->parser->force_connect_mode);
 
 	if (!rc && dp->panel->video_test)
 		dp->link->send_test_response(dp->link);
@@ -1691,7 +1691,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		 * connector modes when link training is still running.
 		 */
 		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
-		dp_display_process_hpd_high(dp);
+		dp_display_process_hpd_high(dp, true);
 		dp_display_send_hpd_notification(dp);
 	}
 
