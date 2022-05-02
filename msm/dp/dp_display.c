@@ -1377,12 +1377,12 @@ end:
 		goto skip_notify;
 	}
 
-	if (!rc && !dp_display_state_is(DP_STATE_ABORTED))
+	if (dp->parser->force_connect_mode)
+		dp_display_send_force_connect_event(dp);
+	else if (!rc && !dp_display_state_is(DP_STATE_ABORTED))
 		dp_display_send_hpd_notification(dp);
 
 skip_notify:
-	if (dp->parser->force_connect_mode)
-		dp_display_send_force_connect_event(dp);
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state,
 		wait_timeout_ms, rc);
@@ -2384,6 +2384,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		if (rc)
 			DP_ERR("DP%d Host init Failed", dp->cell_idx);
 		dp_display_process_hpd_high(dp);
+		dp_display_send_hpd_notification(dp);
 	}
 
 	return rc;
