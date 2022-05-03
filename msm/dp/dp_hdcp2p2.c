@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[dp-hdcp2p2] %s: " fmt, __func__
@@ -11,6 +12,8 @@
 #include <linux/stat.h>
 #include <linux/types.h>
 #include <linux/kthread.h>
+#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
 #include <drm/drm_dp_helper.h>
 #include <msm_hdcp.h>
 
@@ -932,6 +935,7 @@ void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data)
 {
 	int rc;
 	struct dp_hdcp2p2_ctrl *ctrl;
+	static struct sched_param param = {.sched_priority = 1};
 	static struct sde_hdcp_ops ops = {
 		.isr = dp_hdcp2p2_isr,
 		.reauthenticate = dp_hdcp2p2_reauthenticate,
@@ -1027,6 +1031,7 @@ void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data)
 		goto error;
 	}
 
+	sched_setscheduler(ctrl->thread, SCHED_FIFO, &param);
 	return ctrl;
 error:
 	kfree(ctrl);
