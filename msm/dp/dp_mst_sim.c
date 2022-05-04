@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -193,6 +194,7 @@ static int dp_sim_read_edid(struct dp_sim_device *sim_dev,
 {
 	u8 *buf = (u8 *)msg->buffer;
 	u32 addr;
+	size_t size;
 
 	if (!sim_dev->port_num || !msg->size)
 		return 0;
@@ -203,8 +205,11 @@ static int dp_sim_read_edid(struct dp_sim_device *sim_dev,
 			memcpy(msg->buffer, &sim_dev->ports[0].edid[addr],
 					msg->size);
 		} else if (addr < sim_dev->ports[0].edid_size) {
-			memcpy(msg->buffer, &sim_dev->ports[0].edid[addr],
-					sim_dev->ports[0].edid_size - addr);
+			size = sim_dev->ports[0].edid_size - addr;
+			memcpy(msg->buffer, &sim_dev->ports[0].edid[addr], size);
+			memset(msg->buffer + size, 0, msg->size - size);
+		} else {
+			memset(msg->buffer, 0, msg->size);
 		}
 		sim_dev->edid_addr += msg->size;
 		sim_dev->edid_addr &= 0xFF;

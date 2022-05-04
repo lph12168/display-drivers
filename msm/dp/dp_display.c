@@ -2464,6 +2464,12 @@ static int dp_display_create_workqueue(struct dp_display_private *dp)
 	return 0;
 }
 
+static void dp_display_destroy_workqueue(struct dp_display_private *dp)
+{
+	if (dp && dp->wq)
+		destroy_workqueue(dp->wq);
+}
+
 static int dp_display_fsa4480_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -3141,6 +3147,8 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	return 0;
 error:
+	dp_display_destroy_workqueue(dp);
+	g_dp_display[index] = NULL;
 	devm_kfree(&pdev->dev, dp);
 bail:
 	return rc;
@@ -3333,8 +3341,7 @@ static int dp_display_remove(struct platform_device *pdev)
 
 	dp_display_deinit_sub_modules(dp);
 
-	if (dp->wq)
-		destroy_workqueue(dp->wq);
+	dp_display_destroy_workqueue(dp);
 
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, dp);

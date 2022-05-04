@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
@@ -27,6 +28,13 @@ struct dp_debug_private {
 
 	u32 dpcd_offset;
 	u32 dpcd_size;
+
+	u32 dpcd_reg_offset;
+	u32 dpcd_reg_size;
+
+	char reg_name[SZ_32];
+	u32 reg_offset;
+	u32 reg_size;
 
 	u32 mst_con_id;
 	u32 mst_edid_idx;
@@ -180,6 +188,191 @@ bail:
 
 	mutex_unlock(&debug->lock);
 	return rc;
+}
+
+static ssize_t dp_debug_write_dpcd_off(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_32];
+	size_t len = 0;
+	int offset = 0, size = 0;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		goto end;
+
+	/* Leave room for termination char */
+	len = min_t(size_t, count, SZ_32 - 1);
+	if (copy_from_user(buf, user_buff, len))
+		goto end;
+
+	buf[len] = '\0';
+
+	if (sscanf(buf, "%x %x", &offset, &size) != 2)
+		goto end;
+
+	if (!size)
+		goto end;
+
+	debug->dpcd_reg_offset = offset;
+	debug->dpcd_reg_size = size;
+
+	goto end;
+end:
+	return len;
+}
+
+static ssize_t dp_debug_write_dpcd_reg(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	u8 *buf = NULL, *buf_t = NULL, *dpcd = NULL;
+	const int char_to_nib = 2;
+	size_t dpcd_size = 0;
+	size_t size = 0, dpcd_buf_index = 0;
+	ssize_t rc = count;
+	char offset_ch[5];
+	u32 offset, data_len;
+
+	if (!debug)
+		return -ENODEV;
+
+	mutex_lock(&debug->lock);
+
+	if (*ppos)
+		goto bail;
+
+	size = min_t(size_t, count, SZ_2K);
+	if (size < 4)
+		goto bail;
+
+	buf = kzalloc(size, GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(buf)) {
+		rc = -ENOMEM;
+		goto bail;
+	}
+
+	if (copy_from_user(buf, user_buff, size))
+		goto bail;
+
+	memcpy(offset_ch, buf, 4);
+	offset_ch[4] = '\0';
+
+	if (kstrtoint(offset_ch, 16, &offset)) {
+		pr_err("offset kstrtoint error\n");
+		goto bail;
+	}
+
+	size -= 4;
+	if (size == 0)
+		goto bail;
+
+	dpcd_size = size / char_to_nib;
+	data_len = dpcd_size;
+	buf_t = buf + 4;
+
+	dpcd = kzalloc(dpcd_size, GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(dpcd)) {
+		rc = -ENOMEM;
+		goto bail;
+	}
+
+	while (dpcd_size--) {
+		char t[3];
+		int d;
+
+		memcpy(t, buf_t, sizeof(char) * char_to_nib);
+		t[char_to_nib] = '\0';
+
+		if (kstrtoint(t, 16, &d)) {
+			pr_err("kstrtoint error\n");
+			goto bail;
+		}
+
+		dpcd[dpcd_buf_index++] = d;
+
+		buf_t += char_to_nib;
+	}
+
+	debug->dpcd_reg_offset = offset;
+	debug->dpcd_reg_size = dpcd_buf_index;
+
+	drm_dp_dpcd_write(debug->aux->drm_aux,
+			debug->dpcd_reg_offset, dpcd, debug->dpcd_reg_size);
+
+bail:
+	kfree(buf);
+	kfree(dpcd);
+
+	mutex_unlock(&debug->lock);
+	return rc;
+}
+
+static ssize_t dp_debug_read_dpcd_reg(struct file *file,
+		char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char *buf;
+	int const buf_size = SZ_4K;
+	size_t size;
+	u32 offset = 0;
+	u32 len = 0;
+	u8 *dpcd;
+
+	if (!debug || !debug->aux)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	buf = kzalloc(buf_size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	mutex_lock(&debug->lock);
+	dpcd = kzalloc(buf_size, GFP_KERNEL);
+	if (!dpcd)
+		goto bail;
+
+	while (offset < debug->dpcd_reg_size) {
+		size = min_t(size_t, debug->dpcd_reg_size - offset, 16);
+		drm_dp_dpcd_read(debug->aux->drm_aux,
+				debug->dpcd_reg_offset + offset,
+				dpcd + offset, size);
+		offset += size;
+	}
+
+	offset = 0;
+	while (offset < debug->dpcd_reg_size) {
+		if (offset % 16 == 0)
+			len += scnprintf(buf + len, buf_size - len, "%4.4x:",
+				debug->dpcd_reg_offset + offset);
+
+		len += scnprintf(buf + len, buf_size - len, " %2.2x",
+			dpcd[offset++]);
+		if (len < buf_size) {
+			if (offset % 16 == 0)
+				buf[len++] = '\n';
+			else if (offset % 4 == 0)
+				buf[len++] = ' ';
+		}
+	}
+	buf[len++] = '\n';
+
+	kfree(dpcd);
+
+	len = min_t(size_t, count, len);
+	if (!copy_to_user(user_buff, buf, len))
+		*ppos += len;
+
+bail:
+	mutex_unlock(&debug->lock);
+	kfree(buf);
+
+	return len;
 }
 
 static ssize_t dp_debug_write_dpcd(struct file *file,
@@ -1687,6 +1880,228 @@ end:
 	return len;
 }
 
+static ssize_t dp_debug_write_reg(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	u8 *buf = NULL;
+	char name[SZ_32];
+	size_t size = 0;
+	struct dp_io_data *io_data;
+	u32 offset, data;
+	int rc = 0;
+
+	if (!debug)
+		return -ENODEV;
+
+	mutex_lock(&debug->lock);
+
+	if (*ppos)
+		goto bail;
+
+	size = min_t(size_t, count, SZ_2K);
+	buf = kzalloc(size, GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(buf)) {
+		rc = -ENOMEM;
+		goto bail;
+	}
+	rc = size;
+
+	if (copy_from_user(buf, user_buff, size))
+		goto bail;
+
+	if (sscanf(buf, "%32s %x %x", name, &offset, &data) != 3)
+		goto bail;
+
+	io_data = debug->parser->get_io(debug->parser, name);
+	if (!io_data)
+		goto bail;
+
+	if (offset > io_data->io.len - sizeof(u32))
+		goto bail;
+
+	pr_info("Write reg %s %4.4X = %8.8X\n", name, offset, data);
+	dp_write("all", io_data, offset, data);
+
+bail:
+	kfree(buf);
+
+	mutex_unlock(&debug->lock);
+	return rc;
+}
+
+static ssize_t dp_debug_write_misr(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_32];
+	u32 frame_count, enable;
+	size_t len = 0;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	/* Leave room for termination char */
+	len = min_t(size_t, count, SZ_32 - 1);
+	if (copy_from_user(buf, user_buff, len))
+		goto end;
+
+	buf[len] = '\0';
+
+	if (sscanf(buf, "%u %u", &enable, &frame_count) != 2)
+		return -EINVAL;
+
+	debug->ctrl->setup_misr(debug->ctrl, enable, frame_count);
+
+end:
+	return len;
+}
+
+static ssize_t dp_debug_read_misr(struct file *file,
+		char __user *user_buff, size_t count, loff_t *ppos)
+{
+	int rc = 0;
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_1K];
+	u32 len = 0;
+	u32 misr[4];
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	rc = debug->ctrl->collect_misr(debug->ctrl, misr);
+	if (rc > 0)
+		len += scnprintf(buf, sizeof(buf),
+				"MISR Lane[0..3]: %8.8X %8.8X %8.8X %8.8X\n",
+				misr[0], misr[1], misr[2], misr[3]);
+	else if (rc == -EAGAIN)
+		len += scnprintf(buf, sizeof(buf), "not ready\n");
+	else if (rc == -EPERM)
+		len += scnprintf(buf, sizeof(buf), "disabled\n");
+	else
+		len += scnprintf(buf, sizeof(buf), "invalid\n");
+
+	len = min_t(size_t, count, len);
+	if (copy_to_user(user_buff, buf, len))
+		return -EFAULT;
+
+	*ppos += len;
+	return len;
+}
+
+static ssize_t dp_debug_read_crc(struct file *file,
+		char __user *user_buff, size_t count, loff_t *ppos)
+{
+	int rc = 0;
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_1K];
+	u32 len = 0;
+	u32 r, g, b;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	rc = debug->ctrl->collect_crc(debug->ctrl, &r, &g, &b, debug->panel);
+	if (!rc)
+		len += scnprintf(buf, sizeof(buf),
+				"Stream %d CRC RGB: %4.4X %4.4X %4.4X\n",
+				debug->panel->stream_id, r, g, b);
+	else if (rc == -EAGAIN)
+		len += scnprintf(buf, sizeof(buf), "not ready\n");
+	else if (rc == -EPERM)
+		len += scnprintf(buf, sizeof(buf), "disabled\n");
+	else
+		len += scnprintf(buf, sizeof(buf), "invalid\n");
+
+	len = min_t(size_t, count, len);
+	if (copy_to_user(user_buff, buf, len))
+		return -EFAULT;
+
+	*ppos += len;
+	return len;
+}
+
+static ssize_t dp_debug_check_crc(struct file *file,
+		char __user *user_buff, size_t count, loff_t *ppos)
+{
+	int rc1, rc2;
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_1K];
+	u32 len = 0;
+	u8 dpcd[7];
+	u32 r, g, b;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	rc1 = debug->ctrl->collect_crc(debug->ctrl, &r, &g, &b, debug->panel);
+
+	rc2 = drm_dp_dpcd_read(debug->aux->drm_aux, 0x270, dpcd, 1);
+	if (!rc2) {
+		len += scnprintf(buf, sizeof(buf), "read dpcd failed\n");
+		goto error;
+	}
+
+	if (!(dpcd[0] & 1)) {
+		dpcd[0] |= 1;
+		drm_dp_dpcd_write(debug->aux->drm_aux, 0x270, dpcd, 1);
+		len += scnprintf(buf, sizeof(buf), "not ready\n");
+		goto error;
+	}
+
+	rc2 = drm_dp_dpcd_read(debug->aux->drm_aux, 0x240, dpcd, sizeof(dpcd));
+	if (!rc2) {
+		len += scnprintf(buf, sizeof(buf), "read dpcd failed\n");
+		goto error;
+	}
+	if (!(dpcd[6] & 0x20)) {
+		len += scnprintf(buf, sizeof(buf), "not supported\n");
+		goto error;
+	}
+
+	if (!rc1) {
+		len += scnprintf(buf, sizeof(buf),
+				"Stream %d CRC RGB: %4.4X %4.4X %4.4X\n",
+				debug->panel->stream_id, r, g, b);
+		len += scnprintf(buf + len, sizeof(buf) - len,
+				"   Panel CRC RGB: %2.2X%2.2X %2.2X%2.2X %2.2X%2.2X\n",
+				dpcd[1], dpcd[0], dpcd[3], dpcd[2], dpcd[5], dpcd[4]);
+		if ((dpcd[0] != (r & 0xFF)) || (dpcd[1] != (r >> 8)) ||
+				(dpcd[2] != (g & 0xFF)) || (dpcd[3] != (g >> 8)) ||
+				(dpcd[4] != (b & 0xFF)) || (dpcd[5] != (b >> 8)))
+			len += scnprintf(buf + len, sizeof(buf) - len,
+					"CRC mismatch!!!\n");
+		else
+			len += scnprintf(buf + len, sizeof(buf) - len, "CRC match\n");
+	} else if (rc1 == -EAGAIN) {
+		len += scnprintf(buf, sizeof(buf), "not ready\n");
+	} else if (rc1 == -EPERM) {
+		len += scnprintf(buf, sizeof(buf), "disabled\n");
+	} else {
+		len += scnprintf(buf, sizeof(buf), "invalid\n");
+	}
+
+error:
+	len = min_t(size_t, count, len);
+	if (copy_to_user(user_buff, buf, len))
+		return -EFAULT;
+
+	*ppos += len;
+	return len;
+}
+
 static int dp_debug_mst_topology_show(struct seq_file *m, void *arg)
 {
 	struct dp_debug_private *debug = (struct dp_debug_private *) m->private;
@@ -1740,6 +2155,17 @@ static const struct file_operations edid_fops = {
 	.write = dp_debug_write_edid,
 };
 
+static const struct file_operations dpcd_off_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_dpcd_off,
+};
+
+static const struct file_operations dpcd_reg_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_dpcd_reg,
+	.read = dp_debug_read_dpcd_reg,
+};
+
 static const struct file_operations dpcd_fops = {
 	.open = simple_open,
 	.write = dp_debug_write_dpcd,
@@ -1789,6 +2215,27 @@ static const struct file_operations dump_fops = {
 	.read = dp_debug_read_dump,
 };
 
+static const struct file_operations reg_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_reg,
+};
+
+static const struct file_operations misr_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_misr,
+	.read = dp_debug_read_misr,
+};
+
+static const struct file_operations crc_fops = {
+	.open = simple_open,
+	.read = dp_debug_read_crc,
+};
+
+static const struct file_operations crc_check_fops = {
+	.open = simple_open,
+	.read = dp_debug_check_crc,
+};
+
 static const struct file_operations mst_mode_fops = {
 	.open = simple_open,
 	.write = dp_debug_mst_mode_write,
@@ -1829,6 +2276,43 @@ static const struct file_operations dp_debug_mst_topology_fops = {
 	.release = single_release,
 };
 
+struct debugfs_fops {
+	const char *name;
+	const struct file_operations *ops;
+	u32 mode;
+};
+
+static const struct debugfs_fops dp_debugfs_fops[] = {
+	{ "dp_debug", &dp_debug_fops, 0444 },
+	{ "edid_modes", &edid_modes_fops, 0644 },
+	{ "edid_modes_mst", &edid_modes_mst_fops, 0644 },
+	{ "mst_con_id", &mst_con_id_fops, 0644 },
+	{ "mst_con_info", &mst_conn_info_fops, 0644 },
+	{ "hpd", &hpd_fops, 0644 },
+	{ "connected", &connected_fops, 0444 },
+	{ "max_bw_code", &bw_code_fops, 0644 },
+	{ "exe_mode", &exe_mode_fops, 0644 },
+	{ "dpcd_off", &dpcd_off_fops, 0644 },
+	{ "dpcd_reg", &dpcd_reg_fops, 0644 },
+	{ "dpcd", &dpcd_fops, 0644 },
+	{ "tpg_ctrl", &tpg_fops, 0644 },
+	{ "hdr", &hdr_fops, 0644 },
+	{ "sim", &sim_fops, 0644 },
+	{ "attention", &attention_fops, 0644 },
+	{ "dump", &dump_fops, 0644 },
+	{ "reg", &reg_fops, 0644 },
+	{ "misr_data", &misr_fops, 0644 },
+	{ "crc_data", &crc_fops, 0444 },
+	{ "crc_check", &crc_check_fops, 0444 },
+	{ "mst_mode", &mst_mode_fops, 0644 },
+	{ "mst_sideband_mode", &mst_sideband_mode_fops, 0644 },
+	{ "force_bond_mode", &force_bond_mode_fops, 0644 },
+	{ "max_pclk_khz", &max_pclk_khz_fops, 0644 },
+	{ "hdcp", &hdcp_fops, 0644 },
+	{ "widebus_mode", &widebus_mode_fops, 0644 },
+	{ "mst_topology", &dp_debug_mst_topology_fops, 0644 },
+};
+
 static int dp_debug_init(struct dp_debug *dp_debug)
 {
 	int rc = 0;
@@ -1836,6 +2320,7 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		struct dp_debug_private, dp_debug);
 	struct dentry *dir, *file;
 	char debug_name[16];
+	int i;
 
 	if (!IS_ENABLED(CONFIG_DEBUG_FS)) {
 		pr_debug("Skip creating debugfs\n");
@@ -1862,92 +2347,17 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 
 	debug->root = dir;
 
-	file = debugfs_create_file("dp_debug", 0444, dir,
-				debug, &dp_debug_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs create file failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
+	for (i = 0; i < ARRAY_SIZE(dp_debugfs_fops); i++) {
+		file = debugfs_create_file(dp_debugfs_fops[i].name,
+					dp_debugfs_fops[i].mode, dir,
+					debug, dp_debugfs_fops[i].ops);
 
-	file = debugfs_create_file("edid_modes", 0644, dir,
-					debug, &edid_modes_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs create edid_modes failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("edid_modes_mst", 0644, dir,
-					debug, &edid_modes_mst_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs create edid_modes_mst failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("mst_con_id", 0644, dir,
-					debug, &mst_con_id_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs create mst_con_id failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("mst_con_info", 0644, dir,
-					debug, &mst_conn_info_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs create mst_conn_info failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("hpd", 0644, dir,
-					debug, &hpd_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs hpd failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("connected", 0444, dir,
-					debug, &connected_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs connected failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("max_bw_code", 0644, dir,
-			debug, &bw_code_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs max_bw_code failed, rc=%d\n",
-		       debug_name, rc);
-	}
-
-	file = debugfs_create_file("exe_mode", 0644, dir,
-			debug, &exe_mode_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs register failed, rc=%d\n",
-		       debug_name, rc);
-	}
-
-	file = debugfs_create_file("edid", 0644, dir,
-					debug, &edid_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs edid failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
+		if (IS_ERR_OR_NULL(file)) {
+			rc = PTR_ERR(file);
+			pr_err("[%s] debugfs create %s failed, rc=%d\n",
+				   debug_name, dp_debugfs_fops[i].name, rc);
+			goto error_remove_dir;
+		}
 	}
 
 	file = debugfs_create_u32("mst_edid_idx", 0644, dir,
@@ -1958,115 +2368,12 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		       debug_name, rc);
 	}
 
-	file = debugfs_create_file("dpcd", 0644, dir,
-					debug, &dpcd_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs dpcd failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("tpg_ctrl", 0644, dir,
-			debug, &tpg_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs tpg failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("hdr", 0644, dir,
-		debug, &hdr_fops);
-
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs hdr failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("sim", 0644, dir,
-		debug, &sim_fops);
-
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs sim failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("attention", 0644, dir,
-		debug, &attention_fops);
-
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs attention failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("dump", 0644, dir,
-		debug, &dump_fops);
-
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs dump failed, rc=%d\n",
-			debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("mst_mode", 0644, dir,
-			debug, &mst_mode_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs max_bw_code failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("mst_sideband_mode", 0644, dir,
-			debug, &mst_sideband_mode_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs max_bw_code failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("force_bond_mode", 0644, dir,
-			debug, &force_bond_mode_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs force_bond_mode, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("max_pclk_khz", 0644, dir,
-			debug, &max_pclk_khz_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs max_pclk_khz failed, rc=%d\n",
-		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
 	file = debugfs_create_bool("force_encryption", 0644, dir,
 			&debug->dp_debug.force_encryption);
 	if (IS_ERR_OR_NULL(file)) {
 		rc = PTR_ERR(file);
 		pr_err("[%s] debugfs force_encryption failed, rc=%d\n",
 		       debug_name, rc);
-		goto error_remove_dir;
-	}
-
-	file = debugfs_create_file("hdcp", 0644, dir,
-					debug, &hdcp_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs hdcp failed, rc=%d\n",
-			debug_name, rc);
 		goto error_remove_dir;
 	}
 
@@ -2079,7 +2386,6 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		       debug_name, rc);
 		goto error_remove_dir;
 	}
-
 
 	file = debugfs_create_bool("dsc_feature_enable", 0644, dir,
 			&debug->parser->dsc_feature_enable);
@@ -2097,27 +2403,11 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		       debug_name, rc);
 	}
 
-	file = debugfs_create_file("widebus_mode", 0644, dir,
-			debug, &widebus_mode_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs widebus failed, rc=%d\n",
-		       debug_name, rc);
-	}
-
 	file = debugfs_create_u32("max_lclk_khz", 0644, dir,
 			&debug->parser->max_lclk_khz);
 	if (IS_ERR_OR_NULL(file)) {
 		rc = PTR_ERR(file);
 		pr_err("[%s] debugfs max_lclk_khz failed, rc=%d\n",
-		       debug_name, rc);
-	}
-
-	file = debugfs_create_file("mst_topology", 0644, dir,
-			debug, &dp_debug_mst_topology_fops);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		pr_err("[%s] debugfs mst_topology failed, rc=%d\n",
 		       debug_name, rc);
 	}
 
