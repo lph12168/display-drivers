@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[dp-pll] %s: " fmt, __func__
@@ -864,7 +865,7 @@ int dp_vco_prepare_7nm(struct clk_hw *hw)
 	dp_res = vco->priv;
 
 	/* skip vco recalculation for continuous splash use case */
-	if (dp_res->handoff_resources == true)
+	if (dp_res->handoff_resources)
 		return 0;
 
 	pr_debug("DP%d rate=%ld\n", dp_res->index, vco->rate);
@@ -928,6 +929,7 @@ void dp_vco_unprepare_7nm(struct clk_hw *hw)
 	dp_pll_disable_7nm(hw);
 
 	dp_res->handoff_resources = false;
+	dp_res->skip_handoff = true;
 	mdss_pll_resource_enable(dp_res, false);
 	dp_res->pll_on = false;
 }
@@ -1012,9 +1014,11 @@ unsigned long dp_vco_recalc_rate_7nm(struct clk_hw *hw,
 	}
 
 	dp_res->handoff_resources = false;
-	if (dp_7nm_pll_lock_status(dp_res) == true) {
+	if (dp_7nm_pll_lock_status(dp_res) && !dp_res->skip_handoff) {
 		pr_debug("PLL is enabled\n");
 		dp_res->handoff_resources = true;
+	} else {
+		dp_res->skip_handoff = true;
 	}
 
 	pr_debug("DP%d input rates: parent=%lu, vco=%lu\n",
