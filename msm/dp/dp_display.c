@@ -3968,6 +3968,8 @@ static int dp_display_probe(struct platform_device *pdev)
 	if (!dp->name)
 		dp->name = "drm_dp";
 
+	dp->cell_idx = -1;
+	dp->phy_idx = -1;
 	memset(&dp->mst, 0, sizeof(dp->mst));
 
 	rc = dp_display_get_cell_info(dp);
@@ -4169,7 +4171,7 @@ int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 		struct dp_display_bond_displays *dp_bond_info)
 {
 	struct dp_display_private *dp;
-	int i, j;
+	int i, j, n = 0;
 
 	if (!dp_display) {
 		pr_debug("dp display not initialized\n");
@@ -4204,9 +4206,18 @@ int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 			if (dp->parser->bond_cfg[type].ctrl[j] ==
 					dp_disp->cell_idx) {
 				dp_bond_info->dp_display[j] = display;
+				n++;
 				break;
 			}
 		}
+		if (n == dp_bond_info->dp_display_num)
+			break;
+	}
+
+	if (n < dp_bond_info->dp_display_num) {
+		pr_warn("no enough dp displays (%d:%d) for bond type %d, disabled\n",
+				n, dp_bond_info->dp_display_num, type);
+		dp_bond_info->dp_display_num = 0;
 	}
 
 	return 0;
