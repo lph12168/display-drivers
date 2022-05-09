@@ -3721,6 +3721,8 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 
 	display->ctrl_count = dsi_display_get_phandle_count(display,
 					dsi_ctrl_name);
+	display->boot_ctrl_count = display->ctrl_count;
+
 	phy_count = dsi_display_get_phandle_count(display, dsi_phy_name);
 
 	DSI_DEBUG("ctrl count=%d, phy count=%d\n",

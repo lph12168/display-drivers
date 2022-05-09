@@ -284,15 +284,22 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 {
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+	struct dsi_display *display;
 
 	if (!bridge) {
 		DSI_ERR("Invalid params\n");
 		return;
 	}
 
+	display = c_bridge->display;
+	if (!display) {
+		DSI_ERR("Invalid dsi display data\n");
+		return;
+	}
+
 	SDE_ATRACE_BEGIN("dsi_bridge_post_disable");
 	SDE_ATRACE_BEGIN("dsi_display_disable");
-	rc = dsi_display_disable(c_bridge->display);
+	rc = dsi_display_disable(display);
 	if (rc) {
 		DSI_ERR("[%d] DSI display disable failed, rc=%d\n",
 		       c_bridge->id, rc);
@@ -301,7 +308,7 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	}
 	SDE_ATRACE_END("dsi_display_disable");
 
-	rc = dsi_display_unprepare(c_bridge->display);
+	rc = dsi_display_unprepare(display);
 	if (rc) {
 		DSI_ERR("[%d] DSI display unprepare failed, rc=%d\n",
 		       c_bridge->id, rc);
@@ -309,6 +316,12 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		return;
 	}
 	SDE_ATRACE_END("dsi_bridge_post_disable");
+
+	if (display->ctrl_count != display->boot_ctrl_count) {
+		display->ctrl_count = display->boot_ctrl_count;
+		dsi_display_clk_mngr_update_ctrl_count(display->clk_mngr,
+				display->ctrl_count);
+	}
 }
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
@@ -337,10 +350,10 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 		dsi_drm_find_bit_clk_rate(c_bridge->display, adjusted_mode);
 
 	if (display->panel->host_config.ext_bridge_dynamic_mode_set) {
-		if (mode->hdisplay > 2560)
-			display->ctrl_count = 2;
-		else
+		if (mode->hdisplay <= 720 && mode->vdisplay <= 576)
 			display->ctrl_count = 1;
+		else
+			display->ctrl_count = display->boot_ctrl_count;
 
 		dsi_display_clk_mngr_update_ctrl_count(display->clk_mngr,
 			display->ctrl_count);

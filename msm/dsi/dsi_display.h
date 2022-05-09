@@ -206,6 +206,7 @@ struct dsi_display {
 	struct completion esd_te_gate;
 
 	u32 ctrl_count;
+	u32 boot_ctrl_count;
 	struct dsi_display_ctrl ctrl[MAX_DSI_CTRLS_PER_DISPLAY];
 
 	/* panel info */
