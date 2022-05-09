@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/habmm.h>
@@ -61,7 +62,7 @@ struct wire_context {
 	bool wire_isr_enable;
 	bool wire_isr_stop;
 	struct list_head _cb_info_ctx;
-	struct mutex _event_cb_lock;
+	spinlock_t _event_cb_lock;
 	struct task_struct *listener_thread;
 	bool support_batch_mode;
 };
@@ -549,7 +550,7 @@ wire_user_init(u32 client_id,
 		ctx->wire_isr_enable = true;
 		ctx->wire_isr_stop = false;
 		/* init event callback lock */
-		mutex_init(&ctx->_event_cb_lock);
+		spin_lock_init(&ctx->_event_cb_lock);
 
 		/* create event listener thread */
 		ctx->listener_thread = kthread_run(event_listener, ctx,
@@ -599,7 +600,6 @@ wire_user_deinit(
 
 	/* event handling de-initialization */
 	if (ctx->init_info.enable_event_handling) {
-		mutex_destroy(&ctx->_event_cb_lock);
 		kthread_stop(ctx->listener_thread);
 	}
 
@@ -3326,6 +3326,7 @@ event_handler(
 	struct cb_info_node *node;
 	enum event_types type;
 	union event_info info;
+	unsigned long flags;
 
 	if (!e_req)
 		return;
@@ -3341,9 +3342,9 @@ event_handler(
 					e_req->info.vm_event.type;
 	}
 
-	mutex_lock(&ctx->_event_cb_lock);
+	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
 	node = find_node_locked(type, &info, &ctx->_cb_info_ctx);
-	mutex_unlock(&ctx->_event_cb_lock);
+	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
 
 	if (node && node->cb_info.cb)
 		node->cb_info.cb(type, &info, node->cb_info.user_data);
@@ -3423,6 +3424,7 @@ wire_user_register_event_listener(
 	struct wire_context *ctx = wire_dev->ctx;
 	struct cb_info_node *node = NULL;
 	int rc = 0;
+	unsigned long flags;
 
 	if (!ctx->init_info.enable_event_handling) {
 		WIRE_LOG_ERROR("not supported");
@@ -3453,7 +3455,7 @@ wire_user_register_event_listener(
 	 *   b) error case
 	 */
 
-	mutex_lock(&ctx->_event_cb_lock);
+	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
 
 	node = find_node_locked(type, info, &ctx->_cb_info_ctx);
 	if (node) {
@@ -3464,7 +3466,7 @@ wire_user_register_event_listener(
 			kfree(node);
 		}
 	} else if (cb_info) {
-		node = kzalloc(sizeof(struct cb_info_node), GFP_KERNEL);
+		node = kzalloc(sizeof(struct cb_info_node), GFP_ATOMIC);
 		if (node) {
 			node->type = type;
 			node->info = *info;
@@ -3479,7 +3481,7 @@ wire_user_register_event_listener(
 		rc = -1;
 	}
 
-	mutex_unlock(&ctx->_event_cb_lock);
+	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
 
 end:
 
