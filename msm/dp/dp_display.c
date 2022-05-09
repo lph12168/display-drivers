@@ -2517,6 +2517,18 @@ static void dp_display_convert_to_dp_mode(struct dp_display *dp_display,
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	dp_panel = panel;
 
+	/*suspend state 0x120 or 0x23, normal state ox2f*/
+	if (!dp_display_state_is(DP_STATE_READY) ||
+		!dp_display_state_is(DP_STATE_CONNECTED)) {
+		if ((dp_display_state_is(DP_STATE_DISCONNECT_NOTIFIED) &&
+			dp_display_state_is(DP_STATE_ABORTED)) ||
+			(dp_display_state_is(DP_STATE_DISCONNECT_NOTIFIED) &&
+			dp_display_state_is(DP_STATE_CONFIGURED) &&
+			dp_display_state_is(DP_STATE_INITIALIZED))) {
+			DP_ERR("SUSPEND state not DP_STATE_READY return dp->state(0x%x) !\n", dp->state);
+			return;
+		}
+	}
 	memset(dp_mode, 0, sizeof(*dp_mode));
 
 	free_dsc_blks = dp->parser->max_dp_dsc_blks -
