@@ -621,7 +621,7 @@ int dp_vco_prepare_14nm(struct clk_hw *hw)
 	struct mdss_pll_resources *dp_res = vco->priv;
 
 	/* skip vco recalculation for continuous splash use case */
-	if (dp_res->handoff_resources == true)
+	if (dp_res->handoff_resources)
 		return 0;
 
 	pr_debug("rate=%ld\n", vco->rate);
@@ -678,6 +678,7 @@ void dp_vco_unprepare_14nm(struct clk_hw *hw)
 	dp_pll_disable_14nm(hw);
 
 	dp_res->handoff_resources = false;
+	dp_res->skip_handoff = true;
 	mdss_pll_resource_enable(dp_res, false);
 	dp_res->pll_on = false;
 }
@@ -727,9 +728,11 @@ unsigned long dp_vco_recalc_rate_14nm(struct clk_hw *hw,
 	}
 
 	dp_res->handoff_resources = false;
-	if (dp_14nm_pll_lock_status(dp_res) == true) {
+	if (dp_14nm_pll_lock_status(dp_res) && !dp_res->skip_handoff) {
 		pr_debug("PLL is enabled\n");
 		dp_res->handoff_resources = true;
+	} else {
+		dp_res->skip_handoff = true;
 	}
 
 	div = MDSS_PLL_REG_R(dp_res->pll_base, QSERDES_COM_HSCLK_SEL);
