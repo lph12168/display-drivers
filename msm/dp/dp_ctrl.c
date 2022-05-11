@@ -802,8 +802,17 @@ static int dp_ctrl_link_setup(struct dp_ctrl_private *ctrl, bool shallow)
 		dp_ctrl_configure_source_link_params(ctrl, false);
 		dp_ctrl_disable_link_clock(ctrl);
 
-		if (!link_train_max_retries || atomic_read(&ctrl->aborted))
+		if (!link_train_max_retries || atomic_read(&ctrl->aborted)) {
+			/*
+			 * For force connect mode, we expect the display pipe is
+			 * always running, user space can always render to, even
+			 * link training is failed or aborted.
+			 * Reenable link clock and exit link training as-is.
+			 */
+			if (ctrl->parser->force_connect_mode)
+				rc = dp_ctrl_enable_link_clock(ctrl);
 			break;
+		}
 
 		if (!(--link_train_max_retries % 10)) {
 			struct dp_link_params *link = &ctrl->link->link_params;
