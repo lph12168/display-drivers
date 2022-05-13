@@ -1449,17 +1449,18 @@ static int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 	}
 
 	if (vote_req) {
-		if (power_ctrl->enable)
+		if (power_ctrl->enable) {
 			rc = pm_runtime_get_sync(dev->dev);
-		else
-			pm_runtime_put_sync(dev->dev);
-
-		if (rc < 0) {
-			pm_runtime_put_noidle(dev->dev);
-			ctx->enable_refcnt = old_cnt;
+			if (rc < 0)
+				pm_runtime_put_noidle(dev->dev);
 		} else {
-			rc = 0;
+			pm_runtime_put_sync(dev->dev);
 		}
+
+		if (rc < 0)
+			ctx->enable_refcnt = old_cnt;
+		else
+			rc = 0;
 	}
 
 	pr_debug("pid %d enable %d, refcnt %d, vote_req %d\n",
