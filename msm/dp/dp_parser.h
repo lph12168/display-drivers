@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -13,6 +14,8 @@
 #define DP_MAX_PIXEL_CLK_KHZ	675000
 #define DP_MAX_LINK_CLK_KHZ	810000
 #define MAX_DP_MST_STREAMS	2
+#define DP_MAX_H_DISPLAY	4096
+#define DP_MAX_V_DISPLAY	2160
 
 enum dp_pm_type {
 	DP_CORE_PM,
@@ -186,6 +189,8 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @l_pnswap: P/N swap status on each lane
  * @max_pclk_khz: maximum pixel clock supported for the platform
  * @max_lclk_khz: maximum link clock supported for the platform
+ * @max_hdisplay: maximum supported horizontal display by the platform for dp
+ * @max_vdisplay: maximum supported vertical display by the platform for dp
  * @hw_cfg: DP HW specific settings
  * @has_mst: MST feature enable status
  * @has_mst_sideband: MST sideband feature enable status
@@ -217,6 +222,8 @@ struct dp_parser {
 	struct dp_aux_cfg aux_cfg[AUX_CFG_LEN];
 	u32 max_pclk_khz;
 	u32 max_lclk_khz;
+	u32 max_hdisplay;
+	u32 max_vdisplay;
 	struct dp_hw_cfg hw_cfg;
 	bool has_mst;
 	bool has_mst_sideband;

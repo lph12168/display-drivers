@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -776,27 +777,30 @@ static int dp_aux_configure_aux_switch(struct dp_aux *dp_aux,
 		goto end;
 	}
 
-	if (enable) {
-		switch (orientation) {
-		case ORIENTATION_CC1:
-			event = FSA_USBC_ORIENTATION_CC1;
-			break;
-		case ORIENTATION_CC2:
-			event = FSA_USBC_ORIENTATION_CC2;
-			break;
-		default:
-			DP_ERR("invalid orientation\n");
-			rc = -EINVAL;
-			goto end;
+	if (!strcmp(aux->aux_switch_node->name, "fsa4480")) {
+		if (enable) {
+			switch (orientation) {
+			case ORIENTATION_CC1:
+				event = FSA_USBC_ORIENTATION_CC1;
+				break;
+			case ORIENTATION_CC2:
+				event = FSA_USBC_ORIENTATION_CC2;
+				break;
+			default:
+				DP_ERR("invalid orientation\n");
+				rc = -EINVAL;
+				goto end;
+			}
 		}
+
+		DP_DEBUG("enable=%d, orientation=%d, event=%d\n",
+				enable, orientation, event);
+
+		rc = fsa4480_switch_event(aux->aux_switch_node, event);
+		if (rc)
+			DP_ERR("failed to configure fsa4480 i2c device (%d)\n",
+				rc);
 	}
-
-	DP_DEBUG("enable=%d, orientation=%d, event=%d\n",
-			enable, orientation, event);
-
-	rc = fsa4480_switch_event(aux->aux_switch_node, event);
-	if (rc)
-		DP_ERR("failed to configure fsa4480 i2c device (%d)\n", rc);
 end:
 	return rc;
 }
