@@ -228,8 +228,9 @@ const static u32 wire_user_cmd_size[OPENWFD_CMD_MAX] = {
  * Head size optimization
  * ---------------------------------------------------------------------------
  */
-
-#if (MAX_BUFS_CNT > 1) || defined(WIRE_USER_PROFILING_ENABLE)
+/* TODO: Workaround for kernel crash,for now disabling wire user profiling */
+#ifdef ENABLE_PROFILING
+/* #if (MAX_BUFS_CNT > 1) || defined(WIRE_USER_PROFILING_ENABLE) */
 #define WIRE_HEAP static
 static struct mutex _heap_mutex[PROFILING_MAX + 1];
 static bool _heap_inited;
