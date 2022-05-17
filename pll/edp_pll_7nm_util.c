@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[edp-pll] %s: " fmt, __func__
@@ -656,6 +657,10 @@ int edp_vco_prepare_7nm(struct clk_hw *hw)
 	vco = to_dp_vco_hw(hw);
 	edp_res = vco->priv;
 
+	/* skip vco recalculation for continuous splash use case */
+	if (edp_res->handoff_resources)
+		return 0;
+
 	pr_debug("eDP%d rate=%ld\n", edp_res->index, vco->rate);
 	rc = mdss_pll_resource_enable(edp_res, true);
 	if (rc) {
@@ -710,10 +715,14 @@ void edp_vco_unprepare_7nm(struct clk_hw *hw)
 		pr_err("pll resource can't be enabled\n");
 		return;
 	}
-	edp_res->vco_cached_rate = vco->rate;
+
+	if (!edp_res->handoff_resources)
+		edp_res->vco_cached_rate = vco->rate;
+
 	edp_pll_disable_7nm(hw);
 
 	edp_res->handoff_resources = false;
+	edp_res->skip_handoff = true;
 	mdss_pll_resource_enable(edp_res, false);
 	edp_res->pll_on = false;
 }
@@ -774,6 +783,14 @@ unsigned long edp_vco_recalc_rate_7nm(struct clk_hw *hw,
 	if (rc) {
 		pr_err("Failed to enable mdss eDP pll=%d\n", edp_res->index);
 		return 0;
+	}
+
+	edp_res->handoff_resources = false;
+	if (edp_7nm_pll_lock_status(edp_res) && !edp_res->skip_handoff) {
+		pr_info("PLL is enabled\n");
+		edp_res->handoff_resources = true;
+	} else {
+		edp_res->skip_handoff = true;
 	}
 
 	pr_debug("eDP%d input rates: parent=%lu, vco=%lu\n",
