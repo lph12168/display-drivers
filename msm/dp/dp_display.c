@@ -438,13 +438,6 @@ static void dp_display_hdcp_cb_work(struct work_struct *work)
 
 	dp = container_of(dw, struct dp_display_private, hdcp_cb_work);
 
-	dp_display_update_hdcp_info(dp);
-
-	if (!dp_display_is_hdcp_enabled(dp))
-		return;
-
-	dp->link->hdcp_status.hdcp_state = HDCP_STATE_AUTHENTICATING;
-
 	if (!dp_display_state_is(DP_STATE_ENABLED | DP_STATE_CONNECTED) ||
 	     dp_display_state_is(DP_STATE_ABORTED | DP_STATE_HDCP_ABORTED))
 		return;
@@ -779,6 +772,7 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 {
 	int ret = 0;
 	bool hpd = !!dp_display_state_is(DP_STATE_CONNECTED);
+	static int bootsplash_count;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state, hpd);
 
@@ -808,8 +802,9 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 
 	if (!dp_display_framework_ready(dp)) {
 		pr_debug("%s: dp display framework not ready\n", __func__);
-		if (!dp->dp_display.is_bootsplash_en) {
+		if (!dp->dp_display.is_bootsplash_en && !bootsplash_count) {
 			dp->dp_display.is_bootsplash_en = true;
+			bootsplash_count++;
 			drm_client_dev_register(dp->dp_display.drm_dev);
 		}
 		return ret;
@@ -2100,6 +2095,10 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
 	mutex_lock(&dp->session_lock);
 
+	if (dp->dp_display.is_bootsplash_en) {
+		dp->dp_display.is_bootsplash_en = false;
+		goto end;
+	}
 	/*
 	 * If DP_STATE_READY is not set, we should not do any HW
 	 * programming.
@@ -2135,6 +2134,7 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		dp_panel->audio->on(dp_panel->audio);
 	}
 end:
+	dp_display->post_open = NULL;
 	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
 
 	complete_all(&dp->notification_comp);
