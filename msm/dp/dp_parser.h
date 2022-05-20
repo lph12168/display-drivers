@@ -188,6 +188,7 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @mp: gpio, regulator and clock related data
  * @pinctrl: pin-control related data
  * @disp_data: controller's display related data
+ * @cell_idx: index of the display
  * @l_pnswap: P/N swap status on each lane
  * @max_pclk_khz: maximum pixel clock supported for the platform
  * @max_lclk_khz: maximum link clock supported for the platform
@@ -219,6 +220,7 @@ struct dp_parser {
 	struct dp_pinctrl pinctrl;
 	struct dp_io io;
 	struct dp_display_data disp_data;
+	u32 cell_idx;
 
 	u8 l_map[4];
 	u8 l_pnswap;
@@ -269,6 +271,7 @@ enum dp_mainlink_lane_num {
  * dp_parser_get() - get the DP's device tree parser module
  *
  * @pdev: platform data of the client
+ * @cell_idx: index of the DP display
  * return: pointer to dp_parser structure.
  *
  * This function provides client capability to parse the
@@ -276,7 +279,7 @@ enum dp_mainlink_lane_num {
  * related to clock, regulators, pin-control and other
  * can be parsed using this module.
  */
-struct dp_parser *dp_parser_get(struct platform_device *pdev);
+struct dp_parser *dp_parser_get(struct platform_device *pdev, u32 cell_idx);
 
 /**
  * dp_parser_put() - cleans the dp_parser module

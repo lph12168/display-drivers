@@ -1164,8 +1164,8 @@ static void dp_panel_config_tr_unit(struct dp_panel *dp_panel)
 	if (tu_calc_table.boundary_moderation_en)
 		valid_boundary2 |= BIT(0);
 
-	DP_DEBUG("dp_tu=0x%x, valid_boundary=0x%x, valid_boundary2=0x%x\n",
-			dp_tu, valid_boundary, valid_boundary2);
+	DP_DEBUG("DP%d dp_tu=0x%x, valid_boundary=0x%x, valid_boundary2=0x%x\n",
+			panel->parser->cell_idx, dp_tu, valid_boundary, valid_boundary2);
 
 	catalog->dp_tu = dp_tu;
 	catalog->valid_boundary = valid_boundary;
@@ -1313,8 +1313,8 @@ static void _dp_panel_dsc_bw_overhead_calc(struct dp_panel *dp_panel,
 	dwidth_dsc_bytes = tot_num_hor_bytes + tot_num_eoc_symbols +
 				tot_num_dummy_bytes;
 
-	DP_DEBUG("dwidth_dsc_bytes:%d, tot_num_hor_bytes:%d\n",
-			dwidth_dsc_bytes, tot_num_hor_bytes);
+	DP_DEBUG("DP%d dwidth_dsc_bytes:%d, tot_num_hor_bytes:%d\n",
+			panel->parser->cell_idx, dwidth_dsc_bytes, tot_num_hor_bytes);
 
 	dp_mode->dsc_overhead_fp = drm_fixp_from_fraction(dwidth_dsc_bytes,
 			tot_num_hor_bytes);
@@ -1607,21 +1607,24 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 
 	rlen = drm_dp_dpcd_read(drm_aux, DP_TRAINING_AUX_RD_INTERVAL, &temp, 1);
 	if (rlen != 1) {
-		DP_ERR("error reading DP_TRAINING_AUX_RD_INTERVAL\n");
+		DP_ERR("DP%d error reading DP_TRAINING_AUX_RD_INTERVAL\n",
+				panel->parser->cell_idx);
 		rc = -EINVAL;
 		goto end;
 	}
 
 	/* check for EXTENDED_RECEIVER_CAPABILITY_FIELD_PRESENT */
 	if (temp & BIT(7)) {
-		DP_DEBUG("using EXTENDED_RECEIVER_CAPABILITY_FIELD\n");
+		DP_DEBUG("DP%d using EXTENDED_RECEIVER_CAPABILITY_FIELD\n",
+				panel->parser->cell_idx);
 		offset = DPRX_EXTENDED_DPCD_FIELD;
 	}
 
 	rlen = drm_dp_dpcd_read(drm_aux, offset,
 		dp_panel->dpcd, (DP_RECEIVER_CAP_SIZE + 1));
 	if (rlen < (DP_RECEIVER_CAP_SIZE + 1)) {
-		DP_ERR("dpcd read failed, rlen=%d\n", rlen);
+		DP_ERR("DP%d dpcd read failed, rlen=%d\n",
+				panel->parser->cell_idx, rlen);
 		if (rlen == -ETIMEDOUT)
 			rc = rlen;
 		else
@@ -1636,7 +1639,8 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 	rlen = drm_dp_dpcd_read(panel->aux->drm_aux,
 		DPRX_FEATURE_ENUMERATION_LIST, &rx_feature, 1);
 	if (rlen != 1) {
-		DP_DEBUG("failed to read DPRX_FEATURE_ENUMERATION_LIST\n");
+		DP_DEBUG("DP%d failed to read DPRX_FEATURE_ENUMERATION_LIST\n",
+				panel->parser->cell_idx);
 		rx_feature = 0;
 	} else {
 		panel->vsc_supported = !!(rx_feature &
@@ -1646,7 +1650,8 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 		panel->vscext_chaining_supported = !!(rx_feature &
 				VSC_EXT_VESA_SDP_CHAINING_SUPPORTED);
 
-		DP_DEBUG("vsc=%d, vscext=%d, vscext_chaining=%d\n",
+		DP_DEBUG("DP%d vsc=%d, vscext=%d, vscext_chaining=%d\n",
+				panel->parser->cell_idx,
 				panel->vsc_supported, panel->vscext_supported,
 				panel->vscext_chaining_supported);
 	}
@@ -1661,14 +1666,15 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 	link_info->num_lanes = dpcd[DP_MAX_LANE_COUNT] & DP_MAX_LANE_COUNT_MASK;
 
 	if (is_link_rate_valid(panel->dp_panel.link_bw_code)) {
-		DP_DEBUG("debug link bandwidth code: 0x%x\n",
-				panel->dp_panel.link_bw_code);
+		DP_DEBUG("DP%d debug link bandwidth code: 0x%x\n",
+				panel->parser->cell_idx, panel->dp_panel.link_bw_code);
 		link_info->rate = drm_dp_bw_code_to_link_rate(
 				panel->dp_panel.link_bw_code);
 	}
 
 	if (is_lane_count_valid(panel->dp_panel.lane_count)) {
-		DP_DEBUG("debug lane count: %d\n", panel->dp_panel.lane_count);
+		DP_DEBUG("DP%d debug lane count: %d\n",
+				panel->parser->cell_idx, panel->dp_panel.lane_count);
 		link_info->num_lanes = panel->dp_panel.lane_count;
 	}
 
@@ -1676,8 +1682,9 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 		link_info->num_lanes = min_t(unsigned int,
 			link_info->num_lanes, 2);
 
-	DP_DEBUG("version:%d.%d, rate:%d, lanes:%d\n", panel->major,
-		panel->minor, link_info->rate, link_info->num_lanes);
+	DP_DEBUG("DP%d version:%d.%d, rate:%d, lanes:%d\n",
+			panel->parser->cell_idx, panel->major,
+			panel->minor, link_info->rate, link_info->num_lanes);
 
 	if (drm_dp_enhanced_frame_cap(dpcd))
 		link_info->capabilities |= DP_LINK_CAP_ENHANCED_FRAMING;
@@ -1691,15 +1698,16 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 			DP_DOWNSTREAM_PORT_0, dp_panel->ds_ports,
 			DP_MAX_DOWNSTREAM_PORTS);
 		if (rlen < DP_MAX_DOWNSTREAM_PORTS) {
-			DP_ERR("ds port status failed, rlen=%d\n", rlen);
+			DP_ERR("DP%d ds port status failed, rlen=%d\n",
+					panel->parser->cell_idx, rlen);
 			rc = -EINVAL;
 			goto end;
 		}
 	}
 
 	if (dfp_count > DP_MAX_DS_PORT_COUNT)
-		DP_DEBUG("DS port count %d greater that max (%d) supported\n",
-			dfp_count, DP_MAX_DS_PORT_COUNT);
+		DP_DEBUG("DP%d DS port count %d greater that max (%d) supported\n",
+				panel->parser->cell_idx, dfp_count, DP_MAX_DS_PORT_COUNT);
 
 end:
 	return rc;
@@ -1707,6 +1715,7 @@ end:
 
 static int dp_panel_set_default_link_params(struct dp_panel *dp_panel)
 {
+	struct dp_panel_private *panel;
 	struct drm_dp_link *link_info;
 	const int default_bw_code = 162000;
 	const int default_num_lanes = 1;
@@ -1715,11 +1724,13 @@ static int dp_panel_set_default_link_params(struct dp_panel *dp_panel)
 		DP_ERR("invalid input\n");
 		return -EINVAL;
 	}
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
 	link_info = &dp_panel->link_info;
 	link_info->rate = default_bw_code;
 	link_info->num_lanes = default_num_lanes;
-	DP_DEBUG("link_rate=%d num_lanes=%d\n",
-		link_info->rate, link_info->num_lanes);
+	DP_DEBUG("DP%d link_rate=%d num_lanes=%d\n",
+			panel->parser->cell_idx, link_info->rate, link_info->num_lanes);
 
 	return 0;
 }
@@ -1741,7 +1752,7 @@ static int dp_panel_read_edid(struct dp_panel *dp_panel,
 	sde_get_edid(connector, &panel->aux->drm_aux->ddc,
 		(void **)&dp_panel->edid_ctrl);
 	if (!dp_panel->edid_ctrl->edid) {
-		DP_ERR("EDID read failed\n");
+		DP_ERR("DP%d EDID read failed\n", panel->parser->cell_idx);
 		ret = -EINVAL;
 		goto end;
 	}
@@ -1788,7 +1799,8 @@ static void dp_panel_read_sink_dsc_caps(struct dp_panel *dp_panel)
 		rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_DSC_SUPPORT,
 			dp_panel->dsc_dpcd, (DP_RECEIVER_DSC_CAP_SIZE + 1));
 		if (rlen < (DP_RECEIVER_DSC_CAP_SIZE + 1)) {
-			DP_DEBUG("dsc dpcd read failed, rlen=%d\n", rlen);
+			DP_DEBUG("DP%d dsc dpcd read failed, rlen=%d\n",
+					panel->parser->cell_idx, rlen);
 			return;
 		}
 
@@ -1815,7 +1827,8 @@ static void dp_panel_read_sink_fec_caps(struct dp_panel *dp_panel)
 	rlen = drm_dp_dpcd_readb(panel->aux->drm_aux, DP_FEC_CAPABILITY,
 			&dp_panel->fec_dpcd);
 	if (rlen < 1) {
-		DP_ERR("fec capability read failed, rlen=%d\n", rlen);
+		DP_ERR("DP%d fec capability read failed, rlen=%d\n",
+				panel->parser->cell_idx, rlen);
 		return;
 	}
 
@@ -1850,10 +1863,12 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 		((drm_dp_link_rate_to_bw_code(dp_panel->link_info.rate)) >
 		dp_panel->max_bw_code)) {
 		if ((rc == -ETIMEDOUT) || (rc == -ENODEV)) {
-			DP_ERR("DPCD read failed, return early\n");
+			DP_ERR("DP%d DPCD read failed, return early\n",
+					panel->parser->cell_idx);
 			goto end;
 		}
-		DP_ERR("panel dpcd read failed/incorrect, set default params\n");
+		DP_ERR("DP%d panel dpcd read failed/incorrect, set default params\n",
+				panel->parser->cell_idx);
 		dp_panel_set_default_link_params(dp_panel);
 	}
 
@@ -1866,7 +1881,8 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 		if (rlen == count_len) {
 			count = DP_GET_SINK_COUNT(count);
 			if (!count) {
-				DP_ERR("no downstream ports connected\n");
+				DP_ERR("DP%d no downstream ports connected\n",
+						panel->parser->cell_idx);
 				panel->link->sink_count.count = 0;
 				rc = -ENOTCONN;
 				goto end;
@@ -1880,7 +1896,8 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 
 	rc = dp_panel_read_edid(dp_panel, connector);
 	if (rc) {
-		DP_ERR("panel edid read failed, set failsafe mode\n");
+		DP_ERR("DP%d panel edid read failed, set failsafe mode\n",
+				panel->parser->cell_idx);
 		return rc;
 	}
 
@@ -1900,7 +1917,8 @@ skip_edid:
 			dp_panel_read_sink_dsc_caps(dp_panel);
 	}
 
-	DP_INFO("fec_en=%d, dsc_en=%d, widebus_en=%d\n", dp_panel->fec_en,
+	DP_INFO("DP%d fec_en=%d, dsc_en=%d, widebus_en=%d\n",
+			panel->parser->cell_idx, dp_panel->fec_en,
 			dp_panel->dsc_en, dp_panel->widebus_en);
 end:
 	return rc;
@@ -1950,10 +1968,11 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 	}
 
 	if (bpp < min_supported_bpp)
-		DP_ERR("bpp %d is below minimum supported bpp %d\n", bpp,
-				min_supported_bpp);
+		DP_ERR("DP%d bpp %d is below minimum supported bpp %d\n",
+				panel->parser->cell_idx, bpp, min_supported_bpp);
 	if (dp_panel->dsc_en && bpp != 24 && bpp != 30 && bpp != 36)
-		DP_ERR("bpp %d is not supported when dsc is enabled\n", bpp);
+		DP_ERR("DP%d bpp %d is not supported when dsc is enabled\n",
+				panel->parser->cell_idx, bpp);
 
 	return bpp;
 }
@@ -2097,7 +2116,8 @@ static void dp_panel_tpg_config(struct dp_panel *dp_panel, u32 pattern)
 	pinfo = &panel->dp_panel.pinfo;
 
 	if (!panel->panel_on) {
-		DP_DEBUG("DP panel not enabled, handle TPG on next panel on\n");
+		DP_DEBUG("DP%d DP panel not enabled, handle TPG on next panel on\n",
+				panel->parser->cell_idx);
 		return;
 	}
 
@@ -2154,11 +2174,11 @@ static int dp_panel_config_timing(struct dp_panel *dp_panel)
 	catalog = panel->catalog;
 	pinfo = &panel->dp_panel.pinfo;
 
-	DP_DEBUG("width=%d hporch= %d %d %d\n",
+	DP_DEBUG("DP%d width=%d hporch= %d %d %d\n", panel->parser->cell_idx,
 		pinfo->h_active, pinfo->h_back_porch,
 		pinfo->h_front_porch, pinfo->h_sync_width);
 
-	DP_DEBUG("height=%d vporch= %d %d %d\n",
+	DP_DEBUG("DP%d height=%d vporch= %d %d %d\n", panel->parser->cell_idx,
 		pinfo->v_active, pinfo->v_back_porch,
 		pinfo->v_front_porch, pinfo->v_sync_width);
 
@@ -2252,7 +2272,8 @@ static void dp_panel_config_dsc(struct dp_panel *dp_panel, bool enable)
 		rc = sde_dsc_create_pps_buf_cmd(&comp_info->dsc_info,
 				dsc->pps, 0, sizeof(dsc->pps));
 		if (rc) {
-			DP_ERR("failed to create pps cmd %d\n", rc);
+			DP_ERR("DP%d failed to create pps cmd %d\n",
+					panel->parser->cell_idx, rc);
 			return;
 		}
 		dsc->pps_len = DSC_1_1_PPS_PARAMETER_SET_ELEMENTS;
@@ -2290,7 +2311,7 @@ static int dp_panel_edid_register(struct dp_panel_private *panel)
 
 	panel->dp_panel.edid_ctrl = sde_edid_init();
 	if (!panel->dp_panel.edid_ctrl) {
-		DP_ERR("sde edid init for DP failed\n");
+		DP_ERR("DP%d sde edid init for DP failed\n", panel->parser->cell_idx);
 		rc = -ENOMEM;
 	}
 
@@ -2362,12 +2383,13 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel, u32 flags)
 	struct drm_connector *connector;
 	struct sde_connector_state *c_state;
 
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	if (flags & DP_PANEL_SRC_INITIATED_POWER_DOWN) {
-		DP_DEBUG("retain states in src initiated power down request\n");
+		DP_DEBUG("DP%d retain states in src initiated power down request\n",
+				panel->parser->cell_idx);
 		return 0;
 	}
 
-	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	hdr_meta = &panel->catalog->hdr_meta;
 	dhdr_vsif_sdp = &panel->catalog->dhdr_vsif_sdp;
 	shdr_if_sdp = &panel->catalog->shdr_if_sdp;
@@ -2617,7 +2639,8 @@ static int dp_panel_set_colorspace(struct dp_panel *dp_panel,
 	 * shall be used in the dp_panel_hw_cfg
 	 */
 	if (panel->panel_on) {
-		DP_DEBUG("panel is ON programming colorspace\n");
+		DP_DEBUG("DP%d panel is ON programming colorspace\n",
+				panel->parser->cell_idx);
 		rc =  panel->catalog->set_colorspace(panel->catalog,
 			  panel->vsc_supported);
 	}
@@ -2707,12 +2730,12 @@ static int dp_panel_spd_config(struct dp_panel *dp_panel)
 		return -EINVAL;
 	}
 
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
 	if (!dp_panel->spd_enabled) {
-		DP_DEBUG("SPD Infoframe not enabled\n");
+		DP_DEBUG("DP%d SPD Infoframe not enabled\n", panel->parser->cell_idx);
 		goto end;
 	}
-
-	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
 	panel->catalog->spd_vendor_name = panel->spd_vendor_name;
 	panel->catalog->spd_product_description =
@@ -2815,8 +2838,10 @@ static void dp_panel_resolution_info(struct dp_panel_private *panel)
 	 * print resolution info as this is a result
 	 * of user initiated action of cable connection
 	 */
-	DP_INFO("DP RESOLUTION: active(back|front|width|low)\n");
-	DP_INFO("%d(%d|%d|%d|%d)x%d(%d|%d|%d|%d)@%dfps %dbpp %dKhz %dLR %dLn\n",
+	DP_INFO("DP%d DP RESOLUTION: active(back|front|width|low)\n",
+		panel->parser->cell_idx);
+	DP_INFO("DP%d %d(%d|%d|%d|%d)x%d(%d|%d|%d|%d)@%dfps %dbpp %dKhz %dLR %dLn\n",
+		panel->parser->cell_idx,
 		pinfo->h_active, pinfo->h_back_porch, pinfo->h_front_porch,
 		pinfo->h_sync_width, pinfo->h_active_low,
 		pinfo->v_active, pinfo->v_back_porch, pinfo->v_front_porch,
@@ -2894,7 +2919,8 @@ static int dp_panel_read_sink_sts(struct dp_panel *dp_panel, u8 *sts, u32 size)
 	rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_SINK_COUNT_ESI,
 		sts, size);
 	if (rlen != size) {
-		DP_ERR("dpcd sink sts fail rlen:%d size:%d\n", rlen, size);
+		DP_ERR("DP%d dpcd sink sts fail rlen:%d size:%d\n",
+				panel->parser->cell_idx, rlen, size);
 		rc = -EINVAL;
 		return rc;
 	}
@@ -2932,14 +2958,15 @@ static bool dp_panel_read_mst_cap(struct dp_panel *dp_panel)
 	rlen = drm_dp_dpcd_read(panel->aux->drm_aux, DP_MSTM_CAP,
 		&dpcd, 1);
 	if (rlen < 1) {
-		DP_ERR("dpcd mstm_cap read failed, rlen=%d\n", rlen);
+		DP_ERR("DP%d dpcd mstm_cap read failed, rlen=%d\n",
+				panel->parser->cell_idx, rlen);
 		goto end;
 	}
 
 	mst_cap = (dpcd & DP_MST_CAP) ? true : false;
 
 end:
-	DP_DEBUG("dp mst-cap: %d\n", mst_cap);
+	DP_DEBUG("DP%d dp mst-cap: %d\n", panel->parser->cell_idx, mst_cap);
 
 	return mst_cap;
 }
