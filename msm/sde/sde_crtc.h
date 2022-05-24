@@ -461,6 +461,8 @@ struct sde_crtc {
 
 	DECLARE_BITMAP(hwfence_features_mask, HW_FENCE_FEATURES_MAX);
 	u32 hwfence_out_fences_skip;
+
+	int base_reset;
 };
 
 enum sde_crtc_dirty_flags {
