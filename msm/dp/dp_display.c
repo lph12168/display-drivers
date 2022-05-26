@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
@@ -701,6 +702,45 @@ static void dp_display_send_hpd_notification(struct dp_display_private *dp)
 	dp_display_send_hpd_event(dp);
 }
 
+static void dp_display_send_force_connect_event(struct dp_display_private *dp)
+{
+	struct drm_device *dev = NULL;
+	struct drm_connector *connector;
+	char name[HPD_STRING_SIZE];
+	char *envp[5];
+
+	connector = dp->dp_display.base_connector;
+
+	if (!connector) {
+		pr_err("DP%d connector not set\n", dp->cell_idx);
+		return;
+	}
+
+	dev = connector->dev;
+
+	snprintf(name, HPD_STRING_SIZE, "name=%s", connector->name);
+
+	envp[0] = name;
+	envp[1] = dp->hpd->hpd_high ? "sink=connected" : "sink=disconnected";
+	if ((dp->aux->state & DP_STATE_TRAIN_1_SUCCEEDED) &&
+			(dp->aux->state & DP_STATE_TRAIN_2_SUCCEEDED))
+		envp[2] = "link=ready";
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_FAILED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_FAILED))
+		envp[2] = "link=failed";
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_STARTED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_STARTED))
+		envp[2] = "link=training";
+	else
+		envp[2] = "link=not_ready";
+	envp[3] = (dp->aux->state & DP_STATE_CTRL_POWERED_ON) ?
+			"stream=ON" : "stream=OFF";
+	envp[4] = NULL;
+	pr_info("[%s]:[%s] [%s] [%s]\n", name, envp[1], envp[2], envp[3]);
+
+	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+
 static void dp_display_update_mst_state(struct dp_display_private *dp,
 					bool state)
 {
@@ -827,14 +867,15 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 	pr_info("DP%d [OK]\n", dp->cell_idx);
 }
 
-static int dp_display_process_hpd_high(struct dp_display_private *dp)
+static int dp_display_process_hpd_high(struct dp_display_private *dp,
+		bool force)
 {
 	int rc = -EINVAL;
 
 	pr_debug("DP%d\n", dp->cell_idx);
 	mutex_lock(&dp->session_lock);
 
-	if (dp->is_connected) {
+	if (dp->is_connected && !force) {
 		pr_debug("DP%d already connected, skipping hpd high processing\n",
 				dp->cell_idx);
 		mutex_unlock(&dp->session_lock);
@@ -889,7 +930,9 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 end:
 	mutex_unlock(&dp->session_lock);
 
-	if (!rc)
+	if (dp->parser->force_connect_mode)
+		dp_display_send_force_connect_event(dp);
+	else if (!rc)
 		dp_display_send_hpd_notification(dp);
 
 	return rc;
@@ -1086,7 +1129,9 @@ static void dp_display_handle_disconnect(struct dp_display_private *dp)
 		dp->ctrl->abort(dp->ctrl, true);
 		atomic_set(&dp->aborted, 0);
 
-		dp_display_process_hpd_high(dp);
+		dp_display_send_force_connect_event(dp);
+
+		dp_display_process_hpd_high(dp, false);
 
 		/* If stream isn't running, started here */
 		if (!dp->power_on && dp->dp_display.base_connector)
@@ -1355,14 +1400,15 @@ static void dp_display_connect_work(struct work_struct *work)
 			dp_display_clean(dp);
 			dp_display_host_deinit(dp);
 		}
-		dp->is_connected = false;
 		dp_display_process_mst_hpd_low(dp);
 		dp_sim_set_sim_mode(dp->aux_bridge, 0);
+		dp->aux->state = 0;
+		dp_display_send_force_connect_event(dp);
 	}
 
 	mutex_unlock(&dp->session_lock);
 
-	rc = dp_display_process_hpd_high(dp);
+	rc = dp_display_process_hpd_high(dp, dp->parser->force_connect_mode);
 
 	if (!rc && dp->panel->video_test)
 		dp->link->send_test_response(dp->link);
@@ -1608,7 +1654,8 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		 * connector modes when link training is still running.
 		 */
 		dp_sim_set_sim_mode(dp->aux_bridge, DP_SIM_MODE_ALL);
-		dp_display_process_hpd_high(dp);
+		dp_display_process_hpd_high(dp, true);
+		dp_display_send_hpd_notification(dp);
 	}
 
 	return rc;
@@ -1848,6 +1895,9 @@ static int dp_display_prepare(struct dp_display *dp_display, void *panel)
 end:
 	mutex_unlock(&dp->session_lock);
 
+	if (dp->parser->force_connect_mode)
+		dp_display_send_force_connect_event(dp);
+
 	return 0;
 }
 
@@ -1980,7 +2030,7 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		goto end;
 
 	if (!dp_display_is_ready(dp) || !dp->core_initialized) {
-		pr_err("DP%d display not ready\n", dp->cell_idx);
+		pr_debug("DP%d display not ready\n", dp->cell_idx);
 		goto end;
 	}
 
@@ -1996,8 +2046,12 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		cancel_delayed_work_sync(&dp->hdcp_cb_work);
 		queue_delayed_work(dp->wq, &dp->hdcp_cb_work, HZ);
 	}
+
 end:
 	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
+
+	if (dp->parser->force_connect_mode)
+		dp_display_send_force_connect_event(dp);
 
 	mutex_unlock(&dp->session_lock);
 	return 0;
@@ -2206,6 +2260,9 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	dp->power_on = false;
 	dp->aux->state = DP_STATE_CTRL_POWERED_OFF;
 
+	if (dp->parser->force_connect_mode)
+		dp_display_send_force_connect_event(dp);
+
 	/* log this as it results from user action of cable dis-connection */
 	pr_info("DP%d [OK]", dp->cell_idx);
 end:
@@ -2405,6 +2462,12 @@ static int dp_display_create_workqueue(struct dp_display_private *dp)
 	INIT_WORK(&dp->attention_work, dp_display_attention_work);
 
 	return 0;
+}
+
+static void dp_display_destroy_workqueue(struct dp_display_private *dp)
+{
+	if (dp && dp->wq)
+		destroy_workqueue(dp->wq);
 }
 
 static int dp_display_fsa4480_callback(struct notifier_block *self,
@@ -3084,6 +3147,8 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	return 0;
 error:
+	dp_display_destroy_workqueue(dp);
+	g_dp_display[index] = NULL;
 	devm_kfree(&pdev->dev, dp);
 bail:
 	return rc;
@@ -3276,8 +3341,7 @@ static int dp_display_remove(struct platform_device *pdev)
 
 	dp_display_deinit_sub_modules(dp);
 
-	if (dp->wq)
-		destroy_workqueue(dp->wq);
+	dp_display_destroy_workqueue(dp);
 
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, dp);
@@ -3295,6 +3359,9 @@ static int dp_pm_prepare(struct device *dev)
 	dp = dev_get_drvdata(dev);
 
 	dp->suspended = true;
+
+	if (!dp->dp_display.base_connector)
+		return 0;
 
 	dp_display_set_mst_state(&dp->dp_display, PM_SUSPEND);
 
@@ -3320,6 +3387,9 @@ static int dp_pm_prepare(struct device *dev)
 		dp->ctrl->off(dp->ctrl);
 		dp_display_host_deinit(dp);
 		dp->aux->state = DP_STATE_CTRL_POWERED_OFF;
+
+		if (dp->parser->force_connect_mode)
+			dp_display_send_force_connect_event(dp);
 	}
 
 	return 0;
@@ -3334,9 +3404,12 @@ static void dp_pm_complete(struct device *dev)
 
 	dp = dev_get_drvdata(dev);
 
-	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
-
 	dp->suspended = false;
+
+	if (!dp->dp_display.base_connector)
+		return;
+
+	dp_display_set_mst_state(&dp->dp_display, PM_DEFAULT);
 
 	/*
 	 * There are multiple PM suspend entry and exits observed before
@@ -3360,6 +3433,9 @@ static int dp_pm_freeze(struct device *dev)
 		return -EINVAL;
 
 	dp = dev_get_drvdata(dev);
+
+	if (!dp->dp_display.base_connector)
+		return 0;
 
 	dp_display_set_mst_state(&dp->dp_display, PM_FREEZE);
 

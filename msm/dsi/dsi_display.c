@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"msm-dsi-display:[%s] " fmt, __func__
@@ -5320,7 +5321,9 @@ static struct platform_driver dsi_display_driver = {
 static int dsi_display_init(struct dsi_display *display)
 {
 	int rc = 0;
-	 struct platform_device *pdev = display->pdev;
+	struct platform_device *pdev = display->pdev;
+	struct dsi_display_ctrl *ctrl;
+	int i;
 
 	mutex_init(&display->display_lock);
 
@@ -5332,11 +5335,21 @@ static int dsi_display_init(struct dsi_display *display)
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
 	if (rc){
-		pr_err("component add failed, rc=%d\n", rc);
-		goto end;
+		pr_debug("component add failed, rc=%d\n", rc);
+		goto deint;
 	}
 
 	pr_debug("component add success: %s\n", display->name);
+
+deint:
+	display_for_each_ctrl(i, display) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl || !ctrl->phy)
+			break;
+
+		dsi_ctrl_put(ctrl->ctrl);
+		dsi_phy_put(ctrl->phy);
+	}
 end:
 	return rc;
 }

@@ -2,6 +2,7 @@
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -2987,8 +2988,6 @@ static void sde_crtc_vblank_cb(void *data)
 	struct drm_crtc *crtc = (struct drm_crtc *)data;
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
 
-	sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
-
 	/* keep statistics on vblank callback - with auto reset via debugfs */
 	if (ktime_compare(sde_crtc->vblank_cb_time, ktime_set(0, 0)) == 0)
 		sde_crtc->vblank_cb_time = ktime_get();
@@ -3082,6 +3081,8 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 
 	if (fevent->event & SDE_ENCODER_FRAME_EVENT_SIGNAL_RELEASE_FENCE) {
 		SDE_ATRACE_BEGIN("signal_release_fence");
+		sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
+
 		sde_fence_signal(sde_crtc->output_fence, fevent->ts,
 				(fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR)
 				? SDE_FENCE_SIGNAL_ERROR : SDE_FENCE_SIGNAL);
