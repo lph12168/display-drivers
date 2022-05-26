@@ -1793,6 +1793,33 @@ static int dp_panel_dsc_prepare_basic_params(
 	return 0;
 }
 
+static bool dp_panel_dpcp_rev_status(u8 dpcd_rev)
+{
+	switch (dpcd_rev) {
+	case DP_DPCD_REV_10:
+	case DP_DPCD_REV_11:
+	case DP_DPCD_REV_12:
+	case DP_DPCD_REV_13:
+	case DP_DPCD_REV_14:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool dp_panel_bw_code_status(u8 link_bw)
+{
+	switch (link_bw) {
+	case DP_LINK_BW_1_62:
+	case DP_LINK_BW_2_7:
+	case DP_LINK_BW_5_4:
+	case DP_LINK_BW_8_1:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 {
 	int rlen, rc = 0;
@@ -1801,6 +1828,7 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 	struct drm_dp_aux *drm_aux;
 	u8 *dpcd, rx_feature, temp;
 	u32 dfp_count = 0, offset = DP_DPCD_REV;
+	u8 i = 0, retry = 5;
 
 	if (!dp_panel) {
 		DP_ERR("invalid input\n");
@@ -1837,8 +1865,16 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 		offset = DPRX_EXTENDED_DPCD_FIELD;
 	}
 
-	rlen = drm_dp_dpcd_read(drm_aux, offset,
-		dp_panel->dpcd, (DP_RECEIVER_CAP_SIZE + 1));
+	for (i = 0; i < retry; i++) {
+		rlen = drm_dp_dpcd_read(drm_aux, offset,
+			dp_panel->dpcd, (DP_RECEIVER_CAP_SIZE + 1));
+		if (dp_panel_dpcp_rev_status(dp_panel->dpcd[DP_DPCD_REV]) &&
+			dp_panel_bw_code_status(dp_panel->dpcd[DP_MAX_LINK_RATE])) {
+			break;
+		}
+		print_hex_dump(KERN_DEBUG, "[drm-dp] retry SINK DPCD: ",
+			DUMP_PREFIX_NONE, 8, 1, dp_panel->dpcd, rlen, false);
+	}
 	if (rlen < (DP_RECEIVER_CAP_SIZE + 1)) {
 		DP_ERR("dpcd read failed, rlen=%d\n", rlen);
 		if (rlen == -ETIMEDOUT)
