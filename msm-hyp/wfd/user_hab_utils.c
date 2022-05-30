@@ -320,7 +320,6 @@ user_os_utils_send_recv(
 	u32 num_of_wfd_cmds = 0;
 	enum openwfd_cmd_type wfd_cmd_type = OPENWFD_CMD_MAX;
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
-	unsigned long delay = jiffies + (HZ / 2);
 
 	if (!req || !resp) {
 		UTILS_LOG_ERROR("NULL req(0x%p) or resp(0x%p)",
@@ -412,8 +411,7 @@ user_os_utils_send_recv(
 					"habmm_socket_recv - interrupted system call - retry");
 			}
 		}
-	} while ((time_before(jiffies, delay)) && (-EAGAIN == rc) &&
-							(resp_size == 0));
+	} while ((-EAGAIN == rc) && (resp_size == 0));
 
 	HYP_ATRACE_END(marker_buff);
 
