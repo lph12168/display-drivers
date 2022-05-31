@@ -1564,6 +1564,11 @@ static int dp_sim_debug_init(struct dp_sim_device *sim_dev)
 	if (!sim_dev->label)
 		return 0;
 
+	if (!IS_ENABLED(CONFIG_DEBUG_FS)) {
+		pr_err("Skip creating debugfs\n");
+		return 0;
+	}
+
 	dir = debugfs_create_dir(sim_dev->label, NULL);
 	if (IS_ERR_OR_NULL(dir)) {
 		rc = PTR_ERR(dir);
