@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_CATALOG_H_
@@ -124,6 +125,11 @@ struct dp_catalog_ctrl {
 			u32 ch, u32 ch_start_timeslot, u32 tot_ch_cnt);
 	void (*fec_config)(struct dp_catalog_ctrl *ctrl, bool enable);
 	void (*mainlink_levels)(struct dp_catalog_ctrl *ctrl, u8 lane_cnt);
+	void (*setup_misr)(struct dp_catalog_ctrl *ctrl,
+			bool enable, u32 frame_count);
+	int (*collect_misr)(struct dp_catalog_ctrl *ctrl, u32 *misr);
+	int (*collect_crc)(struct dp_catalog_ctrl *ctrl,
+			u32 *r, u32 *g, u32 *b, int strm_id);
 };
 
 struct dp_catalog_hpd {

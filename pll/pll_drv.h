@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MDSS_PLL_H
@@ -136,6 +137,7 @@ struct mdss_pll_resources {
 	 * feature is disabled.
 	 */
 	bool		handoff_resources;
+	bool		skip_handoff;
 
 	/*
 	 * caching the pll trim codes in the case of dynamic refresh
