@@ -289,6 +289,9 @@ static int dp_power_clk_init(struct dp_power_private *power, bool enable)
 		if (power->pixel_parent)
 			clk_put(power->pixel_parent);
 
+		if (power->xo_clk)
+			clk_put(power->xo_clk);
+
 		if (power->pixel_clk_rcg)
 			clk_put(power->pixel_clk_rcg);
 
@@ -417,6 +420,7 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 	int rc = 0;
 	struct dss_module_power *mp;
 	struct dp_power_private *power;
+	enum dp_stream_id stream_id;
 
 	if (!dp_power) {
 		DP_ERR("invalid power data\n");
@@ -472,6 +476,17 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 			DP_DEBUG("DP%d links clks already enabled\n",
 					power->parser->cell_idx);
 			return 0;
+		}
+	} else {
+		if (pm_type == DP_STREAM0_PM || pm_type == DP_STREAM1_PM) {
+			stream_id = pm_type - DP_STREAM0_PM + DP_STREAM_0;
+			dp_power->set_pixel_clk_parent(dp_power, stream_id);
+		} else if (pm_type == DP_LINK_PM && power->link_clk_rcg
+			&& power->xo_clk) {
+			rc = clk_set_parent(power->link_clk_rcg, power->xo_clk);
+			if (rc)
+				DP_ERR("DP%d failed to set link parent to XO\n",
+						power->parser->cell_idx);
 		}
 	}
 
@@ -764,16 +779,18 @@ static int dp_power_set_pixel_clk_parent(struct dp_power *dp_power, u32 strm_id)
 	power = container_of(dp_power, struct dp_power_private, dp_power);
 
 	if (strm_id == DP_STREAM_0) {
-		if (power->pixel_clk_rcg && power->pixel_parent)
-			rc = clk_set_parent(power->pixel_clk_rcg,
-					power->pixel_parent);
+		if (power->strm0_clks_on && power->pixel_clk_rcg && power->xo_clk)
+			rc = clk_set_parent(power->pixel_clk_rcg, power->xo_clk);
+		else if (power->pixel_clk_rcg && power->pixel_parent)
+			rc = clk_set_parent(power->pixel_clk_rcg, power->pixel_parent);
 		else
 			DP_WARN("DP%d skipped for strm_id=%d\n",
 					power->parser->cell_idx, strm_id);
 	} else if (strm_id == DP_STREAM_1) {
-		if (power->pixel1_clk_rcg && power->pixel_parent)
-			rc = clk_set_parent(power->pixel1_clk_rcg,
-					power->pixel_parent);
+		if (power->strm1_clks_on && power->pixel1_clk_rcg && power->xo_clk)
+			rc = clk_set_parent(power->pixel1_clk_rcg, power->xo_clk);
+		else if (power->pixel1_clk_rcg && power->pixel_parent)
+			rc = clk_set_parent(power->pixel1_clk_rcg, power->pixel_parent);
 		else
 			DP_WARN("DP%d skipped for strm_id=%d\n",
 					power->parser->cell_idx, strm_id);
