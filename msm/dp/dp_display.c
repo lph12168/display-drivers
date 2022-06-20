@@ -2551,6 +2551,28 @@ static int dp_display_get_modes(struct dp_display *dp, void *panel,
 	return ret;
 }
 
+static bool dp_display_check_state(struct dp_display_private *dp)
+{
+	if (!dp_display_state_is(DP_STATE_READY) &&
+		!dp_display_state_is(DP_STATE_CONNECTED) &&
+		!dp_display_state_is(DP_STATE_SUSPENDED)) {
+		return true;
+	}
+	return false;
+}
+
+static bool dp_display_disconnect_state(struct dp_display_private *dp)
+{
+	if ((dp_display_state_is(DP_STATE_DISCONNECT_NOTIFIED) &&
+		dp_display_state_is(DP_STATE_ABORTED)) ||
+		(dp_display_state_is(DP_STATE_DISCONNECT_NOTIFIED) &&
+		dp_display_state_is(DP_STATE_CONFIGURED) &&
+		dp_display_state_is(DP_STATE_INITIALIZED))) {
+		return true;
+	}
+	return false;
+}
+
 static void dp_display_convert_to_dp_mode(struct dp_display *dp_display,
 		void *panel,
 		const struct drm_display_mode *drm_mode,
@@ -2567,6 +2589,11 @@ static void dp_display_convert_to_dp_mode(struct dp_display *dp_display,
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	dp_panel = panel;
+
+	if (dp_display_check_state(dp) && dp_display_disconnect_state(dp)) {
+		dp_display_state_show("[state return]");
+		return;
+	}
 
 	memset(dp_mode, 0, sizeof(*dp_mode));
 
