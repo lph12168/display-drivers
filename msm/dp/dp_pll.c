@@ -53,6 +53,7 @@ static int dp_pll_clock_register(struct dp_pll *pll)
 	switch (pll->revision) {
 	case DP_PLL_5NM_V1:
 	case DP_PLL_5NM_V2:
+	case DP_PLL_7NM:
 		rc = dp_pll_clock_register_5nm(pll);
 		break;
 	case DP_PLL_4NM_V1:
@@ -72,6 +73,7 @@ static void dp_pll_clock_unregister(struct dp_pll *pll)
 	switch (pll->revision) {
 	case DP_PLL_5NM_V1:
 	case DP_PLL_5NM_V2:
+	case DP_PLL_7NM:
 		dp_pll_clock_unregister_5nm(pll);
 		break;
 	case DP_PLL_4NM_V1:
@@ -140,6 +142,8 @@ struct dp_pll *dp_pll_get(struct dp_pll_in *in)
 			pll->revision = DP_PLL_5NM_V1;
 		} else if (!strcmp(label, "5nm-v2")) {
 			pll->revision = DP_PLL_5NM_V2;
+		} else if (!strcmp(label, "7nm")) {
+			pll->revision = DP_PLL_7NM;
 		} else if (!strcmp(label, "4nm-v1")) {
 			pll->revision = DP_PLL_4NM_V1;
 		} else if (!strcmp(label, "4nm-v1.1")) {
