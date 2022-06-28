@@ -25,14 +25,16 @@
  */
 #define CHANNEL_OPENWFD		0
 #define CHANNEL_EVENTS		1
-#define MAX_CHANNELS		2
+#define CHANNEL_BUFFERS		2
+#define MAX_CHANNELS		3
 #define WFD_MAX_NUM_OF_CLIENTS	10
 #define WFD_CLIENT_ID_BASE	WFD_CLIENT_ID_CLUSTER
 #define WFD_CLIENT_ID_LA_CONTAINER	0x7818
 #define WFD_CLIENT_ID_LV_CONTAINER	0x7819
 
-#define DO_NOT_LOCK_CHANNEL	0x01
-#define HAB_NO_TIMEOUT_VAL	-1
+#define DO_NOT_LOCK_CHANNEL		0x01
+#define HAB_NO_TIMEOUT_VAL		-1
+#define HAB_BUF_CHANNEL_TIMEOUT_VAL	500
 
 #if !defined(__QNXNTO__) && !defined(__linux__)
 #define CLOCK_MONOTONIC		CLOCK_REALTIME
@@ -71,7 +73,7 @@
  * Structure/Enumeration/Union Definitions
  * ---------------------------------------------------------------------------
  */
-static u32 channel_map[WFD_MAX_NUM_OF_CLIENTS][2] = {
+static u32 channel_map[WFD_MAX_NUM_OF_CLIENTS][3] = {
 	/* Each MM ID translates to a physical channel per VM.
 	 * Different clients on the same VM should use different MM IDs.
 	 */
@@ -87,30 +89,38 @@ static u32 channel_map[WFD_MAX_NUM_OF_CLIENTS][2] = {
 	[WFD_CLIENT_ID_LA_GVM - WFD_CLIENT_ID_BASE] /* LA GVM */
 	{
 		MM_DISP_1,
-		MM_DISP_2
+		MM_DISP_2,
+		MM_DISP_3
 	},
 	[WFD_CLIENT_ID_LV_GVM - WFD_CLIENT_ID_BASE] /* LV GVM */
 	{
 		MM_DISP_1,
-		MM_DISP_2
+		MM_DISP_2,
+		MM_DISP_3
 	},
 	[WFD_CLIENT_ID_LA_CONTAINER - WFD_CLIENT_ID_BASE] /* LA Container */
 	{
 		MM_DISP_1,
-		MM_DISP_2
+		MM_DISP_2,
+		MM_DISP_3
 	},
 	[WFD_CLIENT_ID_LV_CONTAINER - WFD_CLIENT_ID_BASE] /* LV Container */
 	{
 		MM_DISP_1,
-		MM_DISP_2
+		MM_DISP_2,
+		MM_DISP_3
 	},
 };
 
 struct user_os_utils_context {
 	u32 client_id;
 	int32_t hyp_hdl_disp[MAX_CHANNELS];
-	spinlock_t hyp_chl_lock[MAX_CHANNELS];
+	spinlock_t hyp_cmdchl_lock;
+	struct mutex hyp_cbchl_lock;
+	struct mutex hyp_bufchl_lock;
 	unsigned long cmdchl_lock_flags[MAX_CHANNELS];
+	struct task_struct *buffer_thread;
+	int client_idx;
 };
 
 /*
@@ -118,6 +128,37 @@ struct user_os_utils_context {
  * Private Functions
  * ---------------------------------------------------------------------------
  */
+static int buffer_channel_task(void *arg)
+{
+	struct user_os_utils_context *ctx = arg;
+	int client_idx = ctx->client_idx;
+	int rc = 0;
+
+	if ((channel_map[client_idx][CHANNEL_BUFFERS]) != 0x00) {
+		/* open hab channel for events handling */
+#ifdef USE_HAB
+		rc = habmm_socket_open(
+#else
+		rc = habmm_socket_open_dummy(
+#endif
+					&ctx->hyp_hdl_disp[CHANNEL_BUFFERS],
+					channel_map[client_idx][CHANNEL_BUFFERS],
+					HAB_BUF_CHANNEL_TIMEOUT_VAL,
+					0x00);
+		if (rc) {
+			UTILS_LOG_ERROR("habmm_socket_open(HAB_CHNL_BUFFERS) failed");
+		} else {
+			/* create lock for buffer handling hab channel */
+			mutex_init(&ctx->hyp_bufchl_lock);
+
+			ctx->cmdchl_lock_flags[CHANNEL_BUFFERS] = 0;
+			UTILS_LOG_CRITICAL_INFO("Buffer channel open success, hnd=%d",
+					ctx->hyp_hdl_disp[CHANNEL_BUFFERS]);
+		}
+	}
+
+	return 0;
+}
 static inline int32_t
 get_hab_handle(
 	struct user_os_utils_context *ctx,
@@ -129,11 +170,26 @@ get_hab_handle(
 
 	if (chl_id) {
 		client_id = *chl_id;
+
 		if (client_id < MAX_CHANNELS) {
-			if ((!(DO_NOT_LOCK_CHANNEL & flags)) &&
-				(client_id == CHANNEL_OPENWFD) && (!flags))
-				spin_lock_irqsave(&ctx->hyp_chl_lock[client_id],
-					ctx->cmdchl_lock_flags[client_id]);
+			/* Check if Buffer channel is created.
+			 * Otherwise use the OPENWFD channel
+			 */
+			if ((client_id == CHANNEL_BUFFERS) &&
+					(!ctx->hyp_hdl_disp[client_id])) {
+				flags = DO_NOT_LOCK_CHANNEL;
+				client_id = CHANNEL_OPENWFD;
+			}
+
+			if (!(DO_NOT_LOCK_CHANNEL & flags)) {
+				if (client_id == CHANNEL_OPENWFD)
+					spin_lock_irqsave(&ctx->hyp_cmdchl_lock,
+						ctx->cmdchl_lock_flags[client_id]);
+				else if (client_id == CHANNEL_EVENTS)
+					mutex_lock(&ctx->hyp_cbchl_lock);
+				else if (client_id == CHANNEL_BUFFERS)
+					mutex_lock(&ctx->hyp_bufchl_lock);
+			}
 			chl_hdl = ctx->hyp_hdl_disp[client_id];
 		}
 	}
@@ -148,9 +204,25 @@ rel_hab_handle(
 	u32 flags)
 {
 
-	if ((chl_id < MAX_CHANNELS) && (chl_id == CHANNEL_OPENWFD) && (!flags))
-		spin_unlock_irqrestore(&ctx->hyp_chl_lock[chl_id],
-					ctx->cmdchl_lock_flags[chl_id]);
+	if (chl_id < MAX_CHANNELS) {
+		/* Check if Buffer channel is created.
+		 * Otherwise use the OPENWFD channel
+		 */
+		if ((chl_id == CHANNEL_BUFFERS) && (!ctx->hyp_hdl_disp[chl_id])) {
+			flags = DO_NOT_LOCK_CHANNEL;
+			chl_id = CHANNEL_OPENWFD;
+		}
+
+		if ((!flags)) {
+			if (chl_id == CHANNEL_OPENWFD)
+				spin_unlock_irqrestore(&ctx->hyp_cmdchl_lock,
+						ctx->cmdchl_lock_flags[chl_id]);
+			else if (chl_id == CHANNEL_EVENTS)
+				mutex_unlock(&ctx->hyp_cbchl_lock);
+			else if (chl_id == CHANNEL_BUFFERS)
+				mutex_unlock(&ctx->hyp_bufchl_lock);
+		}
+	}
 
 	return 0;
 }
@@ -205,7 +277,7 @@ user_os_utils_init(
 		goto fail;
 	}
 	/* create lock for openwfd commands hab channel */
-	spin_lock_init(&ctx->hyp_chl_lock[CHANNEL_OPENWFD]);
+	spin_lock_init(&ctx->hyp_cmdchl_lock);
 
 	UTILS_LOG_CRITICAL_INFO("OpenWFD channel open successful, handle=%d",
 			ctx->hyp_hdl_disp[CHANNEL_OPENWFD]);
@@ -230,8 +302,7 @@ user_os_utils_init(
 			goto fail;
 		}
 		/* create lock for events handling hab channel */
-		spin_lock_init(&ctx->hyp_chl_lock[CHANNEL_EVENTS]);
-
+		mutex_init(&ctx->hyp_cbchl_lock);
 		UTILS_LOG_CRITICAL_INFO("Events channel open successful, handle=%d",
 			ctx->hyp_hdl_disp[CHANNEL_EVENTS]);
 
@@ -239,6 +310,11 @@ user_os_utils_init(
 		ctx->cmdchl_lock_flags[CHANNEL_EVENTS] = 0;
 
 	}
+
+	/* create a thread buffer channel */
+	ctx->client_idx = client_idx;
+	ctx->buffer_thread = kthread_run(buffer_channel_task, ctx,
+							"buffer channel task");
 
 	ctx->client_id = client_id;
 	init_info->context = ctx;
@@ -273,6 +349,8 @@ user_os_utils_deinit(
 
 	/* close hab channel for events handling */
 	if (ctx->hyp_hdl_disp[CHANNEL_EVENTS]) {
+		/* destroy lock for events handling hab channel */
+		mutex_destroy(&ctx->hyp_cbchl_lock);
 #ifdef USE_HAB
 		rc = habmm_socket_close(ctx->hyp_hdl_disp[CHANNEL_EVENTS]);
 #else
@@ -281,6 +359,23 @@ user_os_utils_deinit(
 		if (rc)
 			UTILS_LOG_ERROR("habmm_socket_close (CHANNEL_EVENTS) failed");
 	}
+
+	/* close hab channel for buffer handling */
+	if (ctx->hyp_hdl_disp[CHANNEL_BUFFERS]) {
+		/* destroy lock for buffer handling hab channel */
+		mutex_destroy(&ctx->hyp_bufchl_lock);
+#ifdef USE_HAB
+		rc = habmm_socket_close(ctx->hyp_hdl_disp[CHANNEL_BUFFERS]);
+#else
+		rc = habmm_socket_close_dummy(ctx->hyp_hdl_disp[CHANNEL_BUFFERS]);
+#endif
+		if (rc)
+			UTILS_LOG_ERROR("habmm_socket_close (CHANNEL_BUFFERS) failed");
+	}
+
+	/* stop buffer channel thread */
+	if (ctx->buffer_thread)
+		kthread_stop(ctx->buffer_thread);
 
 	kfree(ctx);
 
@@ -320,7 +415,6 @@ user_os_utils_send_recv(
 	u32 num_of_wfd_cmds = 0;
 	enum openwfd_cmd_type wfd_cmd_type = OPENWFD_CMD_MAX;
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
-	unsigned long delay = jiffies + (HZ / 2);
 
 	if (!req || !resp) {
 		UTILS_LOG_ERROR("NULL req(0x%p) or resp(0x%p)",
@@ -412,8 +506,7 @@ user_os_utils_send_recv(
 					"habmm_socket_recv - interrupted system call - retry");
 			}
 		}
-	} while ((time_before(jiffies, delay)) && (-EAGAIN == rc) &&
-							(resp_size == 0));
+	} while ((-EAGAIN == rc) && (resp_size == 0));
 
 	HYP_ATRACE_END(marker_buff);
 
@@ -562,7 +655,7 @@ user_os_utils_shmem_export(
 	struct user_os_utils_context *ctx = context;
 	int32_t rc = 0;
 	int32_t handle = 0;
-	u32 chl_id = CHANNEL_OPENWFD;
+	u32 chl_id = CHANNEL_BUFFERS;
 	u32 export_id = 0;
 	u32 export_flags = 0;
 
@@ -572,7 +665,7 @@ user_os_utils_shmem_export(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x01);
+	handle = get_hab_handle(ctx, &chl_id, 0x00);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d",
 			chl_id);
@@ -603,7 +696,7 @@ user_os_utils_shmem_export(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x01))
+		if (rel_hab_handle(ctx, chl_id, 0x00))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -619,7 +712,7 @@ user_os_utils_shmem_import(
 	struct user_os_utils_context *ctx = context;
 	int32_t rc = 0;
 	int32_t handle = 0;
-	u32 chl_id = CHANNEL_OPENWFD;
+	u32 chl_id = CHANNEL_BUFFERS;
 	u32 import_flags = 0;
 
 	if (!mem) {
@@ -628,7 +721,7 @@ user_os_utils_shmem_import(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x01);
+	handle = get_hab_handle(ctx, &chl_id, 0x00);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d",
 			chl_id);
@@ -663,7 +756,7 @@ user_os_utils_shmem_import(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x01))
+		if (rel_hab_handle(ctx, chl_id, 0x00))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -679,7 +772,7 @@ user_os_utils_shmem_unexport(
 	struct user_os_utils_context *ctx = context;
 	int32_t rc = 0;
 	int32_t handle = 0;
-	u32 chl_id = CHANNEL_OPENWFD;
+	u32 chl_id = CHANNEL_BUFFERS;
 	u32 unexport_flags = 0;
 
 	if (!mem) {
@@ -688,7 +781,7 @@ user_os_utils_shmem_unexport(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x01);
+	handle = get_hab_handle(ctx, &chl_id, 0x00);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
 		rc = -1;
@@ -718,7 +811,7 @@ user_os_utils_shmem_unexport(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x01))
+		if (rel_hab_handle(ctx, chl_id, 0x00))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -734,7 +827,7 @@ user_os_utils_shmem_unimport(
 	struct user_os_utils_context *ctx = context;
 	int32_t rc = 0;
 	int32_t handle = 0;
-	u32 chl_id = CHANNEL_OPENWFD;
+	u32 chl_id = CHANNEL_BUFFERS;
 	u32 unimport_flags = 0;
 
 	if (!mem) {
@@ -743,7 +836,7 @@ user_os_utils_shmem_unimport(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x01);
+	handle = get_hab_handle(ctx, &chl_id, 0x00);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
 		rc = -1;
@@ -776,7 +869,7 @@ user_os_utils_shmem_unimport(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x01))
+		if (rel_hab_handle(ctx, chl_id, 0x00))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
