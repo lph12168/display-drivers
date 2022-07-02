@@ -209,6 +209,11 @@ static int dp_parser_misc(struct dp_parser *parser)
 	parser->no_lane_count_reduction = of_property_read_bool(of_node,
 			"qcom,no-lane-count-reduction");
 
+	rc = of_property_read_u32(of_node,
+			"qcom,lane-training-retries", &parser->link_training_retries);
+	if (rc)
+		parser->link_training_retries = MAX_DP_LINK_TRAINING_RETRIES;
+
 	return 0;
 }
 
