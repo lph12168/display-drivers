@@ -326,6 +326,8 @@ enum sde_intf {
 	INTF_4,
 	INTF_5,
 	INTF_6,
+	INTF_7,
+	INTF_8,
 	INTF_MAX
 };
 
