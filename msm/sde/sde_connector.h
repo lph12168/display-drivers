@@ -483,6 +483,18 @@ struct sde_connector_dyn_hdr_metadata {
 };
 
 /**
+ * struct sde_misr_sign - defines sde misr signature structure
+ * @num_valid_misr : count of valid misr signature
+ * @roi_list : list of roi
+ * @misr_sign_value : list of misr signature
+ */
+struct sde_misr_sign {
+	atomic64_t num_valid_misr;
+	struct msm_roi_list roi_list;
+	u64 misr_sign_value[MAX_DSI_DISPLAYS];
+};
+
+/**
  * struct sde_connector - local sde connector structure
  * @base: Base drm connector structure
  * @connector_type: Set to one of DRM_MODE_CONNECTOR_ types
@@ -541,6 +553,9 @@ struct sde_connector_dyn_hdr_metadata {
  * @cmd_rx_buf: the return buffer of response of command transfer
  * @rx_len: the length of dcs command received buffer
  * @cached_edid: cached edid data for the connector
+ * @misr_event_notify_enabled: Flag to indicate if misr event notify is enabled or not
+ * @previous_misr_sign: store previous misr signature
+ * @hwfence_wb_retire_fences_enable: enable hw-fences for wb retire-fence
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -616,6 +631,10 @@ struct sde_connector {
 	int rx_len;
 
 	struct edid *cached_edid;
+	bool misr_event_notify_enabled;
+	struct sde_misr_sign previous_misr_sign;
+
+	bool hwfence_wb_retire_fences_enable;
 };
 
 /**

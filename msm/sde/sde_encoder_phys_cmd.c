@@ -196,11 +196,23 @@ static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_en
 		spin_unlock(phys_enc->enc_spinlock);
 	}
 
-	if (ctl && ctl->ops.get_scheduler_status)
+	if (ctl->ops.get_scheduler_status)
 		scheduler_status = ctl->ops.get_scheduler_status(ctl);
 
 	SDE_EVT32_IRQ(DRMID(phys_enc->parent), ctl->idx - CTL_0,
-		phys_enc->hw_pp->idx - PINGPONG_0, event, scheduler_status);
+		phys_enc->hw_pp->idx - PINGPONG_0, event, scheduler_status,
+		phys_enc->autorefresh_disable_trans);
+
+	/*
+	 * For hw-fences, in the last frame during the autorefresh disable transition
+	 * hw won't trigger the output-fence signal once the frame is done, therefore
+	 * sw must trigger the override to force the signal here
+	 */
+	if (phys_enc->autorefresh_disable_trans) {
+		if (ctl->ops.trigger_output_fence_override)
+			ctl->ops.trigger_output_fence_override(ctl);
+		phys_enc->autorefresh_disable_trans = false;
+	}
 
 	/* Signal any waiting atomic commit thread */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
@@ -269,15 +281,16 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 	struct sde_hw_pp_vsync_info info[MAX_CHANNELS_PER_ENC] = {{0}};
 	struct sde_encoder_phys_cmd_te_timestamp *te_timestamp;
 	unsigned long lock_flags;
+	u32 fence_ready = 0;
 
-	if (!phys_enc || !phys_enc->hw_pp || !phys_enc->hw_intf)
+	if (!phys_enc || !phys_enc->hw_pp || !phys_enc->hw_intf || !phys_enc->hw_ctl)
 		return;
 
 	SDE_ATRACE_BEGIN("rd_ptr_irq");
 	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
 	ctl = phys_enc->hw_ctl;
 
-	if (ctl && ctl->ops.get_scheduler_status)
+	if (ctl->ops.get_scheduler_status)
 		scheduler_status = ctl->ops.get_scheduler_status(ctl);
 
 	spin_lock_irqsave(phys_enc->enc_spinlock, lock_flags);
@@ -290,13 +303,16 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 	}
 	spin_unlock_irqrestore(phys_enc->enc_spinlock, lock_flags);
 
+	if ((scheduler_status != 0x1) && ctl->ops.get_hw_fence_status)
+		fence_ready = ctl->ops.get_hw_fence_status(ctl);
+
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
 	SDE_EVT32_IRQ(DRMID(phys_enc->parent),
 		info[0].pp_idx, info[0].intf_idx,
 		info[0].wr_ptr_line_count, info[0].intf_frame_count,
 		info[1].pp_idx, info[1].intf_idx,
 		info[1].wr_ptr_line_count, info[1].intf_frame_count,
-		scheduler_status);
+		scheduler_status, fence_ready);
 
 	if (phys_enc->parent_ops.handle_vblank_virt)
 		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
@@ -1877,6 +1893,8 @@ static void _sde_encoder_phys_disable_autorefresh(struct sde_encoder_phys *phys_
 
 	sde_encoder_phys_cmd_connect_te(phys_enc, false);
 	_sde_encoder_phys_cmd_config_autorefresh(phys_enc, 0);
+	phys_enc->autorefresh_disable_trans = true;
+
 	if (sde_kms && sde_kms->catalog &&
 			(sde_kms->catalog->autorefresh_disable_seq == AUTOREFRESH_DISABLE_SEQ1)) {
 		_sde_encoder_autorefresh_disable_seq1(phys_enc);

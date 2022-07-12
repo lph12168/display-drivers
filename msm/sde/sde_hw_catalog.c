@@ -178,6 +178,7 @@
  *************************************************************/
 enum {
 	SDE_HW_VERSION,
+	SDE_HW_FENCE_VERSION,
 	SDE_HW_PROP_MAX,
 };
 
@@ -221,6 +222,7 @@ enum sde_prop {
 	TRUSTED_VM_ENV,
 	MAX_TRUSTED_VM_DISPLAYS,
 	TVM_INCLUDE_REG,
+	IPCC_PROTOCOL_ID,
 	SDE_PROP_MAX,
 };
 
@@ -574,6 +576,7 @@ struct sde_dt_props {
  *************************************************************/
 static struct sde_prop_type sde_hw_prop[] = {
 	{SDE_HW_VERSION, "qcom,sde-hw-version", false, PROP_TYPE_U32},
+	{SDE_HW_FENCE_VERSION, "qcom,hw-fence-sw-version", false, PROP_TYPE_U32},
 };
 
 static struct sde_prop_type sde_prop[] = {
@@ -618,6 +621,7 @@ static struct sde_prop_type sde_prop[] = {
 	{MAX_TRUSTED_VM_DISPLAYS, "qcom,sde-max-trusted-vm-displays", false,
 			PROP_TYPE_U32},
 	{TVM_INCLUDE_REG, "qcom,tvm-include-reg", false, PROP_TYPE_U32_ARRAY},
+	{IPCC_PROTOCOL_ID, "qcom,sde-ipcc-protocol-id", false, PROP_TYPE_U32},
 };
 
 static struct sde_prop_type sde_perf_prop[] = {
@@ -3990,6 +3994,8 @@ static void _sde_top_parse_dt_helper(struct sde_mdss_cfg *cfg,
 	cfg->mdp[0].smart_panel_align_mode =
 		PROP_VALUE_ACCESS(props->values, SMART_PANEL_ALIGN_MODE, 0);
 
+	cfg->ipcc_protocol_id = PROP_VALUE_ACCESS(props->values, IPCC_PROTOCOL_ID, 0);
+
 	if (props->exists[SEC_SID_MASK]) {
 		cfg->sec_sid_mask_count = props->counts[SEC_SID_MASK];
 		for (i = 0; i < cfg->sec_sid_mask_count; i++)
@@ -4200,15 +4206,18 @@ static int sde_parse_reg_dma_dt(struct device_node *np,
 	sde_cfg->dma_cfg.clk_ctrl = SDE_CLK_CTRL_LUTDMA;
 	sde_cfg->dma_cfg.vbif_idx = VBIF_RT;
 
-	for (i = 0; i < sde_cfg->mdp_count; i++) {
-		sde_cfg->mdp[i].clk_ctrls[sde_cfg->dma_cfg.clk_ctrl].reg_off =
-			PROP_BITVALUE_ACCESS(prop_value,
-					REG_DMA_CLK_CTRL, 0, 0);
-		sde_cfg->mdp[i].clk_ctrls[sde_cfg->dma_cfg.clk_ctrl].bit_off =
-			PROP_BITVALUE_ACCESS(prop_value,
-					REG_DMA_CLK_CTRL, 0, 1);
+	if (test_bit(SDE_FEATURE_VBIF_CLK_SPLIT, sde_cfg->features)) {
+		sde_cfg->dma_cfg.split_vbif_supported = true;
+	} else {
+		for (i = 0; i < sde_cfg->mdp_count; i++) {
+			sde_cfg->mdp[i].clk_ctrls[sde_cfg->dma_cfg.clk_ctrl].reg_off =
+				PROP_BITVALUE_ACCESS(prop_value,
+						REG_DMA_CLK_CTRL, 0, 0);
+			sde_cfg->mdp[i].clk_ctrls[sde_cfg->dma_cfg.clk_ctrl].bit_off =
+				PROP_BITVALUE_ACCESS(prop_value,
+						REG_DMA_CLK_CTRL, 0, 1);
+		}
 	}
-
 end:
 	kfree(prop_value);
 	/* reg dma is optional feature hence return 0 */
@@ -5152,6 +5161,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		set_bit(SDE_SYS_CACHE_DISP, sde_cfg->sde_sys_cache_type_map);
 		set_bit(SDE_SYS_CACHE_DISP_1, sde_cfg->sde_sys_cache_type_map);
 		set_bit(SDE_SYS_CACHE_DISP_WB, sde_cfg->sde_sys_cache_type_map);
+		set_bit(SDE_FEATURE_SYS_CACHE_NSE, sde_cfg->features);
 		sde_cfg->allowed_dsc_reservation_switch = SDE_DP_DSC_RESERVATION_SWITCH;
 		sde_cfg->autorefresh_disable_seq = AUTOREFRESH_DISABLE_SEQ2;
 		sde_cfg->perf.min_prefill_lines = 40;
@@ -5214,6 +5224,22 @@ end:
 	return rc;
 }
 
+static void _sde_hw_fence_caps(struct sde_mdss_cfg *sde_cfg)
+{
+	struct sde_ctl_cfg *ctl;
+	int i;
+
+	if (!sde_cfg->hw_fence_rev)
+		return;
+
+	set_bit(SDE_FEATURE_HW_FENCE_IPCC, sde_cfg->features);
+
+	for (i = 0; i < sde_cfg->ctl_count; i++) {
+		ctl = sde_cfg->ctl + i;
+		set_bit(SDE_CTL_HW_FENCE, &ctl->features);
+	}
+}
+
 static int _sde_hardware_post_caps(struct sde_mdss_cfg *sde_cfg,
 	uint32_t hw_rev)
 {
@@ -5260,6 +5286,8 @@ static int _sde_hardware_post_caps(struct sde_mdss_cfg *sde_cfg,
 	sde_cfg->min_display_height = MIN_DISPLAY_HEIGHT;
 	sde_cfg->min_display_width = MIN_DISPLAY_WIDTH;
 	sde_cfg->max_cwb = min_t(u32, sde_cfg->wb_count, MAX_CWB_SESSIONS);
+
+	_sde_hw_fence_caps(sde_cfg);
 
 	rc = _sde_hw_dnsc_blur_filter_caps(sde_cfg);
 
@@ -5354,6 +5382,11 @@ static int sde_hw_ver_parse_dt(struct drm_device *dev, struct device_node *np,
 		cfg->hw_rev = PROP_VALUE_ACCESS(prop_value, SDE_HW_VERSION, 0);
 	else
 		cfg->hw_rev = sde_kms_get_hw_version(dev);
+
+	if (prop_exists[SDE_HW_FENCE_VERSION])
+		cfg->hw_fence_rev = PROP_VALUE_ACCESS(prop_value, SDE_HW_FENCE_VERSION, 0);
+	else
+		cfg->hw_fence_rev = 0; /* disable hw-fences */
 
 end:
 	kfree(prop_value);
