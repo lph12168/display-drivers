@@ -196,7 +196,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	if (!sde_kms) {
 		SDE_ERROR("invalid kms\n");
 		return -EINVAL;
-	} else if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI) {
+        } else if (!c_conn->ops.set_backlight) {
 		return 0;
 	}
 
@@ -399,7 +399,7 @@ int sde_connector_get_dither_cfg(struct drm_connector *conn,
 	return 0;
 }
 
-static void sde_connector_get_avail_res_info(struct drm_connector *conn,
+void sde_connector_get_avail_res_info(struct drm_connector *conn,
 		struct msm_resource_caps_info *avail_res)
 {
 	struct sde_kms *sde_kms;

@@ -1058,6 +1058,14 @@ static inline int sde_connector_state_get_compression_info(
 }
 
 /**
+* sde_connector_get_avail_res_info - get available resources
+* @connector: Pointer to drm connector structure
+* @avail_res: Pointer with curr available resources
+*/
+void sde_connector_get_avail_res_info(struct drm_connector *conn,
+                struct msm_resource_caps_info *avail_res);
+
+/**
 * sde_connector_get_mode_info - retrieve mode info for given mode
 * @connector: Pointer to drm connector structure
 * @drm_mode: Display mode set for the display

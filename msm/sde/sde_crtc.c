@@ -699,6 +699,32 @@ static int _sde_crtc_set_roi_v1(struct drm_crtc_state *state,
 	return 0;
 }
 
+static bool _sde_crtc_setup_is_3dmux_dsc(struct drm_crtc_state *state)
+{
+        struct sde_crtc_state *cstate;
+
+        cstate = to_sde_crtc_state(state);
+
+        return (cstate->topology_name == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC ||
+                        cstate->topology_name ==
+                        SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC);
+}
+
+static bool _sde_crtc_setup_is_quad_pipe(struct drm_crtc_state *state)
+{
+       struct sde_crtc_state *cstate;
+
+       cstate = to_sde_crtc_state(state);
+
+       return (cstate->topology_name == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE ||
+                       cstate->topology_name ==
+                       SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE ||
+                       cstate->topology_name ==
+                       SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC ||
+                       cstate->topology_name ==
+                       SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE);
+}
+
 static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 		struct drm_crtc_state *state)
 {
@@ -873,8 +899,7 @@ static int _sde_crtc_set_lm_roi(struct drm_crtc *crtc,
 	 * hence, crtc roi must match the mixer dimensions.
 	 */
 	if (crtc_state->num_ds_enabled ||
-		sde_rm_topology_is_group(&sde_kms->rm, state,
-				SDE_RM_TOPOLOGY_GROUP_3DMERGE_DSC)) {
+                _sde_crtc_setup_is_3dmux_dsc(state)) {
 		if (memcmp(lm_roi, lm_bounds, sizeof(struct sde_rect))) {
 			SDE_ERROR("Unsupported: Dest scaler/3d mux DSC + PU\n");
 			return -EINVAL;
@@ -893,8 +918,10 @@ static u32 _sde_crtc_get_displays_affected(struct drm_crtc *crtc,
 {
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *crtc_state;
+        struct drm_encoder *encoder;
 	u32 disp_bitmask = 0;
 	int i;
+        bool is_ppsplit = false;
 
 	if (!crtc || !state) {
 		pr_err("Invalid crtc or state\n");
@@ -904,8 +931,24 @@ static u32 _sde_crtc_get_displays_affected(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	crtc_state = to_sde_crtc_state(state);
 
+        list_for_each_entry(encoder,
+                       &crtc->dev->mode_config.encoder_list, head) {
+              if (encoder->crtc != state->crtc)
+                       continue;
+
+              is_ppsplit |= sde_encoder_is_topology_ppsplit(encoder);
+        }
+
+        list_for_each_entry(encoder,
+                       &crtc->dev->mode_config.encoder_list, head) {
+               if (encoder->crtc != state->crtc)
+                        continue;
+
+               is_ppsplit |= sde_encoder_is_topology_ppsplit(encoder);
+        }
+
 	/* pingpong split: one ROI, one LM, two physical displays */
-	if (crtc_state->is_ppsplit) {
+        if (is_ppsplit) {
 		u32 lm_split_width = crtc_state->lm_bounds[0].w / 2;
 		struct sde_rect *roi = &crtc_state->lm_roi[0];
 
@@ -920,7 +963,7 @@ static u32 _sde_crtc_get_displays_affected(struct drm_crtc *crtc,
 	} else if (sde_crtc->mixers_swapped) {
 		disp_bitmask = BIT(0);
 	} else {
-		for (i = 0; i < sde_crtc->num_mixers; i++) {
+                for (i = 0; i < crtc_state->num_mixers; i++) {
 			if (!sde_kms_rect_is_null(
 					&crtc_state->lm_roi[i]))
 				disp_bitmask |= BIT(i);
@@ -945,9 +988,9 @@ static int _sde_crtc_check_rois_centered_and_symmetric(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	crtc_state = to_sde_crtc_state(state);
 
-	if (sde_crtc->num_mixers > MAX_MIXERS_PER_CRTC) {
+        if (crtc_state->num_mixers > MAX_MIXERS_PER_CRTC) {
 		SDE_ERROR("%s: unsupported number of mixers: %d\n",
-				sde_crtc->name, sde_crtc->num_mixers);
+                                sde_crtc->name, crtc_state->num_mixers);
 		return -EINVAL;
 	}
 
@@ -984,7 +1027,7 @@ static int _sde_crtc_check_rois_centered_and_symmetric(struct drm_crtc *crtc,
 	 * On certain HW, if using 2 LM, ROIs must be split evenly between the
 	 * LMs and be of equal width.
 	 */
-	if (sde_crtc->num_mixers < CRTC_DUAL_MIXERS_ONLY)
+        if (crtc_state->num_mixers < CRTC_DUAL_MIXERS_ONLY)
 		return 0;
 
 	roi[0] = &crtc_state->lm_roi[0];
@@ -1113,7 +1156,7 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 		if (rc)
 			return rc;
 
-		for (lm_idx = 0; lm_idx < sde_crtc->num_mixers; lm_idx++) {
+                for (lm_idx = 0; lm_idx < sde_crtc_state->num_mixers; lm_idx++) {
 			rc = _sde_crtc_set_lm_roi(crtc, state, lm_idx);
 			if (rc)
 				return rc;
@@ -1441,7 +1484,10 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 		return;
 
 	memset(fetch_active, 0, sizeof(fetch_active));
-	memset(zpos_cnt, 0, sizeof(zpos_cnt));
+        if (sde_crtc->num_mixers > MAX_MIXERS_PER_LAYOUT)
+                memset(zpos_cnt, 0, sizeof(zpos_cnt));
+        else
+                memset(zpos_cnt, 0, sizeof(zpos_cnt[0]));
 
 	drm_atomic_crtc_for_each_plane(plane, crtc) {
 		state = plane->state;
@@ -1692,7 +1738,12 @@ static void _sde_crtc_blend_setup(struct drm_crtc *crtc,
 	_sde_crtc_swap_mixers_for_right_partial_update(crtc);
 
 	/* initialize stage cfg */
-	memset(&sde_crtc->stage_cfg, 0, sizeof(sde_crtc->stage_cfg));
+        if (sde_crtc->num_mixers > MAX_MIXERS_PER_LAYOUT)
+                memset(&sde_crtc->stage_cfg, 0,
+                                sizeof(sde_crtc->stage_cfg));
+        else
+                memset(&sde_crtc->stage_cfg, 0,
+                                sizeof(sde_crtc->stage_cfg[0]));
 
 	if (add_planes)
 		_sde_crtc_blend_setup_mixer(crtc, old_state, sde_crtc, mixer);
@@ -2083,7 +2134,8 @@ void sde_crtc_timeline_status(struct drm_crtc *crtc)
 	sde_fence_timeline_status(sde_crtc->output_fence, &crtc->base);
 }
 
-static int _sde_validate_hw_resources(struct sde_crtc *sde_crtc)
+static int _sde_validate_hw_resources(struct sde_crtc *sde_crtc,
+                struct sde_crtc_state *sde_crtc_state)
 {
 	int i;
 
@@ -2096,11 +2148,11 @@ static int _sde_validate_hw_resources(struct sde_crtc *sde_crtc)
 		return -EINVAL;
 	}
 
-	if (!sde_crtc->num_mixers ||
-		sde_crtc->num_mixers > MAX_MIXERS_PER_CRTC) {
+        if (!sde_crtc_state->num_mixers ||
+                sde_crtc_state->num_mixers > MAX_MIXERS_PER_CRTC) {
 		SDE_ERROR("%s: invalid number mixers: %d\n",
 			sde_crtc->name, sde_crtc->num_mixers);
-		SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc->num_mixers,
+                SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc_state->num_mixers,
 			SDE_EVTLOG_ERROR);
 		return -EINVAL;
 	}
@@ -2116,6 +2168,14 @@ static int _sde_validate_hw_resources(struct sde_crtc *sde_crtc)
 				sde_crtc->mixers[i].hw_ds, SDE_EVTLOG_ERROR);
 			return -EINVAL;
 		}
+
+                /*
+                * Only check resource in commit stage for now until RM state
+                * is supported.
+                */
+		if (sde_crtc_state->base.state)
+			return 0;
+
 	}
 
 	return 0;
@@ -2157,7 +2217,7 @@ static void _sde_crtc_dest_scaler_setup(struct drm_crtc *crtc)
 		SDE_ERROR("crtc%d:invalid parameters\n", crtc->base.id);
 	} else if (!kms->catalog->mdp[0].has_dest_scaler) {
 		SDE_DEBUG("dest scaler feature not supported\n");
-	} else if (_sde_validate_hw_resources(sde_crtc)) {
+        } else if (_sde_validate_hw_resources(sde_crtc, cstate)) {
 		//do nothing
 	} else if ((!cstate->scl3_lut_cfg.is_configured) &&
 			(!is_qseed3_rev_qseed3lite(kms->catalog))) {
@@ -2800,8 +2860,9 @@ static int _sde_crtc_check_dest_scaler_lm(struct drm_crtc *crtc,
 }
 
 static int _sde_crtc_check_dest_scaler_cfg(struct drm_crtc *crtc,
-	struct sde_crtc *sde_crtc, struct drm_display_mode *mode,
-	struct sde_hw_ds *hw_ds, struct sde_hw_ds_cfg *cfg, u32 hdisplay,
+	struct sde_crtc *sde_crtc, struct sde_crtc_state *cstate,
+	struct drm_display_mode *mode,struct sde_hw_ds *hw_ds,
+	struct sde_hw_ds_cfg *cfg, u32 hdisplay,
 	u32 max_in_width, u32 max_out_width)
 {
 	if (cfg->flags & SDE_DRM_DESTSCALER_SCALE_UPDATE ||
@@ -2826,7 +2887,7 @@ static int _sde_crtc_check_dest_scaler_cfg(struct drm_crtc *crtc,
 				cfg->scl3_cfg.dst_height,
 				hdisplay, mode->vdisplay);
 			SDE_ERROR("num_mixers(%d) flags(%d) ds-%d:\n",
-				sde_crtc->num_mixers, cfg->flags,
+				cstate->num_mixers, cfg->flags,
 				hw_ds->idx - DS_0);
 			SDE_ERROR("scale_en = %d, DE_en =%d\n",
 				cfg->scl3_cfg.enable,
@@ -2838,7 +2899,7 @@ static int _sde_crtc_check_dest_scaler_cfg(struct drm_crtc *crtc,
 				cfg->scl3_cfg.src_width[0],
 				cfg->scl3_cfg.dst_width,
 				cfg->scl3_cfg.dst_height, hdisplay,
-				mode->vdisplay, sde_crtc->num_mixers,
+				mode->vdisplay, cstate->num_mixers,
 				SDE_EVTLOG_ERROR);
 
 			cfg->flags &=
@@ -2871,7 +2932,7 @@ static int _sde_crtc_check_dest_scaler_validate_ds(struct drm_crtc *crtc,
 		 * No of dest scalers should match the num of mixers
 		 * unless it is partial update left only/right only use case
 		 */
-		if (lm_idx >= sde_crtc->num_mixers || (i != lm_idx &&
+		if (lm_idx >= cstate->num_mixers || (i != lm_idx &&
 			!(cfg->flags & SDE_DRM_DESTSCALER_PU_ENABLE))) {
 			SDE_ERROR("crtc%d: ds_cfg id(%d):idx(%d), flags(%d)\n",
 				crtc->base.id, i, lm_idx, cfg->flags);
@@ -2900,7 +2961,7 @@ static int _sde_crtc_check_dest_scaler_validate_ds(struct drm_crtc *crtc,
 			return ret;
 
 		/* Check scaler data */
-		ret = _sde_crtc_check_dest_scaler_cfg(crtc, sde_crtc, mode,
+		ret = _sde_crtc_check_dest_scaler_cfg(crtc, sde_crtc, cstate, mode,
 				hw_ds, cfg, hdisplay,
 				max_in_width, max_out_width);
 		if (ret)
@@ -2995,7 +3056,7 @@ static int _sde_crtc_check_dest_scaler_data(struct drm_crtc *crtc,
 		return 0;
 	}
 
-	ret = _sde_validate_hw_resources(sde_crtc);
+	ret = _sde_validate_hw_resources(sde_crtc, cstate);
 	if (ret)
 		goto err;
 
@@ -3005,7 +3066,7 @@ static int _sde_crtc_check_dest_scaler_data(struct drm_crtc *crtc,
 	 * left only/right only use case - currently PU + DS is not supported
 	 */
 	if (cstate->num_ds > kms->catalog->ds_count ||
-		((cstate->num_ds != sde_crtc->num_mixers) &&
+		((cstate->num_ds != cstate->num_mixers) &&
 		!(cstate->ds_cfg[0].flags & SDE_DRM_DESTSCALER_PU_ENABLE))) {
 		SDE_ERROR("crtc%d: num_ds(%d), hw_ds_cnt(%d) flags(%d)\n",
 			crtc->base.id, cstate->num_ds, kms->catalog->ds_count,
@@ -3025,7 +3086,7 @@ static int _sde_crtc_check_dest_scaler_data(struct drm_crtc *crtc,
 	}
 
 	/* Display resolution */
-	hdisplay = mode->hdisplay/sde_crtc->num_mixers;
+	hdisplay = mode->hdisplay / cstate->num_mixers;
 
 	/* Validate the DS data */
 	ret = _sde_crtc_check_dest_scaler_validate_ds(crtc, sde_crtc, cstate,
@@ -3157,14 +3218,15 @@ static void _sde_crtc_setup_mixer_for_encoder(
 static void _sde_crtc_setup_mixers(struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
+	struct sde_crtc_state *sde_crtc_state = to_sde_crtc_state(crtc->state);
 	struct drm_encoder *enc;
 
+	mutex_lock(&sde_crtc->crtc_lock);
 	sde_crtc->num_ctls = 0;
 	sde_crtc->num_mixers = 0;
 	sde_crtc->mixers_swapped = false;
 	memset(sde_crtc->mixers, 0, sizeof(sde_crtc->mixers));
 
-	mutex_lock(&sde_crtc->crtc_lock);
 	/* Check for mixers on all encoders attached to this crtc */
 	list_for_each_entry(enc, &crtc->dev->mode_config.encoder_list, head) {
 		if (enc->crtc != crtc)
@@ -3177,25 +3239,24 @@ static void _sde_crtc_setup_mixers(struct drm_crtc *crtc)
 		_sde_crtc_setup_mixer_for_encoder(crtc, enc);
 	}
 
+        if (sde_crtc_state->num_mixers != sde_crtc->num_mixers) {
+		SDE_ERROR("allocated mixers %d != topology mixers %d\n",
+			sde_crtc->num_mixers, sde_crtc_state->num_mixers);
+		sde_crtc_state->num_mixers = sde_crtc->num_mixers;
+	}
+
 	mutex_unlock(&sde_crtc->crtc_lock);
 	_sde_crtc_check_dest_scaler_data(crtc, crtc->state);
 }
 
 static void _sde_crtc_setup_is_ppsplit(struct drm_crtc_state *state)
 {
-	int i;
 	struct sde_crtc_state *cstate;
 
 	cstate = to_sde_crtc_state(state);
-
-	cstate->is_ppsplit = false;
-	for (i = 0; i < cstate->num_connectors; i++) {
-		struct drm_connector *conn = cstate->connectors[i];
-
-		if (sde_connector_get_topology_name(conn) ==
-				SDE_RM_TOPOLOGY_PPSPLIT)
-			cstate->is_ppsplit = true;
-	}
+	cstate->is_ppsplit =
+			(cstate->topology_name ==
+			SDE_RM_TOPOLOGY_PPSPLIT);
 }
 
 static void _sde_crtc_setup_lm_bounds(struct drm_crtc *crtc,
@@ -3216,14 +3277,14 @@ static void _sde_crtc_setup_lm_bounds(struct drm_crtc *crtc,
 	cstate = to_sde_crtc_state(state);
 
 	adj_mode = &state->adjusted_mode;
-	crtc_split_width = sde_crtc_get_mixer_width(sde_crtc, cstate, adj_mode);
+	crtc_split_width = sde_crtc_get_mixer_width(cstate, adj_mode);
 
-	for (i = 0; i < sde_crtc->num_mixers; i++) {
+	for (i = 0; i < cstate->num_mixers; i++) {
 		cstate->lm_bounds[i].x = crtc_split_width * i;
 		cstate->lm_bounds[i].y = 0;
 		cstate->lm_bounds[i].w = crtc_split_width;
 		cstate->lm_bounds[i].h =
-			sde_crtc_get_mixer_height(sde_crtc, cstate, adj_mode);
+			sde_crtc_get_mixer_height(cstate, adj_mode);
 		memcpy(&cstate->lm_roi[i], &cstate->lm_bounds[i],
 				sizeof(cstate->lm_roi[i]));
 		SDE_EVT32_VERBOSE(DRMID(crtc), i,
@@ -4706,8 +4767,8 @@ static int _sde_crtc_check_get_pstates(struct drm_crtc *crtc,
 
 	memset(pipe_staged, 0, sizeof(pipe_staged));
 
-	mixer_width = sde_crtc_get_mixer_width(sde_crtc, cstate, mode);
-	mixer_height = sde_crtc_get_mixer_height(sde_crtc, cstate, mode);
+	mixer_width = sde_crtc_get_mixer_width(cstate, mode);
+	mixer_height = sde_crtc_get_mixer_height(cstate, mode);
 
 	if (cstate->num_ds_enabled)
 		mixer_width = mixer_width * cstate->num_ds_enabled;
@@ -4947,8 +5008,7 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	if (!sde_rm_topology_is_group(&kms->rm, crtc_state,
-			SDE_RM_TOPOLOGY_GROUP_QUADPIPE))
+	if (!_sde_crtc_setup_is_quad_pipe(crtc_state))
 		return 0;
 
 	drm_atomic_crtc_state_for_each_plane(plane, crtc_state) {
@@ -5867,8 +5927,8 @@ static int _sde_debugfs_status_show(struct seq_file *s, void *data)
 
 	mutex_lock(&sde_crtc->crtc_lock);
 	mode = &crtc->state->adjusted_mode;
-	out_width = sde_crtc_get_mixer_width(sde_crtc, cstate, mode);
-	out_height = sde_crtc_get_mixer_height(sde_crtc, cstate, mode);
+	out_width = sde_crtc_get_mixer_width(cstate, mode);
+	out_height = sde_crtc_get_mixer_height(cstate, mode);
 
 	seq_printf(s, "crtc:%d width:%d height:%d\n", crtc->base.id,
 				mode->hdisplay, mode->vdisplay);

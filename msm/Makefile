@@ -2,6 +2,7 @@
 ccflags-y := -I$(srctree)/include/drm -I$(srctree)/techpack/display/msm -I$(srctree)/techpack/display/msm/dsi -I$(srctree)/techpack/display/msm/dp
 ccflags-y += -I$(srctree)/techpack/display/msm/sde
 ccflags-y += -I$(srctree)/techpack/display/rotator
+ccflags-y += -I$(srctree)/techpack/display/msm/shd
 ccflags-y += -I$(srctree)/techpack/display/hdcp
 ccflags-y += -I$(srctree)/drivers/clk/qcom/
 
@@ -123,6 +124,11 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_display_test.o
 
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o
+
+msm_drm-$(CONFIG_DRM_SDE_SHD) += shd/shd_drm.o \
+        shd/shd_hw.o \
+        shd/sde_encoder_phys_shd.o
+
 
 msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_atomic.o \

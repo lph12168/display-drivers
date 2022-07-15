@@ -443,6 +443,8 @@ struct sde_crtc_state {
 	bool bw_control;
 	bool bw_split_vote;
 
+	enum sde_rm_topology_name topology_name;
+	u32 num_mixers;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
 	struct sde_rect lm_bounds[MAX_MIXERS_PER_CRTC];
@@ -507,18 +509,18 @@ struct sde_crtc_irq_info {
  * Mixer width will be same as panel width(/2 for split)
  * unless destination scaler feature is enabled
  */
-static inline int sde_crtc_get_mixer_width(struct sde_crtc *sde_crtc,
-	struct sde_crtc_state *cstate, struct drm_display_mode *mode)
+static inline int sde_crtc_get_mixer_width(struct sde_crtc_state *cstate,
+	struct drm_display_mode *mode)
 {
 	u32 mixer_width;
 
-	if (!sde_crtc || !cstate || !mode)
+	if (!cstate || !mode)
 		return 0;
 
 	if (cstate->num_ds_enabled)
 		mixer_width = cstate->ds_cfg[0].lm_width;
 	else
-		mixer_width = mode->hdisplay / sde_crtc->num_mixers;
+		mixer_width = mode->hdisplay / cstate->num_mixers;
 
 	return mixer_width;
 }
@@ -528,10 +530,10 @@ static inline int sde_crtc_get_mixer_width(struct sde_crtc *sde_crtc,
  * Mixer height will be same as panel height unless
  * destination scaler feature is enabled
  */
-static inline int sde_crtc_get_mixer_height(struct sde_crtc *sde_crtc,
-		struct sde_crtc_state *cstate, struct drm_display_mode *mode)
+static inline int sde_crtc_get_mixer_height(struct sde_crtc_state *cstate,
+		struct drm_display_mode *mode)
 {
-	if (!sde_crtc || !cstate || !mode)
+	if (!cstate || !mode)
 		return 0;
 
 	return (cstate->num_ds_enabled ?
@@ -964,5 +966,39 @@ void sde_crtc_reset_sw_state(struct drm_crtc *crtc);
  * @cstate:      Pointer to drm crtc state
  */
 void _sde_crtc_clear_dim_layers_v1(struct drm_crtc_state *state);
+/**
+* sde_crtc_state_set_topology_name - set current topology name
+* @state: Pointer to crtc_state
+*/
+static inline void sde_crtc_state_set_topology_name(
+		struct drm_crtc_state *state,
+		enum sde_rm_topology_name topology_name)
+{
+	struct sde_crtc_state *cstate = to_sde_crtc_state(state);
 
+	if (!state)
+		return;
+
+	cstate->topology_name = topology_name;
+
+	switch (topology_name) {
+	case SDE_RM_TOPOLOGY_DUALPIPE:
+	case SDE_RM_TOPOLOGY_DUALPIPE_DSC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC:
+	case SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE:
+		cstate->num_mixers = 2;
+		break;
+	case SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE:
+	case SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC:
+	case SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE:
+	case SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE:
+		cstate->num_mixers = 4;
+		break;
+	default:
+		cstate->num_mixers = 1;
+		break;
+	}
+}
 #endif /* _SDE_CRTC_H_ */

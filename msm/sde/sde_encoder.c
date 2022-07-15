@@ -781,6 +781,24 @@ bool sde_encoder_is_cwb_disabling(struct drm_encoder *drm_enc,
 	return false;
 }
 
+bool sde_encoder_is_topology_ppsplit(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *master;
+
+	if (!drm_enc)
+		return false;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	master = sde_enc->cur_master;
+
+	if (!master || !master->connector)
+		return false;
+
+	return  (sde_connector_get_topology_name(master->connector)
+			== SDE_RM_TOPOLOGY_PPSPLIT);
+}
+
 void sde_encoder_set_clone_mode(struct drm_encoder *drm_enc,
 	 struct drm_crtc_state *crtc_state)
 {
@@ -950,6 +968,10 @@ skip_reserve:
 				"RM failed to update topology, rc: %d\n", ret);
 			return ret;
 		}
+
+		sde_crtc_state_set_topology_name(crtc_state,
+				sde_connector_get_property(conn_state,
+				CONNECTOR_PROP_TOPOLOGY_NAME));
 
 		ret = sde_connector_set_blob_data(conn_state->connector,
 				conn_state,
