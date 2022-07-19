@@ -675,7 +675,7 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	int i, j, num_port, port_idx;
 	int rc;
 	int all_ports_cnt = 0;
-	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {0};
+	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {{0, 0, 0}};
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	attribs[0] = WFD_DEVICE_CLIENT_TYPE;
