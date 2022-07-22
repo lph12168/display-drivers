@@ -242,7 +242,7 @@ static int dp_config_vco_rate_4nm(struct dp_pll *pll,
 		unsigned long rate)
 {
 	int rc = 0;
-	struct dp_pll_db *pdb = (struct dp_pll_db *)pll->priv;
+	struct dp_pll_db *pdb = &pll->pll_db;
 	const struct dp_pll_params *params;
 
 	rc = dp_vco_pll_init_db_4nm(pdb, rate);
@@ -861,7 +861,6 @@ int dp_pll_clock_register_4nm(struct dp_pll *pll)
 	}
 
 	pll->clk_data->clk_num = DP_PLL_NUM_CLKS;
-	pll->priv = &dp_pdb;
 	dp_pdb.pll = pll;
 
 	if (pll->revision == DP_PLL_4NM_V1_1)
@@ -869,6 +868,7 @@ int dp_pll_clock_register_4nm(struct dp_pll *pll)
 	else
 		dp_pdb.pll_params = pll_params_v1;
 
+	pll->pll_db = dp_pdb;
 	pll->pll_cfg = dp_pll_configure;
 	pll->pll_prepare = dp_pll_prepare;
 	pll->pll_unprepare = dp_pll_unprepare;
