@@ -805,35 +805,31 @@ static const struct clk_ops pll_vco_div_clk_ops = {
 	.round_rate = dp_pll_vco_div_clk_round,
 };
 
-static struct dp_pll_vco_clk dp0_phy_pll_clks[DP_PLL_NUM_CLKS] = {
+static struct clk_init_data phy_pll_clks[DP_PLL_NUM_CLKS] = {
 	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp0_phy_pll_link_clk",
+		.name = "_phy_pll_link_clk",
 		.ops = &pll_link_clk_ops,
-		},
 	},
 	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp0_phy_pll_vco_div_clk",
+		.name = "_phy_pll_vco_div_clk",
 		.ops = &pll_vco_div_clk_ops,
-		},
 	},
 };
 
-static struct dp_pll_vco_clk dp_phy_pll_clks[DP_PLL_NUM_CLKS] = {
-	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp_phy_pll_link_clk",
-		.ops = &pll_link_clk_ops,
-		},
-	},
-	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp_phy_pll_vco_div_clk",
-		.ops = &pll_vco_div_clk_ops,
-		},
-	},
-};
+static struct dp_pll_vco_clk *dp_pll_get_clks(struct dp_pll *pll)
+{
+	int i;
+
+	for (i = 0; i < DP_PLL_NUM_CLKS; i++) {
+		snprintf(pll->pll_clks[i].name, DP_PLL_NAME_MAX_SIZE,
+				"%s%s", pll->name, phy_pll_clks[i].name);
+		pll->pll_clks[i].init_data.name = pll->pll_clks[i].name;
+		pll->pll_clks[i].init_data.ops = phy_pll_clks[i].ops;
+		pll->pll_clks[i].hw.init = &pll->pll_clks[i].init_data;
+	}
+
+	return pll->pll_clks;
+}
 
 static struct dp_pll_db dp_pdb;
 
@@ -873,10 +869,7 @@ int dp_pll_clock_register_4nm(struct dp_pll *pll)
 	pll->pll_prepare = dp_pll_prepare;
 	pll->pll_unprepare = dp_pll_unprepare;
 
-	if (pll->dp_core_revision >= 0x10040000)
-		pll_clks = dp0_phy_pll_clks;
-	else
-		pll_clks = dp_phy_pll_clks;
+	pll_clks = dp_pll_get_clks(pll);
 
 	rc = dp_pll_clock_register_helper(pll, pll_clks, DP_PLL_NUM_CLKS);
 	if (rc) {
