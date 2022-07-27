@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -552,7 +553,7 @@ static struct drm_plane_state *shp_plane_atomic_duplicate_state(
 }
 
 static void shp_plane_atomic_update(struct drm_plane *plane,
-				struct drm_plane_state *old_state)
+				struct drm_atomic_state *old_state)
 {
 	struct shp_device *shp_dev;
 	struct shp_plane *shp_plane;
