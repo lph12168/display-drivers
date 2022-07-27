@@ -2455,11 +2455,11 @@ bool sde_rm_topology_is_group(struct sde_rm *rm,
 		struct drm_crtc_state *state,
 		enum sde_rm_topology_group group)
 {
-	int i, ret = 0;
+	int i, j, ret = 0;
 	struct sde_crtc_state *cstate;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
-	struct msm_display_topology topology;
+	struct msm_display_topology topology = {0};
 	enum sde_rm_topology_name name;
 
 	if ((!rm) || (!state) || (!state->state)) {
@@ -2481,16 +2481,26 @@ bool sde_rm_topology_is_group(struct sde_rm *rm,
 				conn);
 		if (!conn_state) {
 			SDE_DEBUG("%s invalid connector state\n", conn->name);
-			continue;
+			/* Fallback to CRTC state topology */
+			name = cstate->topology_name;
+			for (j = 0; j < SDE_RM_TOPOLOGY_MAX; j++)
+				if (rm->topology_tbl[j].top_name == name) {
+					topology.num_lm = rm->topology_tbl[j].num_lm;
+					topology.num_enc = rm->topology_tbl[j].num_comp_enc;
+					topology.num_intf = rm->topology_tbl[j].num_intf;
+					topology.comp_type = rm->topology_tbl[j].comp_type;
+					break;
+				}
+		} else {
+			ret = sde_connector_state_get_topology(conn_state, &topology);
+			if (ret) {
+				SDE_DEBUG("%s invalid topology\n", conn->name);
+				continue;
+			}
+
+			name = sde_rm_get_topology_name(rm, topology);
 		}
 
-		ret = sde_connector_state_get_topology(conn_state, &topology);
-		if (ret) {
-			SDE_DEBUG("%s invalid topology\n", conn->name);
-			continue;
-		}
-
-		name = sde_rm_get_topology_name(rm, topology);
 		switch (group) {
 		case SDE_RM_TOPOLOGY_GROUP_SINGLEPIPE:
 			if (TOPOLOGY_SINGLEPIPE_MODE(name))
