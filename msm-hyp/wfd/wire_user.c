@@ -228,10 +228,10 @@ const static u32 wire_user_cmd_size[OPENWFD_CMD_MAX] = {
  * Head size optimization
  * ---------------------------------------------------------------------------
  */
-
 #if (MAX_BUFS_CNT > 1) || defined(WIRE_USER_PROFILING_ENABLE)
 #define WIRE_HEAP static
 static struct mutex _heap_mutex[PROFILING_MAX + 1];
+static spinlock_t _heap_lock;
 static bool _heap_inited;
 static inline void wire_user_heap_init(void)
 {
@@ -243,10 +243,17 @@ static inline void wire_user_heap_init(void)
 	for (i = 0; i < PROFILING_MAX + 1; i++)
 		mutex_init(&_heap_mutex[i]);
 
+	spin_lock_init(&_heap_lock);
+
 	_heap_inited = true;
 }
 static inline void wire_user_heap_begin(u32 index)
 {
+	if (index == WIRE_USER_INIT_PROFILING) {
+		spin_lock(&_heap_lock);
+		return;
+	}
+
 	if (index >= PROFILING_MAX)
 		mutex_lock(&_heap_mutex[PROFILING_MAX]);
 	else
@@ -254,6 +261,11 @@ static inline void wire_user_heap_begin(u32 index)
 }
 static inline void wire_user_heap_end(u32 index)
 {
+	if (index == WIRE_USER_INIT_PROFILING) {
+		spin_unlock(&_heap_lock);
+		return;
+	}
+
 	if (index >= PROFILING_MAX)
 		mutex_unlock(&_heap_mutex[PROFILING_MAX]);
 	else
@@ -3326,7 +3338,6 @@ event_handler(
 	struct cb_info_node *node;
 	enum event_types type;
 	union event_info info;
-	unsigned long flags;
 
 	if (!e_req)
 		return;
@@ -3342,9 +3353,9 @@ event_handler(
 					e_req->info.vm_event.type;
 	}
 
-	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
+	spin_lock(&ctx->_event_cb_lock);
 	node = find_node_locked(type, &info, &ctx->_cb_info_ctx);
-	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
+	spin_unlock(&ctx->_event_cb_lock);
 
 	if (node && node->cb_info.cb)
 		node->cb_info.cb(type, &info, node->cb_info.user_data);
@@ -3424,7 +3435,6 @@ wire_user_register_event_listener(
 	struct wire_context *ctx = wire_dev->ctx;
 	struct cb_info_node *node = NULL;
 	int rc = 0;
-	unsigned long flags;
 
 	if (!ctx->init_info.enable_event_handling) {
 		WIRE_LOG_ERROR("not supported");
@@ -3455,7 +3465,7 @@ wire_user_register_event_listener(
 	 *   b) error case
 	 */
 
-	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
+	spin_lock(&ctx->_event_cb_lock);
 
 	node = find_node_locked(type, info, &ctx->_cb_info_ctx);
 	if (node) {
@@ -3481,7 +3491,7 @@ wire_user_register_event_listener(
 		rc = -1;
 	}
 
-	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
+	spin_unlock(&ctx->_event_cb_lock);
 
 end:
 
@@ -3506,7 +3516,7 @@ wire_user_request_cb(
 	struct event_req *ev_req = &req.payload.ev_req;
 	struct event_resp *ev_resp = &resp.payload.ev_resp;
 
-	wire_user_heap_begin(0);
+	wire_user_heap_begin(WIRE_USER_INIT_PROFILING);
 
 	if (!ctx->init_info.enable_event_handling) {
 		WIRE_LOG_ERROR("not supported");
@@ -3566,7 +3576,7 @@ wire_user_request_cb(
 	rc = ev_resp->status;
 
 end:
-	wire_user_heap_end(0);
+	wire_user_heap_end(WIRE_USER_INIT_PROFILING);
 
 	return rc;
 }

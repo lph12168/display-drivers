@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-shd:%s:%d] " fmt, __func__, __LINE__
@@ -614,7 +615,12 @@ void sde_shd_hw_flush(struct sde_hw_ctl *ctl_ctx,
 	for (i = 0; i < misr_num; i++)
 		_sde_shd_flush_hw_roi_misr(misr_ctx[i]);
 
-	_sde_shd_flush_hw_dsc_config(ctl_ctx);
+	/*
+	 * Ther is no point of handle the DSC config separatedly for each
+	 * individual shared display. Let base display setup it up.
+	 */
+	if (0)
+		_sde_shd_flush_hw_dsc_config(ctl_ctx);
 
 	if (ctl_ctx->ops.trigger_flush)
 		ctl_ctx->ops.trigger_flush(ctl_ctx);

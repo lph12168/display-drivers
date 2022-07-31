@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_REG_H_
@@ -49,6 +50,18 @@
 #define DP_VALID_BOUNDARY			(0x00000030)
 #define DP_VALID_BOUNDARY_2			(0x00000034)
 #define DP_LOGICAL2PHYSICAL_LANE_MAPPING	(0x00000038)
+#define DP_MISR_CTRL				(0x000000A0)
+#define DP_MISR_VALUE_LANE0			(0x000000A4)
+#define DP_MISR_VALUE_LANE1			(0x000000A8)
+#define DP_MISR_VALUE_LANE2			(0x000000AC)
+#define DP_MISR_VALUE_LANE3			(0x000000B0)
+#define DP_MISR_FILLER				(0x000000B4)
+#define DP_MISR_WRONG_FILLER_1		(0x000000B8)
+#define DP_MISR_WRONG_FILLER_2		(0x000000BC)
+#define DP_PSR_CRC_RG				(0x00000154)
+#define DP_PSR_CRC_B				(0x00000158)
+#define DP_DP1_CRC_RG				(0x00000164)
+#define DP_DP1_CRC_B				(0x00000168)
 
 #define DP1_CONFIGURATION_CTRL			(0x00000400)
 #define DP_DP0_TIMESLOT_1_32			(0x00000404)
