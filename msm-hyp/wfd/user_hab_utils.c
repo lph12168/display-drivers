@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/habmm.h>
@@ -10,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/atomic.h>
 #include <linux/kthread.h>
+#include <linux/spinlock.h>
 #include "msm_hyp_trace.h"
 #include "user_os_utils.h"
 #include "wire_user.h"
@@ -107,7 +109,8 @@ static u32 channel_map[WFD_MAX_NUM_OF_CLIENTS][2] = {
 struct user_os_utils_context {
 	u32 client_id;
 	int32_t hyp_hdl_disp[MAX_CHANNELS];
-	struct mutex hyp_chl_lock[MAX_CHANNELS];
+	spinlock_t hyp_chl_lock[MAX_CHANNELS];
+	unsigned long cmdchl_lock_flags[MAX_CHANNELS];
 };
 
 /*
@@ -127,8 +130,10 @@ get_hab_handle(
 	if (chl_id) {
 		client_id = *chl_id;
 		if (client_id < MAX_CHANNELS) {
-			if (!(DO_NOT_LOCK_CHANNEL & flags))
-				mutex_lock(&ctx->hyp_chl_lock[client_id]);
+			if ((!(DO_NOT_LOCK_CHANNEL & flags)) &&
+				(client_id == CHANNEL_OPENWFD) && (!flags))
+				spin_lock_irqsave(&ctx->hyp_chl_lock[client_id],
+					ctx->cmdchl_lock_flags[client_id]);
 			chl_hdl = ctx->hyp_hdl_disp[client_id];
 		}
 	}
@@ -142,8 +147,10 @@ rel_hab_handle(
 	u32 chl_id,
 	u32 flags)
 {
-	if (chl_id < MAX_CHANNELS)
-		mutex_unlock(&ctx->hyp_chl_lock[chl_id]);
+
+	if ((chl_id < MAX_CHANNELS) && (chl_id == CHANNEL_OPENWFD) && (!flags))
+		spin_unlock_irqrestore(&ctx->hyp_chl_lock[chl_id],
+					ctx->cmdchl_lock_flags[chl_id]);
 
 	return 0;
 }
@@ -198,10 +205,13 @@ user_os_utils_init(
 		goto fail;
 	}
 	/* create lock for openwfd commands hab channel */
-	mutex_init(&ctx->hyp_chl_lock[CHANNEL_OPENWFD]);
+	spin_lock_init(&ctx->hyp_chl_lock[CHANNEL_OPENWFD]);
 
 	UTILS_LOG_CRITICAL_INFO("OpenWFD channel open successful, handle=%d",
 			ctx->hyp_hdl_disp[CHANNEL_OPENWFD]);
+
+	/* Initialize the flag */
+	 ctx->cmdchl_lock_flags[CHANNEL_OPENWFD] = 0;
 
 	if ((init_info->enable_event_handling) &&
 		(channel_map[client_idx][CHANNEL_EVENTS]) != 0x00) {
@@ -220,10 +230,14 @@ user_os_utils_init(
 			goto fail;
 		}
 		/* create lock for events handling hab channel */
-		mutex_init(&ctx->hyp_chl_lock[CHANNEL_EVENTS]);
+		spin_lock_init(&ctx->hyp_chl_lock[CHANNEL_EVENTS]);
 
 		UTILS_LOG_CRITICAL_INFO("Events channel open successful, handle=%d",
 			ctx->hyp_hdl_disp[CHANNEL_EVENTS]);
+
+		/* Initialize the flag */
+		ctx->cmdchl_lock_flags[CHANNEL_EVENTS] = 0;
+
 	}
 
 	ctx->client_id = client_id;
@@ -246,8 +260,6 @@ user_os_utils_deinit(
 	if (!ctx)
 		return -EINVAL;
 
-	/* destroy lock for openwfd commands hab channel */
-	mutex_destroy(&ctx->hyp_chl_lock[CHANNEL_OPENWFD]);
 	/* close hab channel for openwfd commands */
 	if (ctx->hyp_hdl_disp[CHANNEL_OPENWFD]) {
 #ifdef USE_HAB
@@ -261,8 +273,6 @@ user_os_utils_deinit(
 
 	/* close hab channel for events handling */
 	if (ctx->hyp_hdl_disp[CHANNEL_EVENTS]) {
-		/* destroy lock for events handling hab channel */
-		mutex_destroy(&ctx->hyp_chl_lock[CHANNEL_EVENTS]);
 #ifdef USE_HAB
 		rc = habmm_socket_close(ctx->hyp_hdl_disp[CHANNEL_EVENTS]);
 #else
@@ -387,7 +397,7 @@ user_os_utils_send_recv(
 			(void *)resp,
 			(uint32_t *)&resp_size,
 			(uint32_t)HAB_NO_TIMEOUT_VAL,
-			(uint32_t)0x00);
+			HABMM_SOCKET_RECV_FLAGS_NON_BLOCKING);
 		if (rc) {
 			if (-ENODEV == rc)
 				UTILS_LOG_CRITICAL_INFO("OpenWFD channel broken - no device");
@@ -401,7 +411,7 @@ user_os_utils_send_recv(
 					"habmm_socket_recv - interrupted system call - retry");
 			}
 		}
-	} while (-EINTR == rc);
+	} while ((-EAGAIN == rc) && (resp_size == 0));
 
 	HYP_ATRACE_END(marker_buff);
 
@@ -560,7 +570,7 @@ user_os_utils_shmem_export(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x00);
+	handle = get_hab_handle(ctx, &chl_id, 0x01);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d",
 			chl_id);
@@ -591,7 +601,7 @@ user_os_utils_shmem_export(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x00))
+		if (rel_hab_handle(ctx, chl_id, 0x01))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -616,7 +626,7 @@ user_os_utils_shmem_import(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x00);
+	handle = get_hab_handle(ctx, &chl_id, 0x01);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d",
 			chl_id);
@@ -651,7 +661,7 @@ user_os_utils_shmem_import(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x00))
+		if (rel_hab_handle(ctx, chl_id, 0x01))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -676,7 +686,7 @@ user_os_utils_shmem_unexport(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x00);
+	handle = get_hab_handle(ctx, &chl_id, 0x01);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
 		rc = -1;
@@ -706,7 +716,7 @@ user_os_utils_shmem_unexport(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x00))
+		if (rel_hab_handle(ctx, chl_id, 0x01))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
@@ -731,7 +741,7 @@ user_os_utils_shmem_unimport(
 		goto end;
 	}
 
-	handle = get_hab_handle(ctx, &chl_id, 0x00);
+	handle = get_hab_handle(ctx, &chl_id, 0x01);
 	if (!handle) {
 		UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
 		rc = -1;
@@ -764,7 +774,7 @@ user_os_utils_shmem_unimport(
 
 end:
 	if (handle) {
-		if (rel_hab_handle(ctx, chl_id, 0x00))
+		if (rel_hab_handle(ctx, chl_id, 0x01))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
