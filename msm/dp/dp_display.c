@@ -758,7 +758,7 @@ static void dp_display_send_force_connect_event(struct dp_display_private *dp)
 	snprintf(name, HPD_STRING_SIZE, "name=%s", connector->name);
 
 	envp[0] = name;
-	envp[1] = dp->hpd->hpd_high ? "status=connected" : "status=disconnected";
+	envp[1] = dp->hpd->hpd_high ? "sink=connected" : "sink=disconnected";
 	if ((dp->aux->state & DP_STATE_TRAIN_1_SUCCEEDED) &&
 			(dp->aux->state & DP_STATE_TRAIN_2_SUCCEEDED))
 		envp[2] = "link=ready";
