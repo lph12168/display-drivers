@@ -3338,6 +3338,7 @@ event_handler(
 	struct cb_info_node *node;
 	enum event_types type;
 	union event_info info;
+        unsigned long flags;
 
 	if (!e_req)
 		return;
@@ -3353,9 +3354,9 @@ event_handler(
 					e_req->info.vm_event.type;
 	}
 
-	spin_lock(&ctx->_event_cb_lock);
+	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
 	node = find_node_locked(type, &info, &ctx->_cb_info_ctx);
-	spin_unlock(&ctx->_event_cb_lock);
+	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
 
 	if (node && node->cb_info.cb)
 		node->cb_info.cb(type, &info, node->cb_info.user_data);
@@ -3435,6 +3436,7 @@ wire_user_register_event_listener(
 	struct wire_context *ctx = wire_dev->ctx;
 	struct cb_info_node *node = NULL;
 	int rc = 0;
+        unsigned long flags;
 
 	if (!ctx->init_info.enable_event_handling) {
 		WIRE_LOG_ERROR("not supported");
@@ -3465,7 +3467,7 @@ wire_user_register_event_listener(
 	 *   b) error case
 	 */
 
-	spin_lock(&ctx->_event_cb_lock);
+	spin_lock_irqsave(&ctx->_event_cb_lock, flags);
 
 	node = find_node_locked(type, info, &ctx->_cb_info_ctx);
 	if (node) {
@@ -3491,7 +3493,7 @@ wire_user_register_event_listener(
 		rc = -1;
 	}
 
-	spin_unlock(&ctx->_event_cb_lock);
+	spin_unlock_irqrestore(&ctx->_event_cb_lock, flags);
 
 end:
 
