@@ -148,6 +148,7 @@ static int shd_display_init_base_encoder(struct drm_device *dev,
 	struct sde_connector_state conn_state = {};
 	bool has_mst;
 	int rc = 0;
+
 	hw_res.comp_info = &comp_info;
 
 	if (base->connector) {

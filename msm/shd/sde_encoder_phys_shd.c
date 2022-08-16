@@ -177,7 +177,6 @@ static int _sde_encoder_phys_shd_rm_reserve(
 	struct sde_shd_hw_ctl *hw_ctl;
 	struct sde_shd_hw_mixer *hw_lm;
 	struct sde_hw_pingpong *hw_pp;
-
 	int i, rc = 0;
 
 	encoder = display->base->connector->encoder;
@@ -469,7 +468,7 @@ static int sde_encoder_phys_shd_control_vblank_irq(
 
 	SDE_EVT32(DRMID(phys_enc->parent), enable,
 			atomic_read(&phys_enc->vblank_refcount));
-`+
+
 	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1) {
 		ret = _sde_encoder_phys_shd_register_irq(phys_enc,
 				INTR_IDX_VSYNC, true);
@@ -574,7 +573,7 @@ static void sde_encoder_phys_shd_disable(struct sde_encoder_phys *phys_enc)
 	}
 
 
-
+	/* clear own active pipe settings */
     hw_ctl = container_of(phys_enc->hw_ctl, struct sde_shd_hw_ctl, base);
 	hw_ctl->active_pipes = 0;
 

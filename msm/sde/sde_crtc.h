@@ -966,10 +966,11 @@ void sde_crtc_reset_sw_state(struct drm_crtc *crtc);
  * @cstate:      Pointer to drm crtc state
  */
 void _sde_crtc_clear_dim_layers_v1(struct drm_crtc_state *state);
+
 /**
-* sde_crtc_state_set_topology_name - set current topology name
-* @state: Pointer to crtc_state
-*/
+ * sde_crtc_state_set_topology_name - set current topology name
+ * @state: Pointer to crtc_state
+ */
 static inline void sde_crtc_state_set_topology_name(
 		struct drm_crtc_state *state,
 		enum sde_rm_topology_name topology_name)

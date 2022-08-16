@@ -514,11 +514,11 @@ void sde_encoder_set_clone_mode(struct drm_encoder *drm_enc,
 	 struct drm_crtc_state *crtc_state);
 
 /**
-*sde_encoder_is_topology_ppsplit - checks if the current encoder is in
+ *sde_encoder_is_topology_ppsplit - checks if the current encoder is in
 	ppsplit topology.
-*@drm_enc:	Pointer to drm encoder structure
-*@Return:	true if the present topology is ppsplit
-*/
+ *@drm_enc:	Pointer to drm encoder structure
+ *@Return:	true if the present topology is ppsplit
+ */
 bool sde_encoder_is_topology_ppsplit(struct drm_encoder *drm_enc);
 
 /*

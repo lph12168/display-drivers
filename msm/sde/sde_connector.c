@@ -196,7 +196,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	if (!sde_kms) {
 		SDE_ERROR("invalid kms\n");
 		return -EINVAL;
-        } else if (!c_conn->ops.set_backlight) {
+	} else if (!c_conn->ops.set_backlight) {
 		return 0;
 	}
 
