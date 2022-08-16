@@ -350,11 +350,14 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 		dsi_drm_find_bit_clk_rate(c_bridge->display, adjusted_mode);
 
 	if (display->panel->host_config.ext_bridge_dynamic_mode_set) {
-		if (mode->hdisplay <= 720 && mode->vdisplay <= 576)
-			display->ctrl_count = 1;
-		else
+		if (mode->hdisplay == 0 || mode->vdisplay == 0)
 			display->ctrl_count = display->boot_ctrl_count;
-
+		else {
+			if (mode->hdisplay <= 720 && mode->vdisplay <= 576)
+				display->ctrl_count = 1;
+			else
+				display->ctrl_count = display->boot_ctrl_count;
+		}
 		dsi_display_clk_mngr_update_ctrl_count(display->clk_mngr,
 			display->ctrl_count);
 	}
