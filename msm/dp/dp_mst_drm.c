@@ -2384,6 +2384,7 @@ static void dp_mst_register_fixed_connector(struct drm_connector *connector)
 	struct sde_connector *c_conn = to_sde_connector(connector);
 	struct dp_display *dp_display = c_conn->display;
 	struct dp_mst_private *dp_mst = dp_display->dp_mst_prv_info;
+	struct edid *edid;
 	int i;
 
 	DP_MST_DEBUG("enter\n");
@@ -2393,6 +2394,22 @@ static void dp_mst_register_fixed_connector(struct drm_connector *connector)
 		if (dp_mst->mst_bridge[i].fixed_connector == connector) {
 			DP_MST_DEBUG("found fixed connector %d\n",
 					DRMID(connector));
+
+			/*
+			 * For bond MST, retrieve the sibling EDID ahead of get_modes
+			 * for master connector, allowing the sibling connector can
+			 * be found. Pre-load the EDID here.
+			 */
+			mutex_lock(&dp_mst->edid_lock);
+			if (!c_conn->cached_edid) {
+				mutex_unlock(&dp_mst->edid_lock);
+				edid = dp_mst->mst_fw_cbs->get_edid(connector,
+						&dp_mst->mst_mgr, c_conn->mst_port);
+				mutex_lock(&dp_mst->edid_lock);
+				c_conn->cached_edid = edid;
+			}
+			mutex_unlock(&dp_mst->edid_lock);
+
 			if (connector->state->crtc)
 				sde_connector_helper_mode_change_commit(
 						connector);
