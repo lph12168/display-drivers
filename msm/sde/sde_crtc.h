@@ -413,6 +413,9 @@ enum sde_crtc_dirty_flags {
  * @is_ppsplit    : Whether current topology requires PPSplit special handling
  * @bw_control    : true if bw/clk controlled by core bw/clk properties
  * @bw_split_vote : true if bw controlled by llcc/dram bw properties
+ * @topology_name : Current topology name
+ * @mode_info     : Local copy of msm_mode_info struct
+ * @num_mixers    : Number of mixers in current topology
  * @crtc_roi      : Current CRTC ROI. Possibly sub-rectangle of mode.
  *                  Origin top left of CRTC.
  * @lm_bounds     : LM boundaries based on current mode full resolution, no ROI.
@@ -432,6 +435,9 @@ enum sde_crtc_dirty_flags {
  * @ds_cfg: Destination scaler config
  * @scl3_lut_cfg: QSEED3 lut config
  * @new_perf: new performance state being requested
+ * @padding_height: panel height after line padding
+ * @padding_active: active lines in panel stacking pattern
+ * @padding_dummy: dummy lines in panel stacking pattern
  */
 struct sde_crtc_state {
 	struct drm_crtc_state base;
@@ -444,6 +450,7 @@ struct sde_crtc_state {
 	bool bw_split_vote;
 
 	enum sde_rm_topology_name topology_name;
+	struct msm_mode_info mode_info;
 	u32 num_mixers;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
@@ -464,6 +471,10 @@ struct sde_crtc_state {
 	struct sde_hw_scaler3_lut_cfg scl3_lut_cfg;
 
 	struct sde_core_perf_params new_perf;
+
+	u32 padding_height;
+	u32 padding_active;
+	u32 padding_dummy;
 };
 
 enum sde_crtc_irq_state {
@@ -907,6 +918,19 @@ void sde_crtc_set_qos_dirty(struct drm_crtc *crtc);
  * @frame_count: frame_count to be configured
  */
 void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
+
+/**
+ * sde_crtc_calc_vpadding_param - calculate vpadding parameters
+ * @state: Pointer to DRM crtc state object
+ * @crtc_y: Plane's CRTC_Y offset
+ * @crtc_h: Plane's CRTC_H size
+ * @padding_y: Padding Y offset
+ * @padding_start: Padding start offset
+ * @padding_height: Padding height in total
+ */
+int sde_crtc_calc_vpadding_param(struct drm_crtc_state *state,
+		uint32_t crtc_y, uint32_t crtc_h, uint32_t *padding_y,
+		uint32_t *padding_start, uint32_t *padding_height);
 
 /**
  * sde_crtc_get_misr_info - to configure and enable/disable MISR

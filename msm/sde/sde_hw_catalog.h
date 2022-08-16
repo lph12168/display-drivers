@@ -260,6 +260,7 @@ enum {
  * @SDE_SSPP_PREDOWNSCALE    Support pre-downscale X-direction by 2 for inline
  * @SDE_SSPP_PREDOWNSCALE_Y  Support pre-downscale Y-direction for inline
  * @SDE_SSPP_INLINE_CONST_CLR Inline rotation requires const clr disabled
+ * @SDE_SSPP_LINE_INSERTION  Line insertion support
  * @SDE_SSPP_MAX             maximum value
  */
 enum {
@@ -291,6 +292,7 @@ enum {
 	SDE_SSPP_PREDOWNSCALE,
 	SDE_SSPP_PREDOWNSCALE_Y,
 	SDE_SSPP_INLINE_CONST_CLR,
+	SDE_SSPP_LINE_INSERTION,
 	SDE_SSPP_MAX
 };
 
@@ -1505,6 +1507,7 @@ struct sde_mdss_cfg {
 	bool delay_prg_fetch_start;
 	bool has_qsync;
 	bool has_3d_merge_reset;
+	bool has_line_insertion;
 	bool has_decimation;
 	bool has_mixer_combined_alpha;
 	bool vbif_disable_inner_outer_shareable;

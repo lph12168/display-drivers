@@ -201,6 +201,7 @@ enum sde_prop {
 	UBWC_BW_CALC_VERSION,
 	PIPE_ORDER_VERSION,
 	SEC_SID_MASK,
+	LINE_INSERTION,
 	BASE_LAYER,
 	TRUSTED_VM_ENV,
 	MAX_TRUSTED_VM_DISPLAYS,
@@ -573,6 +574,7 @@ static struct sde_prop_type sde_prop[] = {
 	{PIPE_ORDER_VERSION, "qcom,sde-pipe-order-version", false,
 			PROP_TYPE_U32},
 	{SEC_SID_MASK, "qcom,sde-secure-sid-mask", false, PROP_TYPE_U32_ARRAY},
+	{LINE_INSERTION, "qcom,sde-has-line-insertion", false, PROP_TYPE_BOOL},
 	{BASE_LAYER, "qcom,sde-mixer-stage-base-layer", false, PROP_TYPE_BOOL},
 	{TRUSTED_VM_ENV, "qcom,sde-trusted-vm-env", false, PROP_TYPE_BOOL},
 	{MAX_TRUSTED_VM_DISPLAYS, "qcom,sde-max-trusted-vm-displays", false,
@@ -1740,6 +1742,9 @@ static void sde_sspp_set_features(struct sde_mdss_cfg *sde_cfg,
 					&sspp->perf_features);
 		}
 
+		if (sde_cfg->has_line_insertion) {
+			set_bit(SDE_SSPP_LINE_INSERTION, &sspp->features);
+		}
 		if (sde_cfg->uidle_cfg.uidle_rev)
 			set_bit(SDE_PERF_SSPP_UIDLE, &sspp->perf_features);
 
@@ -3806,6 +3811,8 @@ static void _sde_top_parse_dt_helper(struct sde_mdss_cfg *cfg,
 			WAKEUP_WITH_TOUCH, 0);
 	cfg->pipe_order_type = PROP_VALUE_ACCESS(props->values,
 			PIPE_ORDER_VERSION, 0);
+	cfg->has_line_insertion = PROP_VALUE_ACCESS(props->values,
+			LINE_INSERTION, 0);
 	cfg->has_base_layer = PROP_VALUE_ACCESS(props->values, BASE_LAYER, 0);
 	cfg->qseed_hw_version = PROP_VALUE_ACCESS(props->values,
 			 QSEED_HW_VERSION, 0);

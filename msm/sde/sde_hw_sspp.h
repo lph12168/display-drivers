@@ -290,6 +290,22 @@ struct sde_hw_pipe_ts_cfg {
 #define SDE_PIPE_SBUF_PLANE_NUM	2
 
 /**
+ * struct sde_hw_pipe_line_insertion_cfg - line insertion config
+ * @enable: line insertion is enabled
+ * @dummy_lines: dummy lines before active lines
+ * @first_active_lines: number of active lines before first dummy lines
+ * @active_lines: active lines
+ * @dst_h: total active lines plus dummy lines
+ */
+struct sde_hw_pipe_line_insertion_cfg {
+	bool enable;
+	u32 dummy_lines;
+	u32 first_active_lines;
+	u32 active_lines;
+	u32 dst_h;
+};
+
+/**
  * struct sde_hw_sspp_ops - interface to the SSPP Hw driver functions
  * Caller must call the init function to get the pipe context for each pipe
  * Assumption is these functions will be called after clocks are enabled
@@ -602,6 +618,15 @@ struct sde_hw_sspp_ops {
 	 * @ctx: Pointer to pipe context
 	 */
 	u32 (*get_ubwc_error)(struct sde_hw_pipe *ctx);
+
+	/**
+	 * setup_line_insertion - setup line insertion
+	 * @ctx: Pointer to pipe context
+	 * @cfg: Pointer to line insertion configuration
+	 */
+	void (*setup_line_insertion)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index,
+		struct sde_hw_pipe_line_insertion_cfg *cfg);
 };
 
 /**

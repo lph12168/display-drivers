@@ -104,6 +104,7 @@ enum sde_plane_sclcheck_state {
  * @rotation:		rotation cache state
  * @static_cache_state:	plane cache state for static image
  * @cdp_cfg:	CDP configuration
+ * @line_insertion_cfg: line insertion configuration
  */
 struct sde_plane_state {
 	struct drm_plane_state base;
@@ -135,6 +136,7 @@ struct sde_plane_state {
 	uint32_t static_cache_state;
 
 	struct sde_hw_pipe_cdp_cfg cdp_cfg;
+	struct sde_hw_pipe_line_insertion_cfg line_insertion_cfg;
 };
 
 /**

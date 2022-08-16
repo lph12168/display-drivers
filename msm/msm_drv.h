@@ -691,6 +691,7 @@ struct msm_display_topology {
  * @mdp_transfer_time_us   Specifies the mdp transfer time for command mode
  *                         panels in microseconds.
  * @allowed_mode_switches: bit mask to indicate supported mode switch.
+ * @vpadding:        panel stacking height
  */
 struct msm_mode_info {
 	uint32_t frame_rate;
@@ -706,6 +707,7 @@ struct msm_mode_info {
 	bool wide_bus_en;
 	u32 mdp_transfer_time_us;
 	u32 allowed_mode_switches;
+	u32 vpadding;
 };
 
 /**
@@ -1154,6 +1156,7 @@ static inline void __init msm_hdmi_register(void)
 {
 }
 static inline void __exit msm_hdmi_unregister(void)
+{
 }
 #endif /* CONFIG_DRM_MSM_HDMI */
 
@@ -1302,6 +1305,7 @@ static inline void __init sde_wb_register(void)
 {
 }
 static inline void __exit sde_wb_unregister(void)
+{
 }
 #endif /* CONFIG_DRM_SDE_WB */
 

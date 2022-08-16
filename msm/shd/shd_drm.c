@@ -738,6 +738,10 @@ static int shd_connector_get_mode_info(struct drm_connector *connector,
 
 		mode_info->topology = base_mode_info.topology;
 	}
+
+	if (shd_display->src.h != shd_display->roi.h)
+		mode_info->vpadding = shd_display->roi.h;
+
 	return 0;
 }
 
