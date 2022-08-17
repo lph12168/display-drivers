@@ -829,7 +829,7 @@ static bool dp_mst_super_bridge_mode_fixup(struct drm_bridge *drm_bridge,
 	DP_MST_DEBUG("enter\n");
 
 	if (!drm_bridge || !mode || !adjusted_mode) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		ret = false;
 		goto end;
 	}
@@ -839,13 +839,13 @@ static bool dp_mst_super_bridge_mode_fixup(struct drm_bridge *drm_bridge,
 	bridge_state = dp_mst_get_bridge_atomic_state(crtc_state->state,
 				bridge);
 	if (IS_ERR(bridge_state)) {
-		pr_err("Invalid bridge state\n");
+		DP_ERR("Invalid bridge state\n");
 		ret = false;
 		goto end;
 	}
 
 	if (!bridge_state->dp_panel) {
-		pr_err("Invalid dp_panel\n");
+		DP_ERR("Invalid dp_panel\n");
 		ret = false;
 		goto end;
 	}
@@ -869,7 +869,7 @@ static void dp_mst_super_bridge_pre_enable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -887,7 +887,7 @@ static void dp_mst_super_bridge_enable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -905,7 +905,7 @@ static void dp_mst_super_bridge_disable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -924,7 +924,7 @@ static void dp_mst_super_bridge_post_disable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -950,7 +950,7 @@ static void dp_mst_super_bridge_mode_set(struct drm_bridge *drm_bridge,
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -1115,7 +1115,7 @@ int dp_mst_drm_super_bridge_init(void *data, struct drm_encoder *encoder)
 
 	rc = drm_bridge_attach(encoder, &bridge->base, NULL, 0);
 	if (rc) {
-		pr_err("failed to attach bridge, rc=%d\n", rc);
+		DP_ERR("failed to attach bridge, rc=%d\n", rc);
 		goto end;
 	}
 
@@ -1544,7 +1544,7 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 
 		sibling_conn = dp_mst_find_sibling_connector(connector);
 		if (!sibling_conn) {
-			pr_debug("mode:%s requires dual ports\n", mode->name);
+			DP_DEBUG("mode:%s requires dual ports\n", mode->name);
 			return MODE_BAD;
 		}
 
@@ -1552,7 +1552,7 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 				&mst->mst_bridge[MAX_DP_MST_DRM_BRIDGES]);
 		if (dp_bridge_state->connector != connector &&
 				active_enc_cnt) {
-			pr_debug("mode:%s requires dual streams\n",
+			DP_DEBUG("mode:%s requires dual streams\n",
 					mode->name);
 			return MODE_BAD;
 		}
@@ -1574,7 +1574,7 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 
 		if (required_pbn > full_pbn ||
 				required_slots > available_slots) {
-			pr_debug("mode:%s not supported\n", mode->name);
+			DP_DEBUG("mode:%s not supported\n", mode->name);
 			return MODE_BAD;
 		}
 
@@ -1936,7 +1936,7 @@ static int dp_mst_connector_update_pps(struct drm_connector *connector,
 	int i, ret;
 
 	if (!display || !connector || !connector->encoder) {
-		pr_err("invalid params\n");
+		DP_ERR("invalid params\n");
 		return -EINVAL;
 	}
 
@@ -2719,7 +2719,7 @@ int dp_mst_init(struct dp_display *dp_display)
 
 	dp_mst->wq = create_singlethread_workqueue("dp_mst");
 	if (IS_ERR_OR_NULL(dp_mst->wq)) {
-		pr_err("dp drm mst failed creating wq\n");
+		DP_ERR("dp drm mst failed creating wq\n");
 		ret = -EPERM;
 		goto error;
 	}

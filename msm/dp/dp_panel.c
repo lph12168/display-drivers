@@ -2619,7 +2619,7 @@ static int dp_panel_set_colorspace(struct dp_panel *dp_panel,
 	struct dp_panel_private *panel;
 
 	if (!dp_panel) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		rc = -EINVAL;
 		goto end;
 	}

@@ -429,7 +429,7 @@ static bool dp_bond_bridge_mode_fixup(struct drm_bridge *drm_bridge,
 	bool ret = true;
 
 	if (!drm_bridge || !mode || !adjusted_mode) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		ret = false;
 		goto end;
 	}
@@ -439,7 +439,7 @@ static bool dp_bond_bridge_mode_fixup(struct drm_bridge *drm_bridge,
 	dp = bridge->display;
 
 	if (!dp->bridge->dp_panel) {
-		pr_err("Invalid dp_panel\n");
+		DP_ERR("Invalid dp_panel\n");
 		ret = false;
 		goto end;
 	}
@@ -460,7 +460,7 @@ static void dp_bond_bridge_pre_enable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -518,7 +518,7 @@ static void dp_bond_bridge_enable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -535,7 +535,7 @@ static void dp_bond_bridge_disable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -552,7 +552,7 @@ static void dp_bond_bridge_post_disable(struct drm_bridge *drm_bridge)
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -572,7 +572,7 @@ static void dp_bond_bridge_mode_set(struct drm_bridge *drm_bridge,
 	int i;
 
 	if (!drm_bridge) {
-		pr_err("Invalid params\n");
+		DP_ERR("Invalid params\n");
 		return;
 	}
 
@@ -914,7 +914,7 @@ int dp_connector_set_colorspace(struct drm_connector *connector,
 
 	sde_conn = to_sde_connector(connector);
 	if (!sde_conn->drv_panel) {
-		pr_err("invalid dp panel\n");
+		DP_ERR("invalid dp panel\n");
 		return -EINVAL;
 	}
 
@@ -1192,7 +1192,7 @@ int dp_drm_bond_bridge_init(void *display,
 
 	bridge = &mgr->bond_bridge[type];
 	if (bridge->display) {
-		pr_err("bond bridge already inited\n");
+		DP_ERR("bond bridge already inited\n");
 		return -EINVAL;
 	}
 
@@ -1213,7 +1213,7 @@ int dp_drm_bond_bridge_init(void *display,
 
 	rc = drm_bridge_attach(encoder, &bridge->base, NULL, 0);
 	if (rc) {
-		pr_err("failed to attach bridge, rc=%d\n", rc);
+		DP_ERR("failed to attach bridge, rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1264,7 +1264,7 @@ struct drm_encoder *dp_connector_atomic_best_encoder(
 		if (bond_state->connector[type] != connector) {
 			if (bond_state->bond_mask[type] &
 					(1 << bond_info->bond_idx)) {
-				pr_debug("single encoder is in use\n");
+				DP_DEBUG("single encoder is in use\n");
 				return NULL;
 			}
 			continue;
@@ -1290,7 +1290,7 @@ struct drm_encoder *dp_connector_atomic_best_encoder(
 
 		bond_bridge = bond_info->bond_bridge[type];
 		if (bond_state->connector_mask & bond_bridge->bond_mask) {
-			pr_debug("bond encoder is in use\n");
+			DP_DEBUG("bond encoder is in use\n");
 			return NULL;
 		}
 
@@ -1364,7 +1364,7 @@ int dp_connector_atomic_check(struct drm_connector *connector,
 			for (i = 0; i < bond_bridge->bridge_num; i++) {
 				dp = bond_bridge->bridges[i]->display;
 				if (!dp->is_sst_connected) {
-					pr_err("bond dp %d disconnected\n",
+					DP_ERR("bond dp %d disconnected\n",
 						DRMID(dp->base_connector));
 					return -EINVAL;
 				}
@@ -1571,7 +1571,7 @@ enum drm_mode_status dp_connector_mode_valid(struct drm_connector *connector,
 			return MODE_BAD;
 
 		if (!dp_bond_check_connector(connector, type)) {
-			pr_debug("mode:%s requires multi ports\n", mode->name);
+			DP_DEBUG("mode:%s requires multi ports\n", mode->name);
 			return MODE_BAD;
 		}
 
@@ -1727,7 +1727,7 @@ int dp_connector_get_tile_map(struct drm_connector *connector,
 
 	for (i = 0; i < num_tile; i++) {
 		tile_map[i] = bridges[i].h_tile_norm;
-		pr_info("tile map: in %d out %d\n", tile_map[i], i);
+		DP_INFO("tile map: in %d out %d\n", tile_map[i], i);
 	}
 
 	return 0;

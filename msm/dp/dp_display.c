@@ -1017,7 +1017,7 @@ static void dp_display_send_force_connect_event(struct dp_display_private *dp)
 	connector = dp->dp_display.base_connector;
 
 	if (!connector) {
-		pr_err("DP%d connector not set\n", dp->cell_idx);
+		DP_ERR("DP%d connector not set\n", dp->cell_idx);
 		return;
 	}
 
@@ -1111,7 +1111,7 @@ static void dp_display_change_phy_bond_mode(struct dp_display_private *dp,
 		enum dp_phy_bond_mode mode)
 {
 	if (dp->phy_bond_mode != mode)
-		pr_info("DP%d  %d -> %d\n", dp->cell_idx,
+		DP_INFO("DP%d  %d -> %d\n", dp->cell_idx,
 				dp->phy_bond_mode, mode);
 
 	dp->phy_bond_mode = mode;
@@ -3409,7 +3409,7 @@ static int dp_display_setup_colospace(struct dp_display *dp_display,
 	struct dp_display_private *dp;
 
 	if (!dp_display || !panel) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		return -EINVAL;
 	}
 
@@ -3487,7 +3487,7 @@ static int dp_display_init_aux_bridge(struct dp_display_private *dp)
 	struct device_node *bridge_node;
 
 	if (!dp->pdev->dev.of_node) {
-		pr_err("cannot find dev.of_node\n");
+		DP_ERR("cannot find dev.of_node\n");
 		rc = -ENODEV;
 		goto end;
 	}
@@ -3499,7 +3499,7 @@ static int dp_display_init_aux_bridge(struct dp_display_private *dp)
 
 	dp->aux_bridge = of_dp_aux_find_bridge(bridge_node);
 	if (!dp->aux_bridge) {
-		pr_err("failed to find dp aux bridge\n");
+		DP_ERR("failed to find dp aux bridge\n");
 		rc = -EPROBE_DEFER;
 		goto end;
 	}
@@ -3905,7 +3905,7 @@ static int dp_display_set_phy_bond_mode(struct dp_display *dp_display,
 	struct dp_display_private *dp;
 
 	if (!dp_display) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		return -EINVAL;
 	}
 
@@ -3950,7 +3950,7 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	index = dp_display_get_num_of_displays(NULL);
 	if (index >= MAX_DP_ACTIVE_DISPLAY) {
-		pr_err("exceeds max dp count\n");
+		DP_ERR("exceeds max dp count\n");
 		rc = -EINVAL;
 		goto bail;
 	}
@@ -4124,7 +4124,7 @@ int dp_display_get_num_of_bonds(void *dp_display)
 	};
 
 	if (!dp_display) {
-		pr_debug("dp display not initialized\n");
+		DP_DEBUG("dp display not initialized\n");
 		return 0;
 	}
 
@@ -4174,12 +4174,12 @@ int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 	int i, j, n = 0;
 
 	if (!dp_display) {
-		pr_debug("dp display not initialized\n");
+		DP_DEBUG("dp display not initialized\n");
 		return -EINVAL;
 	}
 
 	if (type < 0 || type >= DP_BOND_MAX) {
-		pr_debug("invalid bond type\n");
+		DP_DEBUG("invalid bond type\n");
 		return -EINVAL;
 	}
 
@@ -4215,7 +4215,7 @@ int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 	}
 
 	if (n < dp_bond_info->dp_display_num) {
-		pr_warn("no enough dp displays (%d:%d) for bond type %d, disabled\n",
+		DP_WARN("no enough dp displays (%d:%d) for bond type %d, disabled\n",
 				n, dp_bond_info->dp_display_num, type);
 		dp_bond_info->dp_display_num = 0;
 	}

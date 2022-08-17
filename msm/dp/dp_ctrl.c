@@ -1565,7 +1565,7 @@ static void dp_ctrl_set_phy_bond_mode(struct dp_ctrl *dp_ctrl,
 	struct dp_ctrl_private *ctrl;
 
 	if (!dp_ctrl) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		return;
 	}
 

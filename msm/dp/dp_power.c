@@ -287,7 +287,7 @@ static int dp_power_clk_init(struct dp_power_private *power, bool enable)
 		power->bond_pixel_parent = devm_clk_get(dev,
 						"bond_pixel_parent");
 		if (IS_ERR(power->bond_pixel_parent)) {
-			pr_debug("Unable to get DP bond pixel RCG parent\n");
+			DP_DEBUG("Unable to get DP bond pixel RCG parent\n");
 			power->bond_pixel_parent = NULL;
 		}
 	} else {
