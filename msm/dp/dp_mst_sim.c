@@ -643,6 +643,27 @@ static void dp_sim_update_display_id_detail_timing(u8 *block,
 			((mode->vsync_end - mode->vsync_start - 1) >> 8) & 0xFF;
 }
 
+static int dp_sim_update_edid_name(struct edid *edid, const char *name)
+{
+	u8 *dtd = (u8 *)&edid->detailed_timings[3];
+	u8 standard_header[] = {0x00, 0x00, 0x00, 0xFC, 0x00};
+	u32 dtd_size = 18;
+	u32 header_size = sizeof(standard_header);
+
+	if (!name)
+		return -EINVAL;
+
+	/* Fill standard header */
+	memcpy(dtd, standard_header, header_size);
+
+	dtd_size -= header_size;
+	dtd_size = min_t(u32, dtd_size, strlen(name));
+
+	memcpy(dtd + header_size, name, dtd_size);
+
+	return 0;
+}
+
 static void dp_sim_update_checksum(u8 *data, u8 size)
 {
 	u32 i, sum = 0;
@@ -670,6 +691,8 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	u32 tile_sn = 0;
 	u32 edid_size = 0;
 	u8 *pedid;
+	const char *name;
+	char temp_name[16];
 
 	const u8 edid_buf[EDID_LENGTH] = {
 		0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x44, 0x6D,
@@ -785,6 +808,13 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	of_property_read_u32(node, "qcom,mode-tile-sn",
 			&tile_sn);
 
+	name = of_get_property(node, "qcom,mode-display-name", NULL);
+	if (!name) {
+		scnprintf(temp_name, sizeof(temp_name),
+				"Sim%dx%d", mode->hdisplay, mode->vdisplay);
+		name = temp_name;
+	}
+
 	mode->hsync_start = mode->hdisplay + h_front_porch;
 	mode->hsync_end = mode->hsync_start + h_pulse_width;
 	mode->htotal = mode->hsync_end + h_back_porch;
@@ -812,6 +842,7 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 	pedid = (u8 *)edid;
 	memcpy(pedid, edid_buf, sizeof(edid_buf));
 
+	dp_sim_update_edid_name(edid, name);
 	dp_sim_update_dtd(edid, mode);
 	edid->width_cm = width_mm / 10;
 	edid->height_cm = height_mm / 10;
@@ -1563,6 +1594,11 @@ static int dp_sim_debug_init(struct dp_sim_device *sim_dev)
 
 	if (!sim_dev->label)
 		return 0;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_FS)) {
+		pr_err("Skip creating debugfs\n");
+		return 0;
+	}
 
 	dir = debugfs_create_dir(sim_dev->label, NULL);
 	if (IS_ERR_OR_NULL(dir)) {
