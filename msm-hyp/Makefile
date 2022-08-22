@@ -1,26 +1,16 @@
-ccflags-y := -I$(srctree)/include/drm -I$(srctree)/techpack/display/msm-hyp
-ccflags-y += -I$(srctree)/techpack/display/include/uapi/display
-ccflags-y += -I$(srctree)/techpack/display/include
-ccflags-y += -I$(srctree)/techpack/display/msm
-ccflags-$(CONFIG_DRM_MSM_HYP_WFD) += -I$(srctree)/techpack/display/msm-hyp/wfd
+# SPDX-License-Identifier: GPL-2.0
 
-CFLAGS_REMOVE_wfd/wfd_kms.o += -mgeneral-regs-only
-CFLAGS_REMOVE_wfd/wire_user.o += -mgeneral-regs-only
+KBUILD_OPTIONS+= DISPLAY_ROOT=$(KERNEL_SRC)/$(M)/../
 
-msm_hyp-y := \
-			msm_hyp_trace_point.o \
-			msm_drv_hyp.o\
-			msm_hyp_notifier.o\
-			msm_hyp_utils.o
+all: modules
 
-msm_hyp-$(CONFIG_SYNC_FILE) += \
-			msm_hyp_fence.o
+modules_install:
+	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(M) modules_install
 
-msm_hyp-$(CONFIG_DRM_MSM_HYP_WFD) += \
-			wfd/wfd_kms.o\
-			wfd/user_hab_utils.o\
-			wfd/wire_user.o
+%:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
 
-msm_hyp-$(CONFIG_DRM_MSM_LEASE) += ../msm-lease/msm_lease_drv.o
+clean:
+	rm -f *.o *.ko *.mod.c *.mod.o *~ .*.cmd Module.symvers
+	rm -rf .tmp_versions
 
-obj-$(CONFIG_DRM_MSM_HYP) += msm_hyp.o
