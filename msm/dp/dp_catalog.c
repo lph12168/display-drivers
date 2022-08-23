@@ -2950,6 +2950,7 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 	strlcpy(catalog->exe_mode, "hw", sizeof(catalog->exe_mode));
 
 	dp_catalog = &catalog->dp_catalog;
+	dp_catalog->parser = parser;
 
 	dp_catalog->aux   = aux;
 	dp_catalog->ctrl  = ctrl;

@@ -108,10 +108,13 @@
 
 /* Tx tran offsets */
 #define DP_TRAN_DRVR_EMP_EN			0x00C0
+#define DP_TRAN_DRVR_EMP_EN_7nm			0x00B8
 #define DP_TX_INTERFACE_MODE			0x00C4
+#define DP_TX_INTERFACE_MODE_7nm		0x00BC
 
 /* Tx VMODE offsets */
 #define DP_VMODE_CTRL1				0x00C8
+#define DP_VMODE_CTRL1_7nm			0x00E8
 
 #define DP_PHY_PLL_POLL_SLEEP_US		500
 #define DP_PHY_PLL_POLL_TIMEOUT_US		10000
@@ -119,8 +122,6 @@
 #define DP_VCO_RATE_8100MHZDIV1000		8100000UL
 #define DP_VCO_RATE_9720MHZDIV1000		9720000UL
 #define DP_VCO_RATE_10800MHZDIV1000		10800000UL
-
-#define DP_PLL_NUM_CLKS				2
 
 #define DP_5NM_C_READY		BIT(0)
 #define DP_5NM_FREQ_DONE	BIT(0)
@@ -226,11 +227,84 @@ static int dp_vco_pll_init_db_5nm(struct dp_pll_db *pdb,
 	return 0;
 }
 
+static void dp_pll_config_tx_7nm(struct dp_pll *pll)
+{
+	/* TX-0 register configuration */
+	dp_pll_write(dp_phy, DP_PHY_TX0_TX1_LANE_CTL, 0x05);
+	dp_pll_write(dp_ln_tx0, DP_VMODE_CTRL1_7nm, 0x40);
+	dp_pll_write(dp_ln_tx0, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
+	dp_pll_write(dp_ln_tx0, TXn_INTERFACE_SELECT, 0x3b);
+	dp_pll_write(dp_ln_tx0, TXn_CLKBUF_ENABLE, 0x0f);
+	dp_pll_write(dp_ln_tx0, TXn_RESET_TSYNC_EN, 0x03);
+	dp_pll_write(dp_ln_tx0, DP_TRAN_DRVR_EMP_EN_7nm, 0xf);
+	dp_pll_write(dp_ln_tx0, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
+	dp_pll_write(dp_ln_tx0, DP_TX_INTERFACE_MODE_7nm, 0x00);
+	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_TX, 0x11);
+	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_RX, 0x11);
+	dp_pll_write(dp_ln_tx0, TXn_TX_BAND, 0x04);
+
+	/* Make sure the PLL register writes are done */
+	wmb();
+
+	/* TX-1 register configuration */
+	dp_pll_write(dp_phy, DP_PHY_TX2_TX3_LANE_CTL, 0x05);
+	dp_pll_write(dp_ln_tx1, DP_VMODE_CTRL1_7nm, 0x40);
+	dp_pll_write(dp_ln_tx1, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
+	dp_pll_write(dp_ln_tx1, TXn_INTERFACE_SELECT, 0x3b);
+	dp_pll_write(dp_ln_tx1, TXn_CLKBUF_ENABLE, 0x0f);
+	dp_pll_write(dp_ln_tx1, TXn_RESET_TSYNC_EN, 0x03);
+	dp_pll_write(dp_ln_tx1, DP_TRAN_DRVR_EMP_EN_7nm, 0xf);
+	dp_pll_write(dp_ln_tx1, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
+	dp_pll_write(dp_ln_tx1, DP_TX_INTERFACE_MODE_7nm, 0x00);
+	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_TX, 0x11);
+	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_RX, 0x11);
+	dp_pll_write(dp_ln_tx1, TXn_TX_BAND, 0x04);
+
+	/* Make sure the PHY register writes are done */
+	wmb();
+}
+
+static void dp_pll_config_tx_5nm(struct dp_pll *pll)
+{
+	/* TX-0 register configuration */
+	dp_pll_write(dp_phy, DP_PHY_TX0_TX1_LANE_CTL, 0x05);
+	dp_pll_write(dp_ln_tx0, DP_VMODE_CTRL1, 0x40);
+	dp_pll_write(dp_ln_tx0, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
+	dp_pll_write(dp_ln_tx0, TXn_INTERFACE_SELECT, 0x3b);
+	dp_pll_write(dp_ln_tx0, TXn_CLKBUF_ENABLE, 0x0f);
+	dp_pll_write(dp_ln_tx0, TXn_RESET_TSYNC_EN, 0x03);
+	dp_pll_write(dp_ln_tx0, DP_TRAN_DRVR_EMP_EN, 0xf);
+	dp_pll_write(dp_ln_tx0, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
+	dp_pll_write(dp_ln_tx0, DP_TX_INTERFACE_MODE, 0x00);
+	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_TX, 0x0A);
+	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_RX, 0x11);
+	dp_pll_write(dp_ln_tx0, TXn_TX_BAND, 0x04);
+	/* Make sure the PLL register writes are done */
+	wmb();
+
+	/* TX-1 register configuration */
+	dp_pll_write(dp_phy, DP_PHY_TX2_TX3_LANE_CTL, 0x05);
+	dp_pll_write(dp_ln_tx1, DP_VMODE_CTRL1, 0x40);
+	dp_pll_write(dp_ln_tx1, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
+	dp_pll_write(dp_ln_tx1, TXn_INTERFACE_SELECT, 0x3b);
+	dp_pll_write(dp_ln_tx1, TXn_CLKBUF_ENABLE, 0x0f);
+	dp_pll_write(dp_ln_tx1, TXn_RESET_TSYNC_EN, 0x03);
+	dp_pll_write(dp_ln_tx1, DP_TRAN_DRVR_EMP_EN, 0xf);
+	dp_pll_write(dp_ln_tx1, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
+	dp_pll_write(dp_ln_tx1, DP_TX_INTERFACE_MODE, 0x00);
+	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_TX, 0x0A);
+	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_RX, 0x11);
+	dp_pll_write(dp_ln_tx1, TXn_TX_BAND, 0x04);
+
+	/* Make sure the PHY register writes are done */
+	wmb();
+}
+
 static int dp_config_vco_rate_5nm(struct dp_pll *pll,
 		unsigned long rate)
 {
 	int rc = 0;
-	struct dp_pll_db *pdb = (struct dp_pll_db *)pll->priv;
+	struct dp_pll_db *pdb = &pll->pll_db;
 	const struct dp_pll_params *params;
 
 	rc = dp_vco_pll_init_db_5nm(pdb, rate);
@@ -334,37 +408,10 @@ static int dp_config_vco_rate_5nm(struct dp_pll *pll,
 	/* Make sure the PLL register writes are done */
 	wmb();
 
-	/* TX-0 register configuration */
-	dp_pll_write(dp_phy, DP_PHY_TX0_TX1_LANE_CTL, 0x05);
-	dp_pll_write(dp_ln_tx0, DP_VMODE_CTRL1, 0x40);
-	dp_pll_write(dp_ln_tx0, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
-	dp_pll_write(dp_ln_tx0, TXn_INTERFACE_SELECT, 0x3b);
-	dp_pll_write(dp_ln_tx0, TXn_CLKBUF_ENABLE, 0x0f);
-	dp_pll_write(dp_ln_tx0, TXn_RESET_TSYNC_EN, 0x03);
-	dp_pll_write(dp_ln_tx0, DP_TRAN_DRVR_EMP_EN, 0xf);
-	dp_pll_write(dp_ln_tx0, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
-	dp_pll_write(dp_ln_tx0, DP_TX_INTERFACE_MODE, 0x00);
-	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_TX, params->lane_offset_tx);
-	dp_pll_write(dp_ln_tx0, TXn_RES_CODE_LANE_OFFSET_RX, params->lane_offset_rx);
-	dp_pll_write(dp_ln_tx0, TXn_TX_BAND, 0x04);
-	/* Make sure the PLL register writes are done */
-	wmb();
-
-	/* TX-1 register configuration */
-	dp_pll_write(dp_phy, DP_PHY_TX2_TX3_LANE_CTL, 0x05);
-	dp_pll_write(dp_ln_tx1, DP_VMODE_CTRL1, 0x40);
-	dp_pll_write(dp_ln_tx1, TXn_PRE_STALL_LDO_BOOST_EN, 0x30);
-	dp_pll_write(dp_ln_tx1, TXn_INTERFACE_SELECT, 0x3b);
-	dp_pll_write(dp_ln_tx1, TXn_CLKBUF_ENABLE, 0x0f);
-	dp_pll_write(dp_ln_tx1, TXn_RESET_TSYNC_EN, 0x03);
-	dp_pll_write(dp_ln_tx1, DP_TRAN_DRVR_EMP_EN, 0xf);
-	dp_pll_write(dp_ln_tx1, TXn_PARRATE_REC_DETECT_IDLE_EN, 0x00);
-	dp_pll_write(dp_ln_tx1, DP_TX_INTERFACE_MODE, 0x00);
-	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_TX, params->lane_offset_tx);
-	dp_pll_write(dp_ln_tx1, TXn_RES_CODE_LANE_OFFSET_RX, params->lane_offset_rx);
-	dp_pll_write(dp_ln_tx1, TXn_TX_BAND, 0x04);
-	/* Make sure the PHY register writes are done */
-	wmb();
+	if (pll->revision == DP_PLL_7NM)
+		dp_pll_config_tx_7nm(pll);
+	else
+		dp_pll_config_tx_5nm(pll);
 
 	return set_vco_div(pll, rate);
 }
@@ -787,37 +834,31 @@ static const struct clk_ops pll_vco_div_clk_ops = {
 	.round_rate = dp_pll_vco_div_clk_round,
 };
 
-static struct dp_pll_vco_clk dp0_phy_pll_clks[DP_PLL_NUM_CLKS] = {
+static struct clk_init_data phy_pll_clks[DP_PLL_NUM_CLKS] = {
 	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp0_phy_pll_link_clk",
+		.name = "_phy_pll_link_clk",
 		.ops = &pll_link_clk_ops,
-		},
 	},
 	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp0_phy_pll_vco_div_clk",
+		.name = "_phy_pll_vco_div_clk",
 		.ops = &pll_vco_div_clk_ops,
-		},
 	},
 };
 
-static struct dp_pll_vco_clk dp_phy_pll_clks[DP_PLL_NUM_CLKS] = {
-	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp_phy_pll_link_clk",
-		.ops = &pll_link_clk_ops,
-		},
-	},
-	{
-	.hw.init = &(struct clk_init_data) {
-		.name = "dp_phy_pll_vco_div_clk",
-		.ops = &pll_vco_div_clk_ops,
-		},
-	},
-};
+static struct dp_pll_vco_clk *dp_pll_get_clks(struct dp_pll *pll)
+{
+	int i;
 
-static struct dp_pll_db dp_pdb;
+	for (i = 0; i < DP_PLL_NUM_CLKS; i++) {
+		snprintf(pll->pll_clks[i].name, DP_PLL_NAME_MAX_SIZE,
+				"%s%s", pll->name, phy_pll_clks[i].name);
+		pll->pll_clks[i].init_data.name = pll->pll_clks[i].name;
+		pll->pll_clks[i].init_data.ops = phy_pll_clks[i].ops;
+		pll->pll_clks[i].hw.init = &pll->pll_clks[i].init_data;
+	}
+
+	return pll->pll_clks;
+}
 
 int dp_pll_clock_register_5nm(struct dp_pll *pll)
 {
@@ -843,18 +884,14 @@ int dp_pll_clock_register_5nm(struct dp_pll *pll)
 	}
 
 	pll->clk_data->clk_num = DP_PLL_NUM_CLKS;
-	pll->priv = &dp_pdb;
-	dp_pdb.pll = pll;
-	dp_pdb.pll_params = pll_params;
+	pll->pll_db.pll = pll;
+	pll->pll_db.pll_params = pll_params;
 
 	pll->pll_cfg = dp_pll_configure;
 	pll->pll_prepare = dp_pll_prepare;
 	pll->pll_unprepare = dp_pll_unprepare;
 
-	if (pll->dp_core_revision >= 0x10040000)
-		pll_clks = dp0_phy_pll_clks;
-	else
-		pll_clks = dp_phy_pll_clks;
+	pll_clks = dp_pll_get_clks(pll);
 
 	rc = dp_pll_clock_register_helper(pll, pll_clks, DP_PLL_NUM_CLKS);
 	if (rc) {
