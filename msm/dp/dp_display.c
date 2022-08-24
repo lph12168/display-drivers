@@ -1661,7 +1661,7 @@ static void dp_display_clean(struct dp_display_private *dp)
 		dp_panel->deinit(dp_panel, 0);
 	}
 
-	if (!dp->parser->force_connect_mode)
+	if (dp->parser->force_connect_mode)
 		dp_display_state_remove(DP_STATE_ENABLED)
 	else
 		dp_display_state_remove(DP_STATE_ENABLED | DP_STATE_CONNECTED);
