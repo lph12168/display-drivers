@@ -1504,7 +1504,7 @@ static int dp_display_usbpd_attention_cb(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (dp->hpd->hpd_high && dp->hpd->hpd_irq)
+	if (dp->parser->dp_cec_feature && dp->hpd->hpd_high && dp->hpd->hpd_irq)
 		drm_dp_cec_irq(dp->aux->drm_aux);
 
 	DP_DEBUG("hpd_irq:%d, hpd_high:%d, power_on:%d, is_connected:%d\n",

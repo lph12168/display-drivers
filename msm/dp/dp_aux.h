@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_AUX_H_
@@ -39,6 +40,7 @@ struct dp_aux {
 	u32 state;
 
 	bool read;
+	bool dp_cec_feature;
 
 	struct mutex *access_lock;
 

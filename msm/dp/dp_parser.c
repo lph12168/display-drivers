@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2019,2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_gpio.h>
@@ -175,6 +176,9 @@ static int dp_parser_misc(struct dp_parser *parser)
 
 	DP_DEBUG("Audio parsing successful. Audio support:%d\n",
 		!parser->no_audio_support);
+
+	parser->dp_cec_feature = of_property_read_bool(of_node,
+		"qcom,dp_cec_feature");
 
 	return 0;
 }

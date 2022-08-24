@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "dp_panel.h"
@@ -2331,7 +2332,7 @@ static int dp_panel_get_modes(struct dp_panel *dp_panel,
 		return 1;
 	} else if (dp_panel->edid_ctrl->edid) {
 		count =  _sde_edid_update_modes(connector, dp_panel->edid_ctrl);
-		if (count)
+		if (panel->parser->dp_cec_feature && count)
 			drm_dp_cec_set_edid(panel->aux->drm_aux,
 				dp_panel->edid_ctrl->edid);
 		return count;
@@ -2680,7 +2681,9 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel, u32 flags)
 	shdr_if_sdp = &panel->catalog->shdr_if_sdp;
 	vsc_colorimetry = &panel->catalog->vsc_colorimetry;
 
-	drm_dp_cec_unset_edid(panel->aux->drm_aux);
+	if (panel->parser->dp_cec_feature)
+		drm_dp_cec_unset_edid(panel->aux->drm_aux);
+
 	if (!panel->custom_edid && dp_panel->edid_ctrl->edid)
 		sde_free_edid((void **)&dp_panel->edid_ctrl);
 
