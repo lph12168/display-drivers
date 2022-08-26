@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-shd] %s: " fmt, __func__
@@ -888,11 +889,17 @@ static int shd_connector_get_modes(struct drm_connector *connector,
 	list_for_each_entry(m, &connector->modes, head)
 		m->status = MODE_STALE;
 
+	list_for_each_entry(m, &disp->base->connector->modes, head)
+		m->status = MODE_STALE;
+
 	/* update base modes */
 	drm_connector_list_update(disp->base->connector);
 
 	/* validate modes */
 	list_for_each_entry(m, &disp->base->connector->modes, head) {
+		if (m->status != MODE_OK)
+			continue;
+
 		if (sde_conn->ops.mode_valid)
 			m->status = sde_conn->ops.mode_valid(
 					disp->base->connector, m,
