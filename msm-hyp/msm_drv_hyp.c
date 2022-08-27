@@ -88,6 +88,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_vblank.h>
 #include "msm_drv_hyp.h"
 #include "msm_hyp_utils.h"
 #include "msm_hyp_trace.h"
@@ -714,8 +715,21 @@ static int _msm_hyp_connector_encoder_init(struct drm_device *ddev,
 	return 0;
 }
 
+static void msm_hyp_crtc_atomic_enable(struct drm_crtc *crtc,
+	struct drm_crtc_state *old_state)
+{
+	drm_crtc_vblank_on(crtc);
+}
+
+static void msm_hyp_crtc_atomic_disable(struct drm_crtc *crtc,
+	struct drm_crtc_state *old_state)
+{
+	drm_crtc_vblank_off(crtc);
+}
+
 const struct drm_crtc_helper_funcs msm_hyp_crtc_helper = {
-	/* empty */
+	.atomic_enable = msm_hyp_crtc_atomic_enable,
+	.atomic_disable = msm_hyp_crtc_atomic_disable,
 };
 
 static void msm_hyp_crtc_destroy(struct drm_crtc *crtc)
