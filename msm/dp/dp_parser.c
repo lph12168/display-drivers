@@ -167,6 +167,10 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (rc)
 		parser->max_lclk_khz = DP_MAX_LINK_CLK_KHZ;
 
+	parser->no_4k_dci_support = of_property_read_bool(of_node,
+		"qcom,no-4k-dci-support");
+	DP_DEBUG("no-4k-dci-support = %d\n", parser->no_4k_dci_support);
+
 	parser->display_type = of_get_property(of_node, "label", NULL);
 	if (!parser->display_type)
 		parser->display_type = "unknown";
