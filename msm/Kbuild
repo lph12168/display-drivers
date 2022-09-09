@@ -242,6 +242,7 @@ msm_drm-$(CONFIG_DRM_MSM) += msm_atomic.o \
 			     msm_prop.o
 
 msm_drm-$(CONFIG_DRM_SDE_SHP) += shp/shp_drm.o
+msm_drm-$(CONFIG_DRM_MSM_LEASE) += ../msm-lease/msm_lease_drv.o
 
 msm_drm-$(CONFIG_DRM_SDE_ROI_MISR) += sde/sde_fence_file.o \
 				sde/sde_fence_helper.o \
