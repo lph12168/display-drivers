@@ -2342,12 +2342,14 @@ static int __init msm_drm_register(void)
 	msm_edp_register();
 	msm_hdmi_register();
 	msm_lease_drm_register();
+	sde_shp_register();
 	return 0;
 }
 
 static void __exit msm_drm_unregister(void)
 {
 	DBG("fini");
+	sde_shp_unregister();
 	msm_lease_drm_unregister();
 	sde_wb_unregister();
 	msm_hdmi_unregister();

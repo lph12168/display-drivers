@@ -1479,6 +1479,18 @@ static inline void __exit msm_lease_drm_unregister(void)
 }
 #endif /* CONFIG_DRM_MSM_LEASE */
 
+#if IS_ENABLED(CONFIG_DRM_SDE_SHP)
+void __init sde_shp_register(void);
+void __exit sde_shp_unregister(void);
+#else
+static inline void __init sde_shp_register(void)
+{
+}
+static inline void __exit sde_shp_unregister(void)
+{
+}
+#endif /* CONFIG_DRM_SDE_SHP */
+
 struct clk *msm_clk_get(struct platform_device *pdev, const char *name);
 int msm_clk_bulk_get(struct device *dev, struct clk_bulk_data **bulk);
 
