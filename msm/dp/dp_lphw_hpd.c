@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
 
@@ -152,7 +153,7 @@ static void dp_lphw_hpd_host_deinit(struct dp_hpd *dp_hpd,
 static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 {
 	struct dp_lphw_hpd_private *lphw_hpd;
-	u32 isr = 0;
+	u32 isr = 0, status;
 	int rc = 0;
 
 	if (!dp_hpd) {
@@ -163,8 +164,44 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 	lphw_hpd = container_of(dp_hpd, struct dp_lphw_hpd_private, base);
 
 	isr = lphw_hpd->catalog->get_interrupt(lphw_hpd->catalog);
+	status = (isr >> 29) & 0x7;
 
-	if (isr & DP_HPD_UNPLUG_INT_STATUS) { /* disconnect interrupt */
+	/* Check for uncommon cases */
+	switch (status) {
+	case DP_HPD_STATUS_DISCONNECTED:
+		if (!(isr & DP_HPD_UNPLUG_INT_STATUS))
+			pr_info("disconnect but no interrupt, hpd isr state: 0x%x\n", isr);
+		if (isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS))
+			pr_info("missed connect interrupt, hpd isr state: 0x%x\n", isr);
+		if (isr & DP_IRQ_HPD_INT_STATUS)
+			pr_info("missed hpd_irq interrupt, hpd isr state: 0x%x\n", isr);
+		break;
+	case DP_HPD_STATUS_CONNECT_PENDING:
+		pr_info("connect pending, hpd isr state: 0x%x\n", isr);
+		break;
+	case DP_HPD_STATUS_CONNECTED:
+		if (!(isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS)))
+			pr_info("connect but no interrupt, hpd isr state: 0x%x\n", isr);
+		if (isr & DP_HPD_UNPLUG_INT_STATUS)
+			pr_info("missed disconnect interrupt, hpd isr state: 0x%x\n", isr);
+		if (isr & DP_IRQ_HPD_INT_STATUS)
+			pr_info("missed hpd_irq interrupt, hpd isr state: 0x%x\n", isr);
+		break;
+	case DP_HPD_STATUS_HPD_IO_GLITCH_COUNT:
+		pr_info("hpd io glich counting, hpd isr state: 0x%x\n", isr);
+		break;
+	case DP_HPD_STATUS_IRQ_HPD_PULSE_COUNT:
+		pr_info("hpd irq counting, hpd isr state: 0x%x\n", isr);
+		break;
+	case DP_HPD_STATUS_HPD_REPLUG_COUNT:
+		pr_info("hpd replug counting, hpd isr state: 0x%x\n", isr);
+		break;
+	default:
+		break;
+	}
+
+	/* Process based on most updated HPD status, instead of interrupt */
+	if (status == DP_HPD_STATUS_DISCONNECTED) { /* disconnect status */
 
 		pr_debug("disconnect interrupt, hpd isr state: 0x%x\n", isr);
 
@@ -179,17 +216,11 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 			if (!rc)
 				pr_debug("disconnect not queued\n");
 		} else {
-			pr_err("already disconnected\n");
+			pr_info("already disconnected\n");
 		}
 
-	} else if (isr & DP_IRQ_HPD_INT_STATUS) { /* attention interrupt */
-
-		pr_debug("hpd_irq interrupt, hpd isr state: 0x%x\n", isr);
-
-		rc = queue_work(lphw_hpd->connect_wq, &lphw_hpd->attention);
-		if (!rc)
-			pr_debug("attention not queued\n");
-	} else if (isr & DP_HPD_PLUG_INT_STATUS) {
+	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
+			!(isr & DP_IRQ_HPD_INT_STATUS)) { /* connected status */
 
 		pr_debug("connect interrupt, hpd isr state: 0x%x\n", isr);
 
@@ -200,8 +231,21 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 			if (!rc)
 				pr_debug("connect not queued\n");
 		} else {
-			pr_err("already connected\n");
+			pr_info("already connected\n");
 		}
+
+	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
+			(isr & DP_IRQ_HPD_INT_STATUS)) { /* attention interrupt */
+
+		pr_debug("hpd_irq interrupt, hpd isr state: 0x%x\n", isr);
+
+		rc = queue_work(lphw_hpd->connect_wq, &lphw_hpd->attention);
+		if (!rc)
+			pr_debug("attention not queued\n");
+
+	} else { /* intermediate status */
+
+		pr_info("ignored, hpd isr state: 0x%x\n", isr);
 
 	}
 }
