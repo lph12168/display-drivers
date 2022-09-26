@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_ROI_MISR_HELPER_H
@@ -8,6 +9,7 @@
 
 #include "sde_encoder_phys.h"
 #include "sde_crtc.h"
+#include "sde_hw_roi_misr.h"
 
 #if defined(CONFIG_DRM_SDE_ROI_MISR)
 
@@ -27,6 +29,36 @@ void sde_roi_misr_init(struct sde_crtc *sde_crtc);
  */
 int sde_roi_misr_cfg_set(struct drm_crtc_state *state,
 		void __user *usr_ptr);
+
+/**
+ * sde_roi_misr_populate_roi_range - populate roi range info
+ * @c_conn: Pointer to sde connector structure
+ * @info: Pointer to sde_kms_info structure
+ * @mode: Pointer to drm_display_mode structure
+ * @mode_info: Pointer to msm_mode_info structure
+ */
+void sde_roi_misr_populate_roi_range(
+		struct sde_connector *c_conn,
+		struct sde_kms_info *info,
+		struct drm_display_mode *mode,
+		struct msm_mode_info *mode_info);
+
+/**
+ * sde_roi_misr_get_mode_info - get roi misr mode info
+ * @connector: Pointer to drm connector structure
+ * @drm_mode: Pointer to drm_display mode structure
+ * @mode_info: Pointer to msm_mode_info structure
+ * @misr_mode_info: Output parameter, pointer to
+ *			sde_roi_misr_mode_info structure
+ * @display: Pointer to private display structure
+ *
+ * Returns: Zero on success
+ */
+int sde_roi_misr_get_mode_info(struct drm_connector *connector,
+		const struct drm_display_mode *drm_mode,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display);
 
 /**
  * sde_roi_misr_check_rois - check roi misr config
@@ -79,6 +111,26 @@ void sde_roi_misr_init(struct sde_crtc *sde_crtc)
 static inline
 int sde_roi_misr_cfg_set(struct drm_crtc_state *state,
 		void __user *usr_ptr)
+{
+	return 0;
+}
+
+static inline
+void sde_roi_misr_populate_roi_range(
+		struct sde_connector *c_conn,
+		struct sde_kms_info *info,
+		struct drm_display_mode *mode,
+		struct msm_mode_info *mode_info)
+{
+	return 0;
+}
+
+static inline
+int sde_roi_misr_get_mode_info(struct drm_connector *connector,
+		const struct drm_display_mode *drm_mode,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display)
 {
 	return 0;
 }
