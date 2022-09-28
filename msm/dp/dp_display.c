@@ -1831,6 +1831,7 @@ static void dp_display_attention_work(struct work_struct *work)
 			 */
 			if (dp->parser->no_aux_switch &&
 					!dp->parser->lphw_hpd) {
+				mutex_unlock(&dp->session_lock);
 				dp_display_handle_disconnect(dp);
 				queue_work(dp->wq, &dp->connect_work);
 				goto mst_attention;
