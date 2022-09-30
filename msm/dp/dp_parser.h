@@ -200,7 +200,9 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @fec_feature_enable: FEC feature enable status
  * @dsc_continuous_pps: PPS sent every frame by HW
  * @has_widebus: widebus (2PPC) feature eanble status
-  *@mst_fixed_port: mst port_num reserved for fixed topology
+ * @mst_fixed_port: mst port_num reserved for fixed topology
+ * @mst_fixed_display_type: mst display_type reserved for fixed topology
+ * @display_type: display type as defined in device tree.
  * @qos_cpu_mask: CPU mask for QOS
  * @qos_cpu_latency: CPU Latency setting for QOS
  * @parse: function to be called by client to parse device tree.
@@ -235,6 +237,8 @@ struct dp_parser {
 	u32 pixel_base_off[MAX_DP_MST_STREAMS];
 	u32 qos_cpu_mask;
 	unsigned long qos_cpu_latency;
+	const char *mst_fixed_display_type[MAX_DP_MST_STREAMS];
+	const char *display_type;
 
 	int (*parse)(struct dp_parser *parser);
 	struct dp_io_data *(*get_io)(struct dp_parser *parser, char *name);

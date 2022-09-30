@@ -1966,7 +1966,7 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 	int i;
 
 	strlcpy(panel_name, display->name, SEC_PANEL_NAME_MAX_LEN);
-	if (strcmp(display->display_type, "secondary") == 0)
+	if (strcmp(display->dsi_type, "secondary") == 0)
 		strlcat(panel_name, secondary_panel_str, SEC_PANEL_NAME_MAX_LEN);
 
 	dir = debugfs_create_dir(panel_name, NULL);
@@ -3534,7 +3534,7 @@ static int dsi_display_clocks_init(struct dsi_display *display)
 	struct dsi_clk_link_set *pll = &display->clock_info.pll_clks;
 	char *dsi_clock_name;
 
-	if (!strcmp(display->display_type, "primary"))
+	if (!strcmp(display->dsi_type, "primary"))
 		dsi_clock_name = "qcom,dsi-select-clocks";
 	else
 		dsi_clock_name = "qcom,dsi-select-sec-clocks";
@@ -4107,7 +4107,7 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 	struct device_node *of_node = display->pdev->dev.of_node;
 	char *dsi_ctrl_name, *dsi_phy_name;
 
-	if (!strcmp(display->display_type, "primary")) {
+	if (!strcmp(display->dsi_type, "primary")) {
 		dsi_ctrl_name = "qcom,dsi-ctrl-num";
 		dsi_phy_name = "qcom,dsi-phy-num";
 	} else {
@@ -4213,7 +4213,7 @@ static int dsi_display_res_init(struct dsi_display *display)
 	display->panel = dsi_panel_get(&display->pdev->dev,
 				display->panel_node,
 				display->parser_node,
-				display->display_type,
+				display->dsi_type,
 				display->cmdline_topology,
 				display->trusted_vm_env);
 	if (IS_ERR_OR_NULL(display->panel)) {
@@ -5923,10 +5923,10 @@ static void dsi_display_firmware_display(const struct firmware *fw,
 
 		display->fw = fw;
 
-		if (!strcmp(display->display_type, "primary"))
+		if (!strcmp(display->dsi_type, "primary"))
 			display->name = "dsi_firmware_display";
 
-		else if (!strcmp(display->display_type, "secondary"))
+		else if (!strcmp(display->dsi_type, "secondary"))
 			display->name = "dsi_firmware_display_secondary";
 
 	} else {
@@ -5943,7 +5943,8 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 {
 	struct dsi_display *display = NULL;
 	struct device_node *node = NULL, *panel_node = NULL, *mdp_node = NULL;
-	int rc = 0, index = DSI_PRIMARY;
+	const char *dsi_type = NULL;
+	int rc = 0, index;
 	bool firm_req = false;
 	struct dsi_display_boot_param *boot_disp;
 
@@ -5952,6 +5953,17 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto end;
 	}
+
+	dsi_type = of_get_property(pdev->dev.of_node, "label", NULL);
+	if (!dsi_type)
+		dsi_type = "primary";
+
+	if (!strcmp(dsi_type, "primary"))
+		index = DSI_PRIMARY;
+	else
+		index = DSI_SECONDARY;
+
+	boot_disp = &boot_displays[index];
 
 	display = devm_kzalloc(&pdev->dev, sizeof(*display), GFP_KERNEL);
 	if (!display) {
@@ -5983,14 +5995,10 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	display->panel_id = ~0x0;
 
 	display->display_type = of_get_property(pdev->dev.of_node,
-				"label", NULL);
+					"qcom,display-type", NULL);
 	if (!display->display_type)
-		display->display_type = "primary";
+		display->display_type = "unknown";
 
-	if (!strcmp(display->display_type, "secondary"))
-		index = DSI_SECONDARY;
-
-	boot_disp = &boot_displays[index];
 	node = pdev->dev.of_node;
 	if (boot_disp->boot_disp_en) {
 		/* The panel name should be same as UEFI name index */
@@ -6011,6 +6019,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	display->panel_node = panel_node;
 	display->pdev = pdev;
 	display->boot_disp = boot_disp;
+	display->dsi_type = dsi_type;
 
 	dsi_display_parse_cmdline_topology(display, index);
 
@@ -6026,13 +6035,13 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	if (!(boot_displays[DSI_PRIMARY].boot_disp_en ||
 			boot_displays[DSI_SECONDARY].boot_disp_en) &&
 			IS_ENABLED(CONFIG_DSI_PARSER)) {
-		if (!strcmp(display->display_type, "primary"))
+		if (!strcmp(display->dsi_type, "primary"))
 			firm_req = !request_firmware_nowait(
 				THIS_MODULE, 1, "dsi_prop",
 				&pdev->dev, GFP_KERNEL, display,
 				dsi_display_firmware_display);
 
-		else if (!strcmp(display->display_type, "secondary"))
+		else if (!strcmp(display->dsi_type, "secondary"))
 			firm_req = !request_firmware_nowait(
 				THIS_MODULE, 1, "dsi_prop_sec",
 				&pdev->dev, GFP_KERNEL, display,
@@ -6294,9 +6303,9 @@ static int dsi_display_ext_get_info(struct drm_connector *connector,
 
 	info->is_connected = connector->status != connector_status_disconnected;
 
-	if (!strcmp(display->display_type, "primary"))
+	if (!strcmp(display->dsi_type, "primary"))
 		info->display_type = SDE_CONNECTOR_PRIMARY;
-	else if (!strcmp(display->display_type, "secondary"))
+	else if (!strcmp(display->dsi_type, "secondary"))
 		info->display_type = SDE_CONNECTOR_SECONDARY;
 
 	info->capabilities |= (MSM_DISPLAY_CAP_VID_MODE |
@@ -6721,9 +6730,9 @@ int dsi_display_get_info(struct drm_connector *connector,
 
 	info->is_connected = display->is_active;
 
-	if (!strcmp(display->display_type, "primary"))
+	if (!strcmp(display->dsi_type, "primary"))
 		info->display_type = SDE_CONNECTOR_PRIMARY;
-	else if (!strcmp(display->display_type, "secondary"))
+	else if (!strcmp(display->dsi_type, "secondary"))
 		info->display_type = SDE_CONNECTOR_SECONDARY;
 
 	info->width_mm = phy_props.panel_width_mm;
