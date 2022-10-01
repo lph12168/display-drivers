@@ -1604,6 +1604,7 @@ static int dsi_panel_parse_video_host_config(struct dsi_video_engine_cfg *cfg,
 	const char *traffic_mode;
 	u32 vc_id = 0;
 	u32 val = 0;
+	bool override_data_type;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-h-sync-pulse", &val);
 	if (rc) {
@@ -1664,6 +1665,37 @@ static int dsi_panel_parse_video_host_config(struct dsi_video_engine_cfg *cfg,
 		cfg->vc_id = 0;
 	} else {
 		cfg->vc_id = vc_id;
+	}
+
+	override_data_type = utils->read_bool(utils->data,
+						"qcom,csi-proxy-enable");
+	if (override_data_type) {
+		/* Data Type follow CSI spec. */
+		pr_debug("[%s] enable the CSI proxy mode\n", name);
+		cfg->data_type.override = true;
+		cfg->data_type.vs = 0x01;  /* FE in CSI */
+		cfg->data_type.ve = 0x00;  /* FS in CSI */
+		cfg->data_type.hs = 0x08;  /* Generic Short Packet 1 in CSI */
+		cfg->data_type.he = 0x08;  /* Generic Short Packet 1 in CSI */
+		cfg->data_type.rgb565 = 0x22;  /* RGB565 in CSI */
+		cfg->data_type.rgb666_packed = 0x23;  /* RGB666 in CSI */
+		cfg->data_type.rgb666 = 0x13;  /* Generic Long Packet in CSI */
+		cfg->data_type.rgb888 = 0x24;  /* RGB888 in CSI */
+		cfg->data_type.blank = 0x11;  /* Blanking in CSI */
+		cfg->data_type.blank_data = 0x00;
+	} else {
+		/* Default Data Type follow DSI spec. */
+		cfg->data_type.override = false;
+		cfg->data_type.vs = 0x01;
+		cfg->data_type.ve = 0x11;
+		cfg->data_type.hs = 0x21;
+		cfg->data_type.he = 0x31;
+		cfg->data_type.rgb565 = 0x0E;
+		cfg->data_type.rgb666_packed = 0x1E;
+		cfg->data_type.rgb666 = 0x2E;
+		cfg->data_type.rgb888 = 0x3E;
+		cfg->data_type.blank = 0x19;
+		cfg->data_type.blank_data = 0x00;
 	}
 
 error:
