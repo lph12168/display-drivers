@@ -233,6 +233,7 @@ struct dp_parser {
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
 	bool no_audio_support;
 	bool dp_cec_feature;
+	bool no_4k_dci_support;
 
 	const char *display_type;
 

@@ -34,6 +34,8 @@
 
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
 
+#define DCI_4K_HORIZ_ACTIVE 4096
+
 #define dp_display_state_show(x) { \
 	DP_ERR("%s: state (0x%x): %s\n", x, dp->state, \
 		dp_display_state_name(dp->state)); \
@@ -2372,6 +2374,14 @@ static enum drm_mode_status dp_display_validate_mode(
 	debug = dp->debug;
 	if (!debug)
 		goto end;
+
+	if (dp->parser->no_4k_dci_support) {
+		if (mode->hdisplay == DCI_4K_HORIZ_ACTIVE) {
+			DP_DEBUG("%s not supported\n", mode->name);
+			mode_status = MODE_BAD;
+			goto end;
+		}
+	}
 
 	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
