@@ -179,9 +179,9 @@ enum sde_lm {
 	LM_3,
 	LM_4,
 	LM_5,
+	LM_6,
 	LM_DCWB_DUMMY_0,
 	LM_DCWB_DUMMY_1,
-	LM_6,
 	LM_MAX
 };
 
