@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_POST_COMMIT_FENCE_H_
@@ -64,11 +65,13 @@ struct sde_sub_fence_context {
 /**
  * struct sde_post_commit_fence_context - post-commit fence context structure
  * @base: the generic fence instance
+ * @lock: spinlock for post-commit fence protection
  * @sub_fence_ctx: the sub-fence context pointer
  * @done_count: done count pointer for timeline check
  */
 struct sde_post_commit_fence_context {
 	struct sde_generic_fence_context base;
+	spinlock_t lock;
 	struct sde_sub_fence_context *sub_fence_ctx[SDE_SUB_FENCE_MAX];
 	unsigned int *done_count;
 };
