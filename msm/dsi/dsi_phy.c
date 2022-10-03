@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_device.h>
@@ -238,7 +238,17 @@ static int dsi_phy_supplies_deinit(struct msm_dsi_phy *phy)
 	int rc = 0;
 	struct dsi_regulator_info *regs;
 
+	if (!phy) {
+		DSI_PHY_ERR(phy, "phy is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	regs = &phy->pwr_info.digital;
+	if (!regs) {
+		DSI_PHY_ERR(phy, "regs is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < regs->count; i++) {
 		if (!regs->vregs[i].vreg)
 			DSI_PHY_ERR(phy, "vreg is NULL, should not reach here\n");
@@ -247,6 +257,11 @@ static int dsi_phy_supplies_deinit(struct msm_dsi_phy *phy)
 	}
 
 	regs = &phy->pwr_info.phy_pwr;
+	if (!regs) {
+		DSI_PHY_ERR(phy, "regs is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < regs->count; i++) {
 		if (!regs->vregs[i].vreg)
 			DSI_PHY_ERR(phy, "vreg is NULL, should not reach here\n");
@@ -866,6 +881,11 @@ static int dsi_phy_enable_ulps(struct msm_dsi_phy *phy,
 	u32 lanes = 0;
 	u32 ulps_lanes;
 
+	if (!phy) {
+		DSI_PHY_ERR(phy, "phy is null, should not reach here\n");
+		return -EINVAL;
+	}
+
 	lanes = config->common_config.data_lanes;
 	if (!dsi_is_type_cphy(&config->common_config))
 		lanes |= DSI_CLOCK_LANE;
@@ -901,6 +921,11 @@ static int dsi_phy_disable_ulps(struct msm_dsi_phy *phy,
 		 struct dsi_host_config *config)
 {
 	u32 ulps_lanes, lanes = 0;
+
+	if (!phy) {
+		DSI_PHY_ERR(phy, "Invalid params\n");
+		return -EINVAL;
+	}
 
 	lanes = config->common_config.data_lanes;
 	if (!dsi_is_type_cphy(&config->common_config))
