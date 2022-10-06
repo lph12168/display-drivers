@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_PANEL_H_
@@ -17,6 +18,13 @@
 
 #define DP_RECEIVER_DSC_CAP_SIZE    15
 #define DP_RECEIVER_FEC_STATUS_SIZE 3
+
+enum dp_query_mode {
+	DSC_PASSTHROUGH_IS_ENABLED = 0,
+	DSC_PASSTHROUGH_UPDATE_DP_MODE,
+	DSC_PASSTHROUGH_UPDATE_PIC_WIDTH,
+	NORMAL
+};
 
 /*
  * A source initiated power down flag is set
@@ -169,6 +177,9 @@ struct dp_panel {
 		const struct drm_display_mode *drm_mode,
 		struct dp_display_mode *dp_mode);
 	void (*update_pps)(struct dp_panel *dp_panel, char *pps_cmd);
+	int (*query_mode)(struct dp_panel *dp_panel,
+			void *mode,
+			enum dp_query_mode query);
 };
 
 struct dp_tu_calc_input {

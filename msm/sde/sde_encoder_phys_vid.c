@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -11,6 +12,8 @@
 #include "dsi_display.h"
 #include "sde_trace.h"
 #include "sde_roi_misr_helper.h"
+#include "dp_display.h"
+#include "dp_drm.h"
 
 #define SDE_DEBUG_VIDENC(e, fmt, ...) SDE_DEBUG("enc%d intf%d " fmt, \
 		(e) && (e)->base.parent ? \
@@ -48,7 +51,8 @@ static bool sde_encoder_phys_vid_is_master(
 static void drm_mode_to_intf_timing_params(
 		const struct sde_encoder_phys_vid *vid_enc,
 		const struct drm_display_mode *mode,
-		struct intf_timing_params *timing)
+		struct intf_timing_params *timing,
+		enum dp_query_mode query)
 {
 	const struct sde_encoder_phys *phys_enc = &vid_enc->base;
 	enum msm_display_compression_ratio comp_ratio =
@@ -139,7 +143,13 @@ static void drm_mode_to_intf_timing_params(
 		timing->h_front_porch = timing->h_front_porch >> 1;
 		timing->hsync_pulse_width = timing->hsync_pulse_width >> 1;
 
-		if (vid_enc->base.comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
+		if (query == DSC_PASSTHROUGH_UPDATE_DP_MODE) {
+			timing->compression_en = true;
+			timing->extra_dto_cycles =
+				vid_enc->base.dsc_extra_pclk_cycle_cnt;
+			if (timing->wide_bus_en)
+				timing->extra_dto_cycles = timing->extra_dto_cycles >> 1;
+		} else if (vid_enc->base.comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
 				vid_enc->base.comp_ratio) {
 			timing->compression_en = true;
 			timing->extra_dto_cycles =
@@ -466,6 +476,7 @@ static void sde_encoder_phys_vid_setup_timing_engine(
 	struct sde_hw_intf_cfg intf_cfg = { 0 };
 	bool is_split_link = false;
 	int splits;
+	bool is_connector_usr_mode = false;
 
 	if (!phys_enc || !phys_enc->sde_kms || !phys_enc->hw_ctl ||
 					!phys_enc->hw_intf) {
@@ -473,7 +484,16 @@ static void sde_encoder_phys_vid_setup_timing_engine(
 		return;
 	}
 
-	mode = phys_enc->cached_mode;
+	if (phys_enc->hw_intf->cap->type == INTF_DP) {
+		dp_connector_query_mode(phys_enc->sde_kms->dp_displays[0],
+					(void *)&is_connector_usr_mode,
+					DSC_PASSTHROUGH_IS_ENABLED);
+	}
+
+	if (is_connector_usr_mode)
+		mode = phys_enc->cached_mode_usr;
+	else
+		mode = phys_enc->cached_mode;
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
 	if (!phys_enc->hw_intf->ops.setup_timing_gen) {
 		SDE_ERROR("timing engine setup is not supported\n");
@@ -505,7 +525,8 @@ static void sde_encoder_phys_vid_setup_timing_engine(
 			phys_enc->vfp_cached = mode.vsync_start - mode.vdisplay;
 	}
 
-	drm_mode_to_intf_timing_params(vid_enc, &mode, &timing_params);
+	drm_mode_to_intf_timing_params(vid_enc, &mode, &timing_params,
+			is_connector_usr_mode?DSC_PASSTHROUGH_UPDATE_DP_MODE:NORMAL);
 
 	vid_enc->timing_params = timing_params;
 
@@ -689,8 +710,10 @@ static void sde_encoder_phys_vid_mode_set(
 {
 	struct sde_rm *rm;
 	struct sde_rm_hw_iter iter;
-	int i, instance;
+	int i, instance, rc;
 	struct sde_encoder_phys_vid *vid_enc;
+	struct dp_display_mode usr_mode;
+	bool is_dsc_passthrough = false;
 
 	if (!phys_enc || !phys_enc->sde_kms) {
 		SDE_ERROR("invalid encoder/kms\n");
@@ -746,6 +769,26 @@ static void sde_encoder_phys_vid_mode_set(
 			phys_enc->hw_roi_misr[i] =
 					(struct sde_hw_roi_misr *)iter.hw;
 			phys_enc->roi_misr_num++;
+		}
+	}
+
+	if (adj_mode) {
+		if (phys_enc->hw_intf->cap->type == INTF_DP) {
+			SDE_DEBUG_VIDENC(vid_enc, "caching mode:\n");
+
+			rc = dp_connector_query_mode(phys_enc->sde_kms->dp_displays[0],
+						&is_dsc_passthrough,
+						DSC_PASSTHROUGH_IS_ENABLED);
+
+			if (is_dsc_passthrough) {
+				rc = dp_connector_query_mode(phys_enc->sde_kms->dp_displays[0],
+							&usr_mode,
+							DSC_PASSTHROUGH_UPDATE_DP_MODE);
+				if (rc != 0)
+					pr_err("Can't get the user mode\n");
+			}
+			convert_to_drm_mode(&usr_mode, &phys_enc->cached_mode_usr,
+						phys_enc->sde_kms->dp_displays[0]);
 		}
 	}
 

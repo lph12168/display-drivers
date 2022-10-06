@@ -1071,6 +1071,11 @@ static void dp_catalog_panel_config_msa(struct dp_catalog_panel *panel,
 		nvid_reg_off = DP1_SOFTWARE_NVID - DP_SOFTWARE_NVID;
 	}
 
+	if (catalog->parser->dsc_passthrough.dsc_passthrough_enable) {
+		mvid = catalog->parser->msa.ovr_sw_mvid;
+		nvid = catalog->parser->msa.ovr_sw_nvid;
+	}
+
 	pr_debug("mvid=0x%x, nvid=0x%x\n", mvid, nvid);
 	dp_write(catalog->exe_mode, io_data, DP_SOFTWARE_MVID + mvid_reg_off,
 			mvid);
@@ -1232,7 +1237,7 @@ static void dp_catalog_panel_tpg_cfg(struct dp_catalog_panel *panel,
 	wmb(); /* ensure Timing generator is turned on */
 }
 
-static void dp_catalog_panel_dsc_cfg(struct dp_catalog_panel *panel)
+static void dp_catalog_panel_dsc_cfg(struct dp_catalog_panel *panel, bool dscPassthrough)
 {
 	struct dp_catalog_private *catalog;
 	struct dp_io_data *io_data;
@@ -1259,14 +1264,15 @@ static void dp_catalog_panel_dsc_cfg(struct dp_catalog_panel *panel)
 	dp_write(catalog->exe_mode, io_data, MMSS_DP_DSC_DTO_COUNT,
 			panel->dsc.dto_count);
 
-	reg = dp_read(catalog->exe_mode, io_data, MMSS_DP_DSC_DTO);
-	if (panel->dsc.dto_en) {
-		reg |= BIT(0);
-		reg |= (panel->dsc.dto_n << 8);
-		reg |= (panel->dsc.dto_d << 16);
+	if (!dscPassthrough) {
+		reg = dp_read(catalog->exe_mode, io_data, MMSS_DP_DSC_DTO);
+		if (panel->dsc.dto_en) {
+			reg |= BIT(0);
+			reg |= (panel->dsc.dto_n << 8);
+			reg |= (panel->dsc.dto_d << 16);
+		}
+		dp_write(catalog->exe_mode, io_data, MMSS_DP_DSC_DTO, reg);
 	}
-	dp_write(catalog->exe_mode, io_data, MMSS_DP_DSC_DTO, reg);
-
 	io_data = catalog->io.dp_link;
 
 	if (panel->stream_id == DP_STREAM_0)
@@ -1274,18 +1280,20 @@ static void dp_catalog_panel_dsc_cfg(struct dp_catalog_panel *panel)
 	else
 		offset = DP1_COMPRESSION_MODE_CTRL - DP_COMPRESSION_MODE_CTRL;
 
-	dp_write(catalog->exe_mode, io_data, DP_PPS_HB_0_3 + offset, 0x7F1000);
-	dp_write(catalog->exe_mode, io_data, DP_PPS_PB_0_3 + offset, 0xA22300);
+	if (!dscPassthrough) {
+		dp_write(catalog->exe_mode, io_data, DP_PPS_HB_0_3 + offset, 0x7F1000);
+		dp_write(catalog->exe_mode, io_data, DP_PPS_PB_0_3 + offset, 0xA22300);
 
-	for (i = 0; i < panel->dsc.parity_word_len; i++)
-		dp_write(catalog->exe_mode, io_data,
-				DP_PPS_PB_4_7 + (i << 2) + offset,
-				panel->dsc.parity_word[i]);
+		for (i = 0; i < panel->dsc.parity_word_len; i++)
+			dp_write(catalog->exe_mode, io_data,
+					DP_PPS_PB_4_7 + (i << 2) + offset,
+					panel->dsc.parity_word[i]);
 
-	for (i = 0; i < panel->dsc.pps_word_len; i++)
-		dp_write(catalog->exe_mode, io_data,
-				DP_PPS_PPS_0_3 + (i << 2) + offset,
-				panel->dsc.pps_word[i]);
+		for (i = 0; i < panel->dsc.pps_word_len; i++)
+			dp_write(catalog->exe_mode, io_data,
+					DP_PPS_PPS_0_3 + (i << 2) + offset,
+					panel->dsc.pps_word[i]);
+	}
 
 	reg = 0;
 	if (panel->dsc.dsc_en) {
@@ -1293,6 +1301,10 @@ static void dp_catalog_panel_dsc_cfg(struct dp_catalog_panel *panel)
 		reg |= (panel->dsc.eol_byte_num << 3);
 		reg |= (panel->dsc.slice_per_pkt << 5);
 		reg |= (panel->dsc.bytes_per_pkt << 16);
+		reg |= (panel->dsc.be_in_lane << 10);
+	}
+	if (dscPassthrough) {
+		reg = 0;
 		reg |= (panel->dsc.be_in_lane << 10);
 	}
 	dp_write(catalog->exe_mode, io_data,
@@ -2579,11 +2591,11 @@ static int dp_catalog_init(struct device *dev, struct dp_catalog *catalog,
 				dp_catalog);
 
 	if (parser->hw_cfg.phy_version == DP_PHY_VERSION_4_2_0)
-		rc = dp_catalog_get_v420(dev, catalog, &catalog_priv->io);
+		rc = dp_catalog_get_v420(dev, catalog, &catalog_priv->io, parser);
 	else if (parser->hw_cfg.phy_version == DP_PHY_VERSION_2_0_0)
 		rc = dp_catalog_get_v200(dev, catalog, &catalog_priv->io);
 	else if (parser->hw_cfg.phy_version == DP_PHY_VERSION_5_0_0)
-		rc = dp_catalog_get_v500(dev, catalog, &catalog_priv->io);
+		rc = dp_catalog_get_v500(dev, catalog, &catalog_priv->io, parser);
 
 	return rc;
 }

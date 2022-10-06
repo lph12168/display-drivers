@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_ENCODER_PHYS_H__
@@ -365,6 +366,7 @@ struct sde_encoder_phys {
 	u32 roi_misr_num;
 	struct sde_kms *sde_kms;
 	struct drm_display_mode cached_mode;
+	struct drm_display_mode cached_mode_usr;
 	enum sde_enc_split_role split_role;
 	int slave_idx;
 	enum sde_intf_mode intf_mode;

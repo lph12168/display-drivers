@@ -231,7 +231,7 @@ struct dp_catalog_panel {
 	void (*update_transfer_unit)(struct dp_catalog_panel *panel);
 	void (*config_ctrl)(struct dp_catalog_panel *panel, u32 cfg);
 	void (*config_dto)(struct dp_catalog_panel *panel, bool ack);
-	void (*dsc_cfg)(struct dp_catalog_panel *panel);
+	void (*dsc_cfg)(struct dp_catalog_panel *panel, bool dscPassthrough);
 	void (*pps_flush)(struct dp_catalog_panel *panel);
 };
 
@@ -354,12 +354,12 @@ struct dp_catalog *dp_catalog_get(struct device *dev, u32 cell_idx,
 void dp_catalog_put(struct dp_catalog *catalog);
 
 int dp_catalog_get_v420(struct device *dev, struct dp_catalog *catalog,
-		void *io);
+		void *io, struct dp_parser *parser);
 
 int dp_catalog_get_v200(struct device *dev, struct dp_catalog *catalog,
 		void *io);
 
 int dp_catalog_get_v500(struct device *dev, struct dp_catalog *catalog,
-		void *io);
+		void *io, struct dp_parser *parser);
 
 #endif /* _DP_CATALOG_H_ */
