@@ -200,6 +200,8 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @fec_feature_enable: FEC feature enable status
  * @dsc_continuous_pps: PPS sent every frame by HW
  * @has_widebus: widebus (2PPC) feature eanble status
+ * @no_link_rate_reduction: skip link rate reduction during link training
+ * @no_lane_count_reduction: skip lane count reduction during link training
  * @mst_fixed_port: mst port_num reserved for fixed topology
  * @mst_fixed_display_type: mst display_type reserved for fixed topology
  * @display_type: display type as defined in device tree.
@@ -233,6 +235,8 @@ struct dp_parser {
 	bool has_widebus;
 	bool gpio_aux_switch;
 	bool lphw_hpd;
+	bool no_link_rate_reduction;
+	bool no_lane_count_reduction;
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
 	u32 pixel_base_off[MAX_DP_MST_STREAMS];
 	u32 qos_cpu_mask;
