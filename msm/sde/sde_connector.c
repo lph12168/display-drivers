@@ -21,6 +21,7 @@
 #include "sde_vm.h"
 #include <drm/drm_probe_helper.h>
 #include <linux/version.h>
+#include "sde_roi_misr_helper.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -2942,6 +2943,8 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 
 		sde_kms_info_add_keyint(info, "allowed_mode_switch",
 			mode_info.allowed_mode_switches);
+
+		sde_roi_misr_populate_roi_range(c_conn, info, mode, &mode_info);
 
 		if (!mode_info.roi_caps.num_roi)
 			continue;
