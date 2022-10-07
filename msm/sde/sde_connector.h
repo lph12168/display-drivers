@@ -452,6 +452,17 @@ struct sde_connector_ops {
 	 */
 	int (*update_transfer_time)(void *display, u32 transfer_time);
 
+	/**
+	 * late_register - additional register for the connector
+	 * @connector: Pointer to drm connector structure
+	 */
+	void (*late_register)(struct drm_connector *connector);
+
+	/**
+	 * late_register - additional unregister for the connector
+	 * @connector: Pointer to drm connector structure
+	 */
+	void (*early_unregister)(struct drm_connector *connector);
 };
 
 /**
