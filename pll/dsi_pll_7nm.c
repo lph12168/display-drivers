@@ -1608,9 +1608,14 @@ static int vco_7nm_prepare(struct clk_hw *hw)
 		if (pll->slave)
 			MDSS_PLL_REG_W(pll->slave->phy_base, PHY_CMN_CLK_CFG0,
 				       pll->slave->cached_cfg0);
-		MDSS_PLL_REG_W(pll->pll_base, PLL_PLL_OUTDIV_RATE,
-					pll->cached_outdiv);
 	}
+
+	/*
+	 * cached_outdiv has the latest value from set_rate,
+	 * apply this value to PLL_OUTDIV register
+	 */
+	MDSS_PLL_REG_W(pll->pll_base, PLL_PLL_OUTDIV_RATE,
+			pll->cached_outdiv);
 
 	rc = dsi_pll_enable(vco);
 	if (rc) {
