@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_HDCP_2X_H__
@@ -73,9 +74,24 @@ enum hdcp_transport_wakeup_cmd {
 };
 
 enum sde_hdcp_2x_device_type {
-	HDCP_TXMTR_HDMI = 0x8001,
-	HDCP_TXMTR_DP = 0x8002,
-	HDCP_TXMTR_DP_MST = 0x8003
+	HDCP_TXMTR_HDMI    = 0x8001,
+	HDCP_TXMTR_DP      = 0x8002,
+	HDCP_TXMTR_DP_MST  = 0x8003,
+	HDCP_TXMTR_DP1     = 0x8004,
+	HDCP_TXMTR_DP1_MST = 0x8005,
+	HDCP_TXMTR_DP2     = 0x8006,
+	HDCP_TXMTR_DP2_MST = 0x8007,
+	HDCP_TXMTR_DP3     = 0x8008,
+	HDCP_TXMTR_DP3_MST = 0x8009,
+	HDCP_TXMTR_DP4     = 0x800A,
+	HDCP_TXMTR_DP4_MST = 0x800B,
+	HDCP_TXMTR_DP5     = 0x800C,
+	HDCP_TXMTR_DP5_MST = 0x800D,
+	HDCP_TXMTR_DP6     = 0x800E,
+	HDCP_TXMTR_DP6_MST = 0x800F,
+	HDCP_TXMTR_DP7     = 0x8010,
+	HDCP_TXMTR_DP7_MST = 0x8011,
+	HDCP_TXMTR_MAX     = 0x8012
 };
 
 /**
