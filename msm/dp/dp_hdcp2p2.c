@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -1008,7 +1009,7 @@ void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data)
 		goto error;
 	}
 
-	if (IS_ENABLED(CONFIG_HDCP_QSEECOM))
+	if (IS_ENABLED(CONFIG_HDCP_QSEECOM) && init_data->msm_hdcp_dev)
 		msm_hdcp_register_cb(init_data->msm_hdcp_dev, ctrl,
 				dp_hdcp2p2_min_level_change);
 

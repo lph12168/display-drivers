@@ -217,6 +217,8 @@ struct dp_display_private {
 	u32 intf_idx[DP_STREAM_MAX];
 	u32 phy_idx;
 	u32 stream_cnt;
+
+	struct device *msm_hdcp_dev;
 };
 
 static const struct of_device_id dp_dt_match[] = {
@@ -700,7 +702,7 @@ static int dp_display_initialize_hdcp(struct dp_display_private *dp)
 	hdcp_init_data.hdcp_io       = &parser->get_io(parser,
 						"hdcp_physical")->io;
 	hdcp_init_data.revision      = &dp->panel->link_info.revision;
-	hdcp_init_data.msm_hdcp_dev  = dp->parser->msm_hdcp_dev;
+	hdcp_init_data.msm_hdcp_dev  = dp->msm_hdcp_dev;
 
 	fd = sde_hdcp_1x_init(&hdcp_init_data);
 	if (IS_ERR_OR_NULL(fd)) {
@@ -3403,6 +3405,30 @@ static int dp_display_create_workqueue(struct dp_display_private *dp)
 	return 0;
 }
 
+static int dp_parser_msm_hdcp_dev(struct dp_display_private *dp)
+{
+	struct device_node *node;
+	struct platform_device *pdev;
+
+	node = of_parse_phandle(dp->pdev->dev.of_node, "qcom,msm-hdcp", 0);
+	if (!node) {
+		// This is a non-fatal error, module initialization can proceed
+		pr_warn("couldn't find msm-hdcp node\n");
+		return 0;
+	}
+
+	pdev = of_find_device_by_node(node);
+	if (!pdev) {
+		// defer the  module initialization
+		pr_err("couldn't find msm-hdcp pdev defer probe\n");
+		return -EPROBE_DEFER;
+	}
+
+	dp->msm_hdcp_dev = &pdev->dev;
+
+	return 0;
+}
+
 static int dp_display_bridge_internal_hpd(void *dev, bool hpd, bool hpd_irq)
 {
 	struct dp_display_private *dp = dev;
@@ -3873,6 +3899,10 @@ static int dp_display_probe(struct platform_device *pdev)
 	memset(&dp->mst, 0, sizeof(dp->mst));
 
 	rc = dp_display_get_cell_info(dp);
+	if (rc)
+		goto error;
+
+	rc = dp_parser_msm_hdcp_dev(dp);
 	if (rc)
 		goto error;
 
