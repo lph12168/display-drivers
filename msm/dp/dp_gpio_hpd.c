@@ -19,6 +19,7 @@
 struct dp_gpio_hpd_private {
 	struct device *dev;
 	struct dp_hpd base;
+	struct dp_parser *parser;
 	struct dss_gpio gpio_cfg;
 	struct delayed_work work;
 	struct workqueue_struct *connect_wq;
@@ -95,7 +96,7 @@ static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 	if (!gpio_hpd->cb ||
 		!gpio_hpd->cb->configure ||
 		!gpio_hpd->cb->disconnect) {
-		DP_ERR("invalid cb\n");
+		DP_ERR("DP%d invalid cb\n", gpio_hpd->parser->cell_idx);
 		rc = -EINVAL;
 		goto error;
 	}
@@ -104,7 +105,8 @@ static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 		rc = queue_work(gpio_hpd->connect_wq,
 				&gpio_hpd->connect);
 		if (!rc)
-			DP_DEBUG("connect not queued\n");
+			DP_DEBUG("DP%d connect not queued\n",
+					gpio_hpd->parser->cell_idx);
 	} else {
 		gpio_hpd->base.hpd_high = false;
 		gpio_hpd->base.alt_mode_cfg_done = false;
@@ -113,7 +115,8 @@ static int dp_gpio_hpd_connect(struct dp_gpio_hpd_private *gpio_hpd, bool hpd)
 		rc = queue_work(gpio_hpd->connect_wq,
 				&gpio_hpd->disconnect);
 		if (!rc)
-			DP_DEBUG("disconnect not queued\n");
+			DP_DEBUG("DP%d disconnect not queued\n",
+					gpio_hpd->parser->cell_idx);
 	}
 
 error:
@@ -133,7 +136,8 @@ static int dp_gpio_hpd_attention(struct dp_gpio_hpd_private *gpio_hpd)
 	if (gpio_hpd->cb && gpio_hpd->cb->attention) {
 		rc = queue_work(gpio_hpd->connect_wq, &gpio_hpd->attention);
 		if (!rc)
-			DP_DEBUG("attention not queued\n");
+			DP_DEBUG("DP%d attention not queued\n",
+					gpio_hpd->parser->cell_idx);
 	}
 
 error:
@@ -208,7 +212,8 @@ static void dp_gpio_hpd_work(struct work_struct *work)
 	}
 
 	if (ret < 0)
-		DP_ERR("Cannot claim IRQ dp-gpio-intp\n");
+		DP_ERR("DP%d Cannot claim IRQ dp-gpio-intp\n",
+				gpio_hpd->parser->cell_idx);
 }
 
 static int dp_gpio_hpd_simulate_connect(struct dp_hpd *dp_hpd, bool hpd)
@@ -266,7 +271,8 @@ int dp_gpio_hpd_register(struct dp_hpd *dp_hpd)
 		edge | IRQF_ONESHOT,
 		"dp-gpio-intp", gpio_hpd);
 	if (rc) {
-		DP_ERR("Failed to request INTP threaded IRQ: %d\n", rc);
+		DP_ERR("DP%d Failed to request INTP threaded IRQ: %d\n",
+				gpio_hpd->parser->cell_idx, rc);
 		return rc;
 	}
 
@@ -277,7 +283,7 @@ int dp_gpio_hpd_register(struct dp_hpd *dp_hpd)
 }
 
 struct dp_hpd *dp_gpio_hpd_get(struct device *dev,
-	struct dp_hpd_cb *cb)
+	struct dp_parser *parser, struct dp_hpd_cb *cb)
 {
 	int rc = 0;
 	const char *hpd_gpio_name = "qcom,dp-hpd-gpio";
@@ -312,7 +318,8 @@ struct dp_hpd *dp_gpio_hpd_get(struct device *dev,
 			rc = pinctrl_select_state(pinctrl.pin,
 					pinctrl.state_hpd_active);
 			if (rc) {
-				DP_ERR("failed to set hpd active state\n");
+				DP_ERR("DP%d failed to set hpd active state\n",
+						gpio_hpd->parser->cell_idx);
 				goto gpio_error;
 			}
 		}
@@ -332,13 +339,14 @@ struct dp_hpd *dp_gpio_hpd_get(struct device *dev,
 	gpio_direction_input(gpio_hpd->gpio_cfg.gpio);
 
 	gpio_hpd->dev = dev;
+	gpio_hpd->parser = parser;
 	gpio_hpd->cb = cb;
 	gpio_hpd->irq = gpio_to_irq(gpio_hpd->gpio_cfg.gpio);
 	INIT_DELAYED_WORK(&gpio_hpd->work, dp_gpio_hpd_work);
 
 	gpio_hpd->connect_wq = create_singlethread_workqueue("dp-gpio-conn-eq");
 	if (!gpio_hpd->connect_wq) {
-		DP_ERR("Error creating connect_wq\n");
+		DP_ERR("DP%d Error creating connect_wq\n", gpio_hpd->parser->cell_idx);
 		goto gpio_error;
 	}
 

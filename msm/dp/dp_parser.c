@@ -937,7 +937,7 @@ static void dp_parser_clear_io_buf(struct dp_parser *dp_parser)
 	}
 }
 
-struct dp_parser *dp_parser_get(struct platform_device *pdev)
+struct dp_parser *dp_parser_get(struct platform_device *pdev, u32 cell_idx)
 {
 	struct dp_parser *parser;
 
@@ -950,6 +950,7 @@ struct dp_parser *dp_parser_get(struct platform_device *pdev)
 	parser->get_io_buf = dp_parser_get_io_buf;
 	parser->clear_io_buf = dp_parser_clear_io_buf;
 	parser->pdev = pdev;
+	parser->cell_idx = cell_idx;
 
 	return parser;
 }

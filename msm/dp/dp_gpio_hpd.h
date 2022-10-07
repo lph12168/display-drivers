@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -18,7 +19,7 @@
  * This function sets up the gpio hpd module
  */
 struct dp_hpd *dp_gpio_hpd_get(struct device *dev,
-	struct dp_hpd_cb *cb);
+	struct dp_parser *parser, struct dp_hpd_cb *cb);
 
 /**
  * dp_gpio_hpd_put()
