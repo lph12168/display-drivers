@@ -203,6 +203,7 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @has_widebus: widebus (2PPC) feature eanble status
  * @no_link_rate_reduction: skip link rate reduction during link training
  * @no_lane_count_reduction: skip lane count reduction during link training
+ * @force_connect_mode: force dp in connect mode
  * @mst_fixed_port: mst port_num reserved for fixed topology
  * @mst_fixed_display_type: mst display_type reserved for fixed topology
  * @display_type: display type as defined in device tree.
@@ -239,6 +240,7 @@ struct dp_parser {
 	bool lphw_hpd;
 	bool no_link_rate_reduction;
 	bool no_lane_count_reduction;
+	bool force_connect_mode;
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
 	u32 pixel_base_off[MAX_DP_MST_STREAMS];
 	u32 qos_cpu_mask;
