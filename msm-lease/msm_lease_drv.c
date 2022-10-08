@@ -845,7 +845,7 @@ static int msm_lease_parse_objs(struct drm_device *dev,
 	return 0;
 }
 
-static void msm_lease_parse_remain_objs(void)
+static void msm_lease_parse_remain_objs(u32 hw_dev_id)
 {
 	struct device_node *of_node;
 	struct msm_lease *lease, *target = NULL;
@@ -863,8 +863,11 @@ static void msm_lease_parse_remain_objs(void)
 	bool found;
 
 	list_for_each_entry(lease, &g_lease_list, head) {
-		if (!lease->minor)
+		if (lease->hw_dev_id != hw_dev_id)
 			continue;
+
+		if (!lease->minor)
+			return;
 
 		if (!lease->obj_cnt)
 			target = lease;
@@ -1146,7 +1149,7 @@ static int msm_lease_notifier(struct notifier_block *nb,
 	}
 
 	/* check if there are remaining objs */
-	msm_lease_parse_remain_objs();
+	msm_lease_parse_remain_objs(lease_drv->hw_dev_id);
 fail:
 	return ret;
 }
