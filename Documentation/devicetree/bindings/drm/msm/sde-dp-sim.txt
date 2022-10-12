@@ -16,6 +16,13 @@ Each child node represents a port at root branch, with properties:
 - qcom,mode-v-active-high: A boolean property if vertical polarity is high.
 - qcom,mode-refresh-rate:  A u32 property defines vertial refresh rate.
 - qcom,mode-clock-in-khz:  A u32 property defines clock in kHz.
+- qcom,mode-width-mm:      A u32 property defines panel width.
+- qcom,mode-height-mm:     A u32 property defines panel height.
+- qcom,mode-num-h-tile:    A u32 property defines number of horizontal tiles.
+- qcom,mode-num-v-tile:    A u32 property defines number of vertical tiles.
+- qcom,mode-h-tile-loc:    A u32 property defines location of horizontal tile.
+- qcom,mode-v-tile-loc:    A u32 property defines location of vertical tile.
+- qcom,mode-tile-sn:       A u32 property define the serial number for topology ID.
 
 Example:
 
@@ -56,3 +63,59 @@ Example:
 		};
 	};
 };
+
+8k tiles topology example:
+/{
+	...
+
+	sde_dp_mst_sim0: qcom,dp-mst-sim {
+		compatible = "qcom,dp-mst-sim";
+
+		port@0 {
+			qcom,mode-h-active = <3840>;
+			qcom,mode-h-front-porch = <48>;
+			qcom,mode-h-pulse-width = <32>;
+			qcom,mode-h-back-porch = <120>;
+			qcom,mode-h-active-high;
+			qcom,mode-v-active = <4320>;
+			qcom,mode-v-front-porch = <3>;
+			qcom,mode-v-pulse-width = <10>;
+			qcom,mode-v-back-porch = <85>;
+			qcom,mode-refresh-rate = <48>;
+			qcom,mode-clock-in-khz = <856730>;
+			qcom,mode-width-mm = <350>;
+			qcom,mode-height-mm = <390>;
+
+			qcom,mode-num-h-tile = <2>;
+			qcom,mode-num-v-tile = <1>;
+			qcom,mode-h-tile-loc = <1>;
+			qcom,mode-v-tile-loc = <1>;
+			qcom,mode-tile-sn = <1>;
+		};
+	};
+
+	sde_dp_mst_sim1: qcom,dp-mst-sim {
+		compatible = "qcom,dp-mst-sim";
+
+		port@0 {
+			qcom,mode-h-active = <3840>;
+			qcom,mode-h-front-porch = <48>;
+			qcom,mode-h-pulse-width = <32>;
+			qcom,mode-h-back-porch = <120>;
+			qcom,mode-h-active-high;
+			qcom,mode-v-active = <4320>;
+			qcom,mode-v-front-porch = <3>;
+			qcom,mode-v-pulse-width = <10>;
+			qcom,mode-v-back-porch = <85>;
+			qcom,mode-refresh-rate = <48>;
+			qcom,mode-clock-in-khz = <856730>;
+			qcom,mode-width-mm = <350>;
+			qcom,mode-height-mm = <390>;
+
+			qcom,mode-num-h-tile = <2>;
+			qcom,mode-num-v-tile = <1>;
+			qcom,mode-h-tile-loc = <2>;
+			qcom,mode-v-tile-loc = <1>;
+			qcom,mode-tile-sn = <1>;
+		};
+	};

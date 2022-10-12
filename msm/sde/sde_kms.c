@@ -1639,7 +1639,8 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		ret = sde_encoder_wait_for_event(encoder, cwb_disabling ?
 						MSM_ENC_TX_COMPLETE : MSM_ENC_COMMIT_DONE);
 		if (ret && ret != -EWOULDBLOCK) {
-			SDE_ERROR("wait for commit done returned %d\n", ret);
+			SDE_ERROR("[crtc:%d] enc%d wait for commit done returned %d\n",
+					crtc->base.id, encoder->base.id, ret);
 			sde_crtc_request_frame_reset(crtc, encoder);
 			break;
 		}
@@ -1849,6 +1850,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.update_transfer_time = NULL,
 	};
 	static const struct sde_connector_ops dp_ops = {
+		.set_info_blob = dp_connnector_set_info_blob,
 		.post_init  = dp_connector_post_init,
 		.detect     = dp_connector_detect,
 		.get_modes  = dp_connector_get_modes,

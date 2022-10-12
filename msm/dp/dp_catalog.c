@@ -2375,9 +2375,9 @@ static void dp_catalog_hpd_config_hpd(struct dp_catalog_hpd *hpd, bool en)
 	if (en) {
 		u32 reftimer = dp_read(DP_DP_HPD_REFTIMER);
 
-		/* Arm only the UNPLUG and HPD_IRQ interrupts */
+		/* Arm only the PLUG, UNPLUG and HPD_IRQ interrupts */
 		dp_write(DP_DP_HPD_INT_ACK, 0xF);
-		dp_write(DP_DP_HPD_INT_MASK, 0xA);
+		dp_write(DP_DP_HPD_INT_MASK, 0xB);
 
 		/* Enable REFTIMER to count 1ms */
 		reftimer |= BIT(16);

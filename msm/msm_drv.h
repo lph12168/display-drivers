@@ -1415,6 +1415,18 @@ static inline void __exit dp_display_unregister(void)
 }
 #endif /* CONFIG_DRM_MSM_DP */
 
+#if IS_ENABLED(CONFIG_DRM_MSM_DP)
+void __init dp_sim_register(void);
+void __exit dp_sim_unregister(void);
+#else
+static inline void __init dp_sim_register(void)
+{
+}
+static inline void __exit dp_sim_unregister(void)
+{
+}
+#endif /* CONFIG_DRM_MSM_DP */
+
 #if IS_ENABLED(CONFIG_DRM_SDE_RSC)
 void __init sde_rsc_register(void);
 void __exit sde_rsc_unregister(void);
