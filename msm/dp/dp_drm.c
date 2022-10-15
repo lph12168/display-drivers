@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-dp]: %s: " fmt, __func__
@@ -854,8 +855,6 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 	if (!dp_display->dp_bond_prv_info || !dp_display->force_bond_mode)
 		return;
 
-	connector->has_tile = false;
-
 	for (type = DP_BOND_DUAL; type < DP_BOND_MAX; type++) {
 		if (!dp_bond_check_connector(connector, type))
 			continue;
@@ -863,10 +862,10 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 		preferred_type = type;
 	}
 
-	if (preferred_type == DP_BOND_MAX)
+	if (preferred_type == DP_BOND_MAX) {
+		connector->has_tile = false;
 		return;
-
-	connector->has_tile = true;
+	}
 
 	if (!connector->tile_group)
 		connector->tile_group = drm_mode_create_tile_group(
@@ -874,6 +873,7 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 
 	connector->num_h_tile = preferred_type + 2;
 	connector->num_v_tile = 1;
+	connector->has_tile = true;
 }
 
 int dp_connector_config_hdr(struct drm_connector *connector, void *display,

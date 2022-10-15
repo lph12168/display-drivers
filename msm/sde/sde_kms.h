@@ -2,6 +2,7 @@
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -203,6 +204,7 @@ struct sde_irq_callback {
  * @enable_counts array of IRQ enable counts
  * @cb_lock:      callback lock
  * @debugfs_file: debugfs file for irq statistics
+ * @en_lock_arr : array of IRQ enable locks
  */
 struct sde_irq {
 	u32 total_irqs;
@@ -211,6 +213,7 @@ struct sde_irq {
 	atomic_t *irq_counts;
 	spinlock_t cb_lock;
 	struct dentry *debugfs_file;
+	spinlock_t *en_lock_arr;
 };
 
 struct sde_kms {

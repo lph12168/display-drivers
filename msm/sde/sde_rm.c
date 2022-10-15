@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s] " fmt, __func__
@@ -214,12 +215,28 @@ static const struct drm_private_state_funcs sde_rm_state_funcs = {
 static struct sde_rm_state *sde_rm_get_atomic_state(
 		struct drm_atomic_state *state, struct sde_rm *rm)
 {
+	int ret = 0;
 	struct drm_device *dev = rm->dev;
+	struct drm_private_state *priv_state;
+
+retry:
 
 	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 
-	return to_sde_rm_priv_state(
-			drm_atomic_get_private_obj_state(state, &rm->obj));
+	priv_state = drm_atomic_get_private_obj_state(state, &rm->obj);
+	if (PTR_ERR(priv_state) == -EDEADLK) {
+		do {
+			drm_modeset_backoff(state->acquire_ctx);
+			ret = drm_modeset_lock_all_ctx(dev, state->acquire_ctx);
+		} while (ret == -EDEADLK);
+
+		if (!ret)
+			goto retry;
+
+		drm_modeset_drop_locks(state->acquire_ctx);
+	}
+
+	return to_sde_rm_priv_state(priv_state);
 }
 
 static uint64_t sde_rm_get_enc_res_mask(struct sde_rm *rm,
