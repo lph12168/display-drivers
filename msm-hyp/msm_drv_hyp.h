@@ -17,6 +17,10 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
 #ifndef __MSM_DRV_HYP_H__
 #define __MSM_DRV_HYP_H__
 
@@ -31,7 +35,7 @@
 #include <linux/kthread.h>
 #include <linux/component.h>
 #include <linux/backlight.h>
-#include <drm/drmP.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_encoder.h>
@@ -249,6 +253,19 @@ struct msm_hyp_drm_private {
 
 	char dev_name_from_dt[DRM_DRI_NAME_SIZE];
 };
+
+#define DEFINE_DRM_GEM_SHMEM_FOPS(name) \
+static const struct file_operations name = {\
+	.owner          = THIS_MODULE,\
+	.open           = drm_open,\
+	.release        = drm_release,\
+	.unlocked_ioctl = drm_ioctl,\
+	.compat_ioctl   = drm_compat_ioctl,\
+	.poll           = drm_poll,\
+	.read           = drm_read,\
+	.llseek         = noop_llseek,\
+	.mmap           = msm_hyp_gem_shmem_mmap, \
+}
 
 void msm_hyp_set_kms(struct drm_device *dev, struct msm_hyp_kms *kms);
 void msm_hyp_crtc_commit_done(struct drm_crtc *crtc);
