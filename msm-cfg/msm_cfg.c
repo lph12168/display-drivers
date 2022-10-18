@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -104,6 +105,11 @@ static int msm_cfg_probe(struct platform_device *pdev)
 	for_each_child_of_node(cfg_node, node) {
 		/* create all sub devices */
 		of_platform_device_create(node, NULL, NULL);
+	}
+
+	if (!match) {
+		pr_info("ignore empty connectors\n");
+		return 0;
 	}
 
 	rc = component_master_add_with_match(&pdev->dev,

@@ -22,3 +22,4 @@ endif
 
 obj-$(CONFIG_DRM_MSM) += msm/
 obj-$(CONFIG_DRM_MSM_HYP) += msm-hyp/
+obj-$(CONFIG_DRM_MSM_CFG) += msm-cfg/
