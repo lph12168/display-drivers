@@ -41,6 +41,10 @@ ifneq ( ,$(findstring msmnile_au,$(TARGET_PRODUCT)))
 endif
 endif
 
+ifeq (y, $(findstring y, $(CONFIG_ARCH_LEMANS)))
+	include $(DISPLAY_ROOT)/config/augen4disp.conf
+	LINUX_INC += -include $(DISPLAY_ROOT)/config/augen4dispconf.h
+endif
 
 LINUX_INC +=	-Iinclude/linux \
 		-Iinclude/linux/drm
