@@ -824,6 +824,87 @@ static int dp_display_get_cell_info(struct dp_display_private *dp)
 	return 0;
 }
 
+static ssize_t status_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct dp_display_private *dp = NULL;
+	struct drm_connector *connector;
+
+	char *p = buf;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return -ENODEV;
+	}
+
+	dp = dev_get_drvdata(dev);
+	if (!dp) {
+		pr_err("invalid driver pointer\n");
+		return -ENODEV;
+	}
+
+	connector = dp->dp_display.base_connector;
+
+	if (!connector) {
+		pr_err("DP%d connector not set\n", dp->cell_idx);
+		p += scnprintf(p, PAGE_SIZE, "connector not set");
+		goto out;
+	}
+
+	p += scnprintf(p, PAGE_SIZE + buf - p, "name=%s", connector->name);
+
+	p += scnprintf(p, PAGE_SIZE + buf - p, " status=%s",
+			dp->hpd->hpd_high ? "connected" : "disconnected");
+
+	if ((dp->aux->state & DP_STATE_TRAIN_1_SUCCEEDED) &&
+			(dp->aux->state & DP_STATE_TRAIN_2_SUCCEEDED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=ready");
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_FAILED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_FAILED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=failed");
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_STARTED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_STARTED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=training");
+	else if (dp->aux->state & DP_STATE_LINK_MAINTENANCE_STARTED)
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=maintaining");
+	else
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=not_ready");
+	p += scnprintf(p, PAGE_SIZE + buf - p, " stream=%s",
+			(dp->aux->state & DP_STATE_CTRL_POWERED_ON) ? "ON" : "OFF");
+	p += scnprintf(p, PAGE_SIZE + buf - p, " state=0x%X", dp->aux->state);
+
+out:
+	return p - buf;
+}
+
+static DEVICE_ATTR_RO(status);
+
+static struct attribute *dp_fs_attrs[] = {
+	&dev_attr_status.attr,
+	NULL
+};
+
+static struct attribute_group dp_fs_attr_group = {
+	.attrs = dp_fs_attrs
+};
+
+static int dp_display_sysfs_init(struct dp_display_private *dp)
+{
+	int ret;
+
+	ret = sysfs_create_group(&dp->pdev->dev.kobj, &dp_fs_attr_group);
+	if (ret)
+		pr_err("DP%d unable to register dp_display sysfs nodes\n", dp->cell_idx);
+
+	return 0;
+}
+
+static int dp_display_sysfs_deinit(struct dp_display_private *dp)
+{
+	sysfs_remove_group(&dp->pdev->dev.kobj, &dp_fs_attr_group);
+	return 0;
+}
+
 static int dp_display_bind(struct device *dev, struct device *master,
 		void *data)
 {
@@ -882,6 +963,7 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 	if (dp->aux)
 		(void)dp->aux->drm_aux_deregister(dp->aux);
 	dp_display_deinitialize_hdcp(dp);
+	dp_display_sysfs_deinit(dp);
 }
 
 static const struct component_ops dp_display_comp_ops = {
@@ -2489,6 +2571,8 @@ static int dp_display_post_init(struct dp_display *dp_display)
 		goto end;
 
 	dp_display_dbg_reister(dp);
+
+	dp_display_sysfs_init(dp);
 
 	dp_display->post_init = NULL;
 end:
