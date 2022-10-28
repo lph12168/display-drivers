@@ -88,10 +88,6 @@ struct sde_hw_fence_data {
 };
 
 #if IS_ENABLED(CONFIG_SYNC_FILE)
-
-struct sde_hw_mdp;
-struct sde_hw_ctl;
-
 /**
  * sde_sync_get - Query sync fence object from a file handle
  *

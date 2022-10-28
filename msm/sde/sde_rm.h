@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_RM_H__
@@ -42,17 +41,6 @@
 		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE)
-
-#define TOPOLOGY_3DMUX_MODE(x) \
-	(x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE ||\
-		x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC ||\
-		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE ||\
-		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC)
-
-#define TOPOLOGY_DSCMERGE_MODE(x) \
-	(x == SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE ||\
-		x == SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE)
-
 /**
  * enum sde_rm_topology_name - HW resource use case in use by connector
  * @SDE_RM_TOPOLOGY_NONE:                 No topology in use currently
@@ -236,16 +224,6 @@ struct sde_rm_hw_request {
  */
 enum sde_rm_topology_name sde_rm_get_topology_name(struct sde_rm *rm,
 		struct msm_display_topology topology);
-
-/**
- * sde_rm_get_roi_misr_num - get the number of roi misr with
- *                           the given drm_connector
- * @rm: SDE Resource Manager handle
- * @topology: topology name
- * @Return: the number of roi misrs
- */
-int sde_rm_get_roi_misr_num(struct sde_rm *rm,
-		enum sde_rm_topology_name topology);
 
 /**
  * sde_rm_debugfs_init - setup debugfs node for rm module

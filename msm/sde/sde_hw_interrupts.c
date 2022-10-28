@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -31,9 +31,6 @@
 #define MDP_WB_INTR_EN_OFF		0x18C
 #define MDP_WB_INTR_STATUS_OFF		0x190
 #define MDP_WB_INTR_CLEAR_OFF		0x194
-#define MDP_INTR_ROI_MISR_EN_OFF	0x4
-#define MDP_INTR_ROI_MISR_STATUS_OFF	0x8
-#define MDP_INTR_ROI_MISR_CLEAR_OFF	0xC
 
 /**
  * WB interrupt status bit definitions
@@ -171,14 +168,6 @@
 #define SDE_INTR_INTF_TEAR_RD_PTR BIT(2)
 #define SDE_INTR_INTF_TEAR_TE_DETECTED BIT(3)
 #define SDE_INTR_INTF_TEAR_TEAR_DETECTED BIT(4)
-
-/**
- * ROI MISR mismatch interrupt bit definitions
- */
-#define SDE_INTR_ROI_MISR_ROI0_MISMATCHED BIT(0)
-#define SDE_INTR_ROI_MISR_ROI1_MISMATCHED BIT(1)
-#define SDE_INTR_ROI_MISR_ROI2_MISMATCHED BIT(2)
-#define SDE_INTR_ROI_MISR_ROI3_MISMATCHED BIT(3)
 
 /**
  * LTM interrupt status bit definitions
@@ -381,13 +370,6 @@ static struct sde_irq_type sde_irq_ltm_map[] = {
 
 static struct sde_irq_type sde_irq_wb_map[] = {
 	{ SDE_IRQ_TYPE_WB_PROG_LINE, -1, SDE_INTR_WB_PROG_LINE, -1},
-};
-
-static struct sde_irq_type sde_irq_roi_misr_map[] = {
-	{ SDE_IRQ_TYPE_ROI_MISR, -1, SDE_INTR_ROI_MISR_ROI0_MISMATCHED, -1},
-	{ SDE_IRQ_TYPE_ROI_MISR, -1, SDE_INTR_ROI_MISR_ROI1_MISMATCHED, -1},
-	{ SDE_IRQ_TYPE_ROI_MISR, -1, SDE_INTR_ROI_MISR_ROI2_MISMATCHED, -1},
-	{ SDE_IRQ_TYPE_ROI_MISR, -1, SDE_INTR_ROI_MISR_ROI3_MISMATCHED, -1},
 };
 
 static int sde_hw_intr_irqidx_lookup(struct sde_hw_intr *intr,
@@ -837,11 +819,7 @@ static int _set_sde_irq_tbl_offset(struct sde_intr_reg *sde_irq,
 		sde_irq->en_off = base_offset + MDP_WB_INTR_EN_OFF;
 		sde_irq->status_off = base_offset + MDP_WB_INTR_STATUS_OFF;
 		break;
-	case SDE_INTR_HWBLK_ROI_MISR:
-		sde_irq->clr_off = base_offset + MDP_INTR_ROI_MISR_CLEAR_OFF;
-		sde_irq->en_off = base_offset + MDP_INTR_ROI_MISR_EN_OFF;
-		sde_irq->status_off = base_offset + MDP_INTR_ROI_MISR_STATUS_OFF;
-		break;
+
 	default:
 		pr_err("unrecognized intr blk type %d\n",
 				item->type);
@@ -934,9 +912,6 @@ static inline u32 _get_irq_map_size(struct sde_intr_irq_offsets *item)
 	case SDE_INTR_HWBLK_WB:
 		ret = ARRAY_SIZE(sde_irq_wb_map);
 		break;
-	case SDE_INTR_HWBLK_ROI_MISR:
-		ret = ARRAY_SIZE(sde_irq_roi_misr_map);
-		break;
 	default:
 		pr_err("invalid type: %d\n", item->type);
 	}
@@ -989,9 +964,6 @@ static inline struct sde_irq_type *_get_irq_map_addr(
 		break;
 	case SDE_INTR_HWBLK_WB:
 		ret = sde_irq_wb_map;
-		break;
-	case SDE_INTR_HWBLK_ROI_MISR:
-		ret = sde_irq_roi_misr_map;
 		break;
 	default:
 		pr_err("invalid type: %d\n", item->type);

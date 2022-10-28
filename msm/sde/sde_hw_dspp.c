@@ -18,13 +18,6 @@
 
 #define DSPP_VALID_START_OFF 0x800
 
-#define ROI_MISR_OP_MODE(i)                    (BIT(i) | BIT((i) + 16))
-#define ROI_MISR_ROI_POSITION(i)               (0x10 + 0x4 * (i))
-#define ROI_MISR_ROI_SIZE(i)                   (0x20 + 0x4 * (i))
-
-#define ROI_POSITION_VAL(x, y)                 ((x) | ((y) << 16))
-#define ROI_SIZE_VAL(w, h)                     ((w) | ((h) << 16))
-
 static struct sde_dspp_cfg *_dspp_offset(enum sde_dspp dspp,
 		struct sde_mdss_cfg *m,
 		void __iomem *addr,
@@ -373,38 +366,6 @@ static void dspp_demura(struct sde_hw_dspp *c)
 	}
 }
 
-static void sde_setup_dspp_roi_misr(struct sde_hw_dspp *ctx,
-		uint32_t roi_mask, struct sde_rect *roi_cfg)
-{
-	uint32_t op_mode = 0;
-	int i;
-
-	if (!ctx || !roi_cfg) {
-		DRM_ERROR("invalid param ctx %pK, roi_cfg %pK\n",
-				ctx, roi_cfg);
-		return;
-	}
-
-	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_MISR; i++) {
-		if (roi_mask & BIT(i))
-			op_mode |= ROI_MISR_OP_MODE(i);
-
-		SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->roi_misr.base
-			+ ROI_MISR_ROI_POSITION(i),
-			ROI_POSITION_VAL(roi_cfg[i].x, roi_cfg[i].y));
-		SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->roi_misr.base
-			+ ROI_MISR_ROI_SIZE(i),
-			ROI_POSITION_VAL(roi_cfg[i].w, roi_cfg[i].h));
-	}
-
-	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->roi_misr.base, op_mode);
-}
-
-static void dspp_roi_misr_bypass(struct sde_hw_dspp *c)
-{
-	c->ops.setup_roi_misr = sde_setup_dspp_roi_misr;
-}
-
 static void (*dspp_blocks[SDE_DSPP_MAX])(struct sde_hw_dspp *c);
 
 static void _init_dspp_ops(void)
@@ -424,7 +385,6 @@ static void _init_dspp_ops(void)
 	dspp_blocks[SDE_DSPP_RC] = dspp_rc;
 	dspp_blocks[SDE_DSPP_SPR] = dspp_spr;
 	dspp_blocks[SDE_DSPP_DEMURA] = dspp_demura;
-	dspp_blocks[SDE_DSPP_ROI_MISR_BYPASS] = dspp_roi_misr_bypass;
 }
 
 static void _setup_dspp_ops(struct sde_hw_dspp *c, unsigned long features)

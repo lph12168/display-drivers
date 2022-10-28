@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
  */
 
@@ -98,7 +98,6 @@ enum sde_intr_type {
 	SDE_IRQ_TYPE_LTM_STATS_DONE,
 	SDE_IRQ_TYPE_LTM_STATS_WB_PB,
 	SDE_IRQ_TYPE_WB_PROG_LINE,
-	SDE_IRQ_TYPE_ROI_MISR,
 	SDE_IRQ_TYPE_RESERVED,
 };
 

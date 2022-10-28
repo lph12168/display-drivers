@@ -1,6 +1,4 @@
-/*
- * Copyright (c) 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,15 +45,15 @@ static void sde_hw_roi_misr_setup(struct sde_hw_roi_misr *ctx,
 	uint32_t ctrl_val = 0;
 	int i;
 
+	ctrl_val = ROI_MISR_CTRL_RUN_MODE
+			| ROI_MISR_CTRL_ENABLE
+			| ROI_MISR_CTRL_STATUS_CLEAR;
+
 	spin_lock(&ctx->spin_lock);
 
 	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_MISR; ++i) {
 		if (roi_info->roi_mask & BIT(i)) {
-			ctrl_val = ROI_MISR_CTRL_RUN_MODE
-				| ROI_MISR_CTRL_ENABLE
-				| ROI_MISR_CTRL_STATUS_CLEAR
-				| cfg->frame_count[i];
-
+			ctrl_val |= cfg->frame_count[i];
 			SDE_REG_WRITE(roi_misr_c, ROI_MISR_POSITION(i),
 				ROI_POSITION_VAL(roi_info->misr_roi_rect[i].x,
 				roi_info->misr_roi_rect[i].y));
@@ -137,7 +135,7 @@ static struct sde_roi_misr_cfg *_roi_misr_offset(enum sde_roi_misr roi_misr,
 			b->base_off = addr;
 			b->blk_off = m->roi_misr[i].base;
 			b->length = m->roi_misr[i].len;
-			b->hw_rev = m->hw_rev;
+			b->hwversion = m->hwversion;
 			b->log_mask = SDE_DBG_MASK_ROI_MISR;
 			return &m->roi_misr[i];
 		}
@@ -154,12 +152,18 @@ static void _setup_roi_misr_ops(struct sde_hw_roi_misr_ops *ops,
 	ops->reset_roi_misr = sde_hw_roi_misr_reset;
 };
 
-struct sde_hw_blk_reg_map *sde_hw_roi_misr_init(enum sde_roi_misr idx,
+static struct sde_hw_blk_ops sde_hw_ops = {
+	.start = NULL,
+	.stop = NULL,
+};
+
+struct sde_hw_roi_misr *sde_hw_roi_misr_init(enum sde_roi_misr idx,
 		void __iomem *addr,
 		struct sde_mdss_cfg *m)
 {
 	struct sde_hw_roi_misr *c;
 	struct sde_roi_misr_cfg *cfg;
+	int rc;
 
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
@@ -168,7 +172,6 @@ struct sde_hw_blk_reg_map *sde_hw_roi_misr_init(enum sde_roi_misr idx,
 	cfg = _roi_misr_offset(idx, m, addr, &c->hw);
 	if (IS_ERR_OR_NULL(cfg)) {
 		kfree(c);
-		pr_err("failed to create sde_hw_roi_misr %d\n", idx);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -177,15 +180,27 @@ struct sde_hw_blk_reg_map *sde_hw_roi_misr_init(enum sde_roi_misr idx,
 	spin_lock_init(&c->spin_lock);
 	_setup_roi_misr_ops(&c->ops, c->caps->features);
 
+	rc = sde_hw_blk_init(&c->base, SDE_HW_BLK_ROI_MISR, idx, &sde_hw_ops);
+	if (rc) {
+		SDE_ERROR("failed to init hw blk %d\n", rc);
+		goto blk_init_error;
+	}
+
 	sde_dbg_reg_register_dump_range(SDE_DBG_NAME, cfg->name, c->hw.blk_off,
 		c->hw.blk_off + c->hw.length, c->hw.xin_id);
 
-	return &c->hw;
+	return c;
+
+blk_init_error:
+	kzfree(c);
+
+	return ERR_PTR(rc);
 }
 
-void sde_hw_roi_misr_destroy(struct sde_hw_blk_reg_map *hw)
+void sde_hw_roi_misr_destroy(struct sde_hw_roi_misr *roi_misr)
 {
-	if (hw)
-		kfree(to_sde_hw_roi_misr(hw));
+	if (roi_misr)
+		sde_hw_blk_destroy(&roi_misr->base);
+	kfree(roi_misr);
 }
 

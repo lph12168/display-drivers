@@ -1,6 +1,4 @@
-/*
- * Copyright (c) 2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +13,8 @@
 #ifndef _SDE_HW_ROI_MISR_H
 #define _SDE_HW_ROI_MISR_H
 
-#include "sde_hw_util.h"
+#include "sde_hw_blk.h"
+#include "sde_hw_mdss.h"
 
 struct sde_hw_roi_misr;
 
@@ -56,6 +55,7 @@ struct sde_hw_roi_misr_ops {
 
 /**
  * struct sde_hw_roi_misr - roi_misr description
+ * @base: Hardware block base structure
  * @hw: Block hardware details
  * @hw_top: Block hardware top details
  * @idx: ROI_MISR index
@@ -64,6 +64,7 @@ struct sde_hw_roi_misr_ops {
  * @spin_lock: Spinlock to protect setup/collect operation
  */
 struct sde_hw_roi_misr {
+	struct sde_hw_blk base;
 	struct sde_hw_blk_reg_map hw;
 
 	/* roi_misr */
@@ -78,13 +79,12 @@ struct sde_hw_roi_misr {
 
 /**
  * sde_hw_roi_misr - convert base object sde_hw_base to container
- * @hw: Pointer to hardware block register map object
+ * @hw: Pointer to base hardware block
  * return: Pointer to hardware block container
  */
-static inline struct sde_hw_roi_misr *to_sde_hw_roi_misr(
-		struct sde_hw_blk_reg_map *hw)
+static inline struct sde_hw_roi_misr *to_sde_hw_roi_misr(struct sde_hw_blk *hw)
 {
-	return container_of(hw, struct sde_hw_roi_misr, hw);
+	return container_of(hw, struct sde_hw_roi_misr, base);
 }
 
 /**
@@ -94,15 +94,15 @@ static inline struct sde_hw_roi_misr *to_sde_hw_roi_misr(
  * @addr: Mapped register io address of MDP
  * @Return: pointer to structure or ERR_PTR
  */
-struct sde_hw_blk_reg_map *sde_hw_roi_misr_init(enum sde_roi_misr idx,
+struct sde_hw_roi_misr *sde_hw_roi_misr_init(enum sde_roi_misr idx,
 			void __iomem *addr,
 			struct sde_mdss_cfg *m);
 
 /**
  * sde_hw_roi_misr_destroy(): Destroys ROI_MISR driver context
- * @hw: Pointer to hardware block register map object
+ * @roi_misr:   Pointer to ROI_MISR driver context
  */
-void sde_hw_roi_misr_destroy(struct sde_hw_blk_reg_map *hw);
+void sde_hw_roi_misr_destroy(struct sde_hw_roi_misr *roi_misr);
 
 #endif /*_SDE_HW_ROI_MISR_H */
 
