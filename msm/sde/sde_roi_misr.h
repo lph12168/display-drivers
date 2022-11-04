@@ -27,11 +27,13 @@ struct sde_crtc_misr_event {
 /**
  * struct sde_roi_misr_mode_info - defines misr related mode info
  * @num_misrs:		the number of misrs
+ * @misr_width:		the misr width
  * @mixer_width:	the layer mixer width
  * @roi_range:		the maximum roi range for misrs
  */
 struct sde_roi_misr_mode_info {
 	u32 num_misrs;
+	u32 misr_width;
 	u32 mixer_width;
 	struct drm_clip_rect roi_range[ROI_MISR_MAX_ROIS_PER_CRTC];
 };
