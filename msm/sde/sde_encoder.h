@@ -714,14 +714,6 @@ static inline bool sde_encoder_is_widebus_enabled(struct drm_encoder *drm_enc)
 	return sde_enc->mode_info.wide_bus_en;
 }
 
-/*
- * sde_encoder_is_line_insertion_supported - get line insertion
- * feature bit value from panel
- * @drm_enc:    Pointer to drm encoder structure
- * @Return: line insertion support status
- */
-bool sde_encoder_is_line_insertion_supported(struct drm_encoder *drm_enc);
-
 /**
  * sde_encoder_get_hw_ctl - gets hw ctl from the connector
  * @c_conn: sde connector
