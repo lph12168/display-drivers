@@ -309,6 +309,7 @@ enum {
  * @SDE_SSPP_UBWC_STATS:     Support for ubwc stats
  * @SDE_SSPP_SCALER_DE_LPF_BLEND:     Support for detail enhancer
  * @SDE_SSPP_MAX             maximum value
+ * @SDE_SSPP_LINE_INSERTION  Line insertion support
  */
 enum {
 	SDE_SSPP_SRC = 0x1,
@@ -344,6 +345,7 @@ enum {
 	SDE_SSPP_FP16_UNMULT,
 	SDE_SSPP_UBWC_STATS,
 	SDE_SSPP_SCALER_DE_LPF_BLEND,
+	SDE_SSPP_LINE_INSERTION,
 	SDE_SSPP_MAX
 };
 
@@ -1859,6 +1861,7 @@ struct sde_mdss_cfg {
 	u32 true_inline_rot_rev;
 	u32 dnsc_blur_rev;
 	u32 hw_fence_rev;
+	bool has_line_insertion;
 
 	/* HW Blocks */
 	u32 mdss_count;

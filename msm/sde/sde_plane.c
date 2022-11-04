@@ -1478,6 +1478,43 @@ static int _sde_plane_color_fill(struct sde_plane *psde,
 	return 0;
 }
 
+static void _sde_plane_setup_panel_stacking(struct sde_plane *psde,
+		struct sde_plane_state *pstate)
+{
+	struct sde_hw_pipe_line_insertion_cfg *cfg;
+	struct sde_crtc_state *cstate;
+	uint32_t h_start = 0, h_total = 0, y_start = 0;
+	int ret;
+
+	if (!test_bit(SDE_SSPP_LINE_INSERTION, &psde->features))
+		return;
+
+	cfg = &pstate->line_insertion_cfg;
+	memset(cfg, 0, sizeof(*cfg));
+
+	cstate = to_sde_crtc_state(psde->base.state->crtc->state);
+	if (!cstate->padding_height)
+		return;
+
+	ret = sde_crtc_calc_vpadding_param(
+		psde->base.state->crtc->state,
+		pstate->base.crtc_y, pstate->base.crtc_h,
+		&y_start, &h_start, &h_total);
+	if (ret) {
+		SDE_ERROR("failed to calculate vpadding parameters\n");
+		return;
+	}
+
+	cfg->enable = true;
+	cfg->dummy_lines = cstate->padding_dummy;
+	cfg->active_lines = cstate->padding_active;
+
+	cfg->first_active_lines = h_start;
+	cfg->dst_h = h_total;
+
+	psde->pipe_cfg.dst_rect.y += y_start - pstate->base.crtc_y;
+}
+
 /**
 * sde_plane_rot_atomic_check - verify rotator update of the given state
 * @plane: Pointer to drm plane
@@ -3066,6 +3103,8 @@ static void _sde_plane_update_roi_config(struct drm_plane *plane,
 
 	_sde_plane_setup_scaler(psde, pstate, fmt, false);
 
+	_sde_plane_setup_panel_stacking(psde, pstate);
+
 	/* check for color fill */
 	psde->color_fill = (uint32_t)sde_plane_get_property(pstate,
 			PLANE_PROP_COLOR_FILL);
@@ -3109,6 +3148,12 @@ static void _sde_plane_update_roi_config(struct drm_plane *plane,
 				true,
 				pstate->multirect_index,
 				pstate->multirect_mode);
+	/* update line insertion */
+	if (psde->pipe_hw->ops.setup_line_insertion)
+		psde->pipe_hw->ops.setup_line_insertion(
+				psde->pipe_hw,
+				pstate->multirect_index,
+				&pstate->line_insertion_cfg);
 }
 
 static void _sde_plane_update_format_and_rects(struct sde_plane *psde,
@@ -4684,7 +4729,7 @@ static int _sde_plane_init_debugfs(struct drm_plane *plane)
 		return -ENOMEM;
 
 	/* don't error check these */
-	debugfs_create_x64("features", 0400,
+	debugfs_create_ulong("features", 0400,
 		psde->debugfs_root, &psde->features);
 
 	if (cfg->features & BIT(SDE_SSPP_SCALER_QSEED3) ||

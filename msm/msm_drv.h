@@ -810,6 +810,7 @@ struct msm_display_wd_jitter_config {
  * @dyn_clk_list: List of dynamic clock rates for RFI.
  * @qsync_min_fps: qsync min fps rate
  * @wd_jitter:         Info for WD jitter.
+ * @vpadding:        panel stacking height
  */
 struct msm_mode_info {
 	uint32_t frame_rate;
@@ -832,6 +833,7 @@ struct msm_mode_info {
 	struct msm_dyn_clk_list dyn_clk_list;
 	u32 qsync_min_fps;
 	struct msm_display_wd_jitter_config wd_jitter;
+	u32 vpadding;
 };
 
 /**

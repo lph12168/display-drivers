@@ -56,7 +56,7 @@ struct sde_plane {
 	struct mutex lock;
 
 	enum sde_sspp pipe;
-	uint64_t features;      /* capabilities from catalog */
+	unsigned long features;	/* capabilities from catalog */
 	uint32_t perf_features; /* perf capabilities from catalog */
 	uint32_t nformats;
 	uint32_t formats[64];
@@ -162,6 +162,7 @@ enum sde_plane_sclcheck_state {
  * @cdp_cfg:	CDP configuration
  * @cont_splash_populated: State was populated as part of cont. splash
  * @ubwc_stats_roi: cached roi for ubwc stats
+ * @line_insertion_cfg: line insertion configuration
  */
 struct sde_plane_state {
 	struct drm_plane_state base;
@@ -198,6 +199,8 @@ struct sde_plane_state {
 	bool cont_splash_populated;
 
 	struct sde_drm_ubwc_stats_roi ubwc_stats_roi;
+
+	struct sde_hw_pipe_line_insertion_cfg line_insertion_cfg;
 };
 
 /**

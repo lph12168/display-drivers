@@ -44,6 +44,8 @@
 #define SSPP_SRC_CONSTANT_COLOR_REC1       0x180
 #define SSPP_EXCL_REC_SIZE_REC1            0x184
 #define SSPP_EXCL_REC_XY_REC1              0x188
+#define SSPP_LINE_INSERTION_CTRL_REC1      0x1E4
+#define SSPP_LINE_INSERTION_OUT_SIZE_REC1  0x1EC
 
 #define SSPP_UIDLE_CTRL_VALUE              0x1f0
 #define SSPP_UIDLE_CTRL_VALUE_REC1         0x1f4
@@ -111,6 +113,8 @@
 #define SSPP_UBWC_STATIC_CTRL_REC1         0x1C0
 #define SSPP_UBWC_ERROR_STATUS_REC1        0x1C8
 #define SSPP_META_ERROR_STATUS_REC1        0x1C4
+#define SSPP_LINE_INSERTION_CTRL           0x1E0
+#define SSPP_LINE_INSERTION_OUT_SIZE       0x1E8
 #define SSPP_VIG_OP_MODE                   0x0
 #define SSPP_VIG_CSC_10_OP_MODE            0x0
 #define SSPP_TRAFFIC_SHAPER_BPC_MAX        0xFF
@@ -1442,6 +1446,39 @@ static int sde_hw_sspp_get_clk_ctrl_status(struct sde_hw_blk_reg_map *hw,
 	return 0;
 }
 
+static void sde_hw_sspp_setup_line_insertion(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index rect_index,
+		struct sde_hw_pipe_line_insertion_cfg *cfg)
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 ctl_off, size_off, ctl_val;
+	u32 idx;
+
+	if (_sspp_subblk_offset(ctx, SDE_SSPP_SRC, &idx) || !cfg)
+		return;
+
+	c = &ctx->hw;
+
+	if (rect_index == SDE_SSPP_RECT_SOLO || rect_index == SDE_SSPP_RECT_0) {
+		ctl_off = SSPP_LINE_INSERTION_CTRL;
+		size_off = SSPP_LINE_INSERTION_OUT_SIZE;
+	} else {
+		ctl_off = SSPP_LINE_INSERTION_CTRL_REC1;
+		size_off = SSPP_LINE_INSERTION_OUT_SIZE_REC1;
+	}
+
+	if (cfg->enable)
+		ctl_val = BIT(31) |
+			(cfg->dummy_lines << 16) |
+			(cfg->first_active_lines << 8) |
+			(cfg->active_lines);
+	else
+		ctl_val = 0;
+
+	SDE_REG_WRITE(c, ctl_off, ctl_val);
+	SDE_REG_WRITE(c, size_off, cfg->dst_h << 16);
+}
+
 static void _setup_layer_ops(struct sde_hw_pipe *c,
 		unsigned long features, unsigned long perf_features,
 		bool is_virtual_pipe)
@@ -1535,6 +1572,10 @@ static void _setup_layer_ops(struct sde_hw_pipe *c,
 	if (test_bit(SDE_SSPP_UBWC_STATS, &features)) {
 		c->ops.set_ubwc_stats_roi = sde_hw_sspp_ubwc_stats_set_roi;
 		c->ops.get_ubwc_stats_data = sde_hw_sspp_ubwc_stats_get_data;
+	}
+
+	if (test_bit(SDE_SSPP_LINE_INSERTION, &features)) {
+		c->ops.setup_line_insertion = sde_hw_sspp_setup_line_insertion;
 	}
 }
 
