@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/list.h>
@@ -3720,6 +3721,8 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 
 	display->ctrl_count = dsi_display_get_phandle_count(display,
 					dsi_ctrl_name);
+	display->boot_ctrl_count = display->ctrl_count;
+
 	phy_count = dsi_display_get_phandle_count(display, dsi_phy_name);
 
 	DSI_DEBUG("ctrl count=%d, phy count=%d\n",
@@ -5385,6 +5388,11 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	if (!strcmp(display->display_type, "secondary"))
 		index = DSI_SECONDARY;
 
+	if (of_get_property(pdev->dev.of_node, "boot-panel-param", NULL)) {
+		boot_displays[index].boot_disp_en = false;
+		DSI_DEBUG("boot_displays[%d].boot_disp_en false!\n", index);
+	}
+
 	boot_disp = &boot_displays[index];
 	node = pdev->dev.of_node;
 	if (boot_disp->boot_disp_en) {
@@ -5700,6 +5708,25 @@ static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
 			<= drm_mode->hdisplay) ? 2 : 1;
 	topology->num_enc = 0;
 	topology->num_intf = topology->num_lm;
+
+	if (ext_display->panel->host_config.ext_bridge_custom_topology) {
+		u32 num_lm = topology->num_lm;
+		u32 ctrl_count = ext_display->ctrl_count;
+
+		if (drm_mode->hdisplay == 720 &&
+				drm_mode->vdisplay == 480) {
+			/* no need to change topology */
+		} else {
+			topology->num_lm =
+				(num_lm >= ctrl_count) ? num_lm : ctrl_count;
+			topology->num_enc = 0;
+			topology->num_intf = ctrl_count;
+		}
+	}
+
+	DSI_DEBUG("%dx%d@%d : %d %d %d\n",
+		drm_mode->hdisplay, drm_mode->vdisplay, drm_mode->vrefresh,
+		topology->num_lm, topology->num_enc, topology->num_intf);
 
 	return 0;
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "dp_panel.h"
@@ -2034,6 +2035,8 @@ static int dp_panel_read_edid(struct dp_panel *dp_panel,
 end:
 	edid = dp_panel->edid_ctrl->edid;
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = dp_panel->audio_supported
+				&& !panel->parser->no_audio_support;
 
 	return ret;
 }
@@ -2329,7 +2332,7 @@ static int dp_panel_get_modes(struct dp_panel *dp_panel,
 		return 1;
 	} else if (dp_panel->edid_ctrl->edid) {
 		count =  _sde_edid_update_modes(connector, dp_panel->edid_ctrl);
-		if (count)
+		if (panel->parser->dp_cec_feature && count)
 			drm_dp_cec_set_edid(panel->aux->drm_aux,
 				dp_panel->edid_ctrl->edid);
 		return count;
@@ -2678,7 +2681,9 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel, u32 flags)
 	shdr_if_sdp = &panel->catalog->shdr_if_sdp;
 	vsc_colorimetry = &panel->catalog->vsc_colorimetry;
 
-	drm_dp_cec_unset_edid(panel->aux->drm_aux);
+	if (panel->parser->dp_cec_feature)
+		drm_dp_cec_unset_edid(panel->aux->drm_aux);
+
 	if (!panel->custom_edid && dp_panel->edid_ctrl->edid)
 		sde_free_edid((void **)&dp_panel->edid_ctrl);
 
@@ -3208,12 +3213,16 @@ static int dp_panel_read_sink_sts(struct dp_panel *dp_panel, u8 *sts, u32 size)
 static int dp_panel_update_edid(struct dp_panel *dp_panel, struct edid *edid)
 {
 	int rc;
+	struct dp_panel_private *panel;
 
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	dp_panel->edid_ctrl->edid = edid;
 	sde_parse_edid(dp_panel->edid_ctrl);
 
 	rc = _sde_edid_update_modes(dp_panel->connector, dp_panel->edid_ctrl);
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
+	dp_panel->audio_supported = dp_panel->audio_supported
+				&& !panel->parser->no_audio_support;
 
 	return rc;
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -13,6 +14,7 @@
 #include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/usb/usbpd.h>
 
+#include <drm/drm_client.h>
 #include "sde_connector.h"
 
 #include "msm_drv.h"
@@ -31,6 +33,8 @@
 #include "sde_dbg.h"
 
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
+
+#define DCI_4K_HORIZ_ACTIVE 4096
 
 #define dp_display_state_show(x) { \
 	DP_ERR("%s: state (0x%x): %s\n", x, dp->state, \
@@ -199,9 +203,17 @@ static const struct of_device_id dp_dt_match[] = {
 	{}
 };
 
+static void dp_display_update_hdcp_info(struct dp_display_private *dp);
+
 static inline bool dp_display_is_hdcp_enabled(struct dp_display_private *dp)
 {
 	return dp->link->hdcp_status.hdcp_version && dp->hdcp.ops;
+}
+
+static bool is_drm_bootsplash_enabled(struct device *dev)
+{
+	return of_property_read_bool(dev->of_node,
+		"qcom,sde-drm-fb-splash-logo-enabled");
 }
 
 static irqreturn_t dp_display_irq(int irq, void *dev_id)
@@ -734,6 +746,7 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 {
 	int ret = 0;
 	bool hpd = !!dp_display_state_is(DP_STATE_CONNECTED);
+	static int bootsplash_count;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state, hpd);
 
@@ -760,6 +773,14 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 		dp->dp_display.is_sst_connected = hpd;
 	else
 		dp->dp_display.is_sst_connected = false;
+
+	if (!dp->dp_display.is_bootsplash_en
+		&& is_drm_bootsplash_enabled(dp->dp_display.drm_dev->dev)
+		&& !bootsplash_count) {
+		dp->dp_display.is_bootsplash_en = true;
+		bootsplash_count++;
+		drm_client_dev_register(dp->dp_display.drm_dev);
+	}
 
 	reinit_completion(&dp->notification_comp);
 	dp_display_send_hpd_event(dp);
@@ -1455,7 +1476,7 @@ static int dp_display_usbpd_attention_cb(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (dp->hpd->hpd_high && dp->hpd->hpd_irq)
+	if (dp->parser->dp_cec_feature && dp->hpd->hpd_high && dp->hpd->hpd_irq)
 		drm_dp_cec_irq(dp->aux->drm_aux);
 
 	DP_DEBUG("hpd_irq:%d, hpd_high:%d, power_on:%d, is_connected:%d\n",
@@ -2041,6 +2062,10 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
 	mutex_lock(&dp->session_lock);
 
+	if (dp->dp_display.is_bootsplash_en) {
+		dp->dp_display.is_bootsplash_en = false;
+		goto end;
+	}
 	/*
 	 * If DP_STATE_READY is not set, we should not do any HW
 	 * programming.
@@ -2350,6 +2375,14 @@ static enum drm_mode_status dp_display_validate_mode(
 	if (!debug)
 		goto end;
 
+	if (dp->parser->no_4k_dci_support) {
+		if (mode->hdisplay == DCI_4K_HORIZ_ACTIVE) {
+			DP_DEBUG("%s not supported\n", mode->name);
+			mode_status = MODE_BAD;
+			goto end;
+		}
+	}
+
 	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
 	dsc_en = dp_mode.timing.comp_info.comp_ratio ? true : false;
@@ -2635,6 +2668,7 @@ static int dp_display_fsa4480_callback(struct notifier_block *self,
 static int dp_display_init_aux_switch(struct dp_display_private *dp)
 {
 	int rc = 0;
+	const char *external_aux_switch = "redriver";
 	const char *phandle = "qcom,dp-aux-switch";
 	struct notifier_block nb;
 
@@ -2651,6 +2685,10 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 		rc = -ENODEV;
 		goto end;
 	}
+
+	if (strcmp(dp->aux_switch_node->name,
+		 external_aux_switch) == 0)
+		goto end;
 
 	nb.notifier_call = dp_display_fsa4480_callback;
 	nb.priority = 0;

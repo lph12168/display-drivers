@@ -309,6 +309,12 @@ static inline int pll_reg_read(void *context, unsigned int reg,
 	u32 data;
 	struct mdss_pll_resources *rsc = context;
 
+	/* Return cached outdiv as it is updated during vco prepare */
+	if (!rsc->handoff_resources) {
+		*val = rsc->cached_outdiv;
+		return rc;
+	}
+
 	rc = mdss_pll_resource_enable(rsc, true);
 	if (rc) {
 		pr_err("Failed to enable dsi pll resources, rc=%d\n", rc);
@@ -348,6 +354,13 @@ static inline int pll_reg_write(void *context, unsigned int reg,
 	MDSS_PLL_REG_W(rsc->pll_base, reg, val);
 	(void)mdss_pll_resource_enable(rsc, false);
 
+	/*
+	 * cache the current divider value where parent
+	 * is not changing but divider is changing. In that case
+	 * clock framework won't call set_rate and hence pll_outdiv
+	 * bit won't be programmed.
+	 */
+	rsc->cached_outdiv = val;
 	return rc;
 }
 
@@ -1524,11 +1537,12 @@ static void vco_7nm_unprepare(struct clk_hw *hw)
 	if (!pll->handoff_resources || pll->dfps_trigger) {
 		pll->cached_cfg0 = MDSS_PLL_REG_R(pll->phy_base,
 						  PHY_CMN_CLK_CFG0);
+		if (pll->slave)
+			pll->slave->cached_cfg0 =
+				MDSS_PLL_REG_R(pll->slave->phy_base,
+					PHY_CMN_CLK_CFG0);
 		pll->cached_outdiv = MDSS_PLL_REG_R(pll->pll_base,
 						    PLL_PLL_OUTDIV_RATE);
-		pr_debug("cfg0=%d,cfg1=%d, outdiv=%d\n", pll->cached_cfg0,
-			 pll->cached_cfg1, pll->cached_outdiv);
-
 		pll->vco_cached_rate = clk_get_rate(hw->clk);
 	}
 
@@ -1547,6 +1561,9 @@ static void vco_7nm_unprepare(struct clk_hw *hw)
 				MDSS_PLL_REG_R(pll->slave->phy_base,
 					       PHY_CMN_CLK_CFG1);
 	}
+
+	pr_debug("cfg0=%d,cfg1=%d, outdiv=%d\n", pll->cached_cfg0,
+		pll->cached_cfg1, pll->cached_outdiv);
 
 	dsi_pll_disable(vco);
 	mdss_pll_resource_enable(pll, false);
@@ -1590,10 +1607,15 @@ static int vco_7nm_prepare(struct clk_hw *hw)
 					pll->cached_cfg0);
 		if (pll->slave)
 			MDSS_PLL_REG_W(pll->slave->phy_base, PHY_CMN_CLK_CFG0,
-				       pll->cached_cfg0);
-		MDSS_PLL_REG_W(pll->pll_base, PLL_PLL_OUTDIV_RATE,
-					pll->cached_outdiv);
+				       pll->slave->cached_cfg0);
 	}
+
+	/*
+	 * cached_outdiv has the latest value from set_rate,
+	 * apply this value to PLL_OUTDIV register
+	 */
+	MDSS_PLL_REG_W(pll->pll_base, PLL_PLL_OUTDIV_RATE,
+			pll->cached_outdiv);
 
 	rc = dsi_pll_enable(vco);
 	if (rc) {
