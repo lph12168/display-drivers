@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[sde-hdcp1x] %s: " fmt, __func__
@@ -1065,6 +1066,8 @@ static void sde_hdcp_1x_update_auth_status(struct sde_hdcp_1x *hdcp)
 		hdcp->init_data.notify_status(
 			hdcp->init_data.cb_data,
 			hdcp->hdcp_state);
+		msm_hdcp_notify_status(hdcp->init_data.msm_hdcp_dev,
+				hdcp->hdcp_state, HDCP_VERSION_1X);
 	}
 }
 
@@ -1248,6 +1251,8 @@ static void sde_hdcp_1x_off(void *input)
 	DSS_REG_W(io, isr->int_reg,
 		DSS_REG_R(io, isr->int_reg) & ~HDCP_INT_EN);
 	hdcp->hdcp_state = HDCP_STATE_INACTIVE;
+	msm_hdcp_notify_status(hdcp->init_data.msm_hdcp_dev,
+				HDCP_STATE_INACTIVE, HDCP_VERSION_1X);
 
 	/* complete any wait pending */
 	complete_all(&hdcp->sink_r0_available);
