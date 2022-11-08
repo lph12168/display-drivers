@@ -38,6 +38,7 @@ struct msm_hdcp {
 	void *client_ctx;
 	void (*cb)(void *ctx, u8 data);
 	u32 cell_idx;
+	u8 min_enc_level;
 	struct msm_hdcp *master_hdcp;
 	struct list_head head;
 	struct list_head slave_list;
@@ -67,7 +68,7 @@ void msm_hdcp_register_cb(struct device *dev, void *ctx,
 EXPORT_SYMBOL(msm_hdcp_register_cb);
 
 void msm_hdcp_notify_status(struct device *dev,
-	       int state, int version)
+		struct msm_hdcp_status *status)
 {
 	char *envp[2];
 	struct msm_hdcp *hdcp = NULL;
@@ -78,10 +79,12 @@ void msm_hdcp_notify_status(struct device *dev,
 		return;
 	}
 
-	if ((state != hdcp->state) ||
-			(version != hdcp->version)) {
-		hdcp->state = state;
-		hdcp->version = version;
+	if ((status->state != hdcp->state) ||
+			(status->version != hdcp->version) ||
+			(status->min_enc_level != hdcp->min_enc_level)) {
+		hdcp->state = status->state;
+		hdcp->version = status->version;
+		hdcp->min_enc_level = status->min_enc_level;
 
 		envp[0] = "HDCP_UPDATE=1";
 		envp[1] = NULL;
@@ -351,6 +354,26 @@ static ssize_t hdcp_version_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%zu\n", hdcp->version);
 }
 
+static ssize_t hdcp_mel_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct msm_hdcp *hdcp = NULL;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return -ENODEV;
+	}
+
+	hdcp = dev_get_drvdata(dev);
+	if (!hdcp) {
+		pr_err("invalid driver pointer\n");
+		return -ENODEV;
+	}
+	return scnprintf(buf, PAGE_SIZE, "%zu\n", hdcp->min_enc_level);
+}
+
+static DEVICE_ATTR_RO(hdcp_mel);
+
 static DEVICE_ATTR_RW(tp);
 
 static DEVICE_ATTR_WO(min_level_change);
@@ -364,6 +387,7 @@ static struct attribute *msm_hdcp_fs_attrs[] = {
 	&dev_attr_min_level_change.attr,
 	&dev_attr_hdcp_state.attr,
 	&dev_attr_hdcp_version.attr,
+	&dev_attr_hdcp_mel.attr,
 	NULL
 };
 
@@ -407,6 +431,7 @@ static int msm_hdcp_probe(struct platform_device *pdev)
 	hdcp->pdev = pdev;
 	hdcp->state = 0;
 	hdcp->version = 0;
+	hdcp->min_enc_level = 0;
 
 	platform_set_drvdata(pdev, hdcp);
 
