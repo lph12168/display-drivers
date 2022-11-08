@@ -234,6 +234,7 @@ struct dp_parser {
 	bool fec_feature_enable;
 	bool dsc_continuous_pps;
 	bool has_widebus;
+	bool has_force_encryption;
 	bool gpio_aux_switch;
 	bool lphw_hpd;
 	bool no_link_rate_reduction;

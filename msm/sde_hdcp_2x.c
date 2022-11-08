@@ -476,6 +476,22 @@ static void sde_hdcp_2x_initialize_command(struct sde_hdcp_2x_ctrl *hdcp,
 		cdata->buf = hdcp->app_data.request.data + 1;
 }
 
+static void sde_hdcp_set_forced_encryption(struct sde_hdcp_2x_ctrl *hdcp)
+{
+	struct hdcp_transport_wakeup_data cdata = {
+						HDCP_TRANSPORT_CMD_INVALID };
+	cdata.context = hdcp->client_data;
+	if (hdcp->force_encryption) {
+		hdcp2_force_encryption(hdcp->hdcp2_ctx, 1);
+		sde_hdcp_2x_initialize_command(hdcp,
+				HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION,
+				&cdata);
+		sde_hdcp_2x_wakeup_client(hdcp, &cdata);
+	} else {
+		hdcp2_force_encryption(hdcp->hdcp2_ctx, 0);
+	}
+}
+
 static void sde_hdcp_2x_msg_sent(struct sde_hdcp_2x_ctrl *hdcp)
 {
 	struct hdcp_transport_wakeup_data cdata = {
@@ -496,11 +512,10 @@ static void sde_hdcp_2x_msg_sent(struct sde_hdcp_2x_ctrl *hdcp)
 				HDCP2_CMD_EN_ENCRYPTION, &hdcp->app_data)) {
 			hdcp->authenticated = true;
 
-			if (hdcp->force_encryption)
-				hdcp2_force_encryption(hdcp->hdcp2_ctx, 1);
-
 			cdata.cmd = HDCP_TRANSPORT_CMD_STATUS_SUCCESS;
 			sde_hdcp_2x_wakeup_client(hdcp, &cdata);
+
+			sde_hdcp_set_forced_encryption(hdcp);
 		}
 
 		/* poll for link check */
@@ -665,12 +680,10 @@ static void sde_hdcp_2x_msg_recvd(struct sde_hdcp_2x_ctrl *hdcp)
 			if (!rc) {
 				hdcp->authenticated = true;
 
-				if (hdcp->force_encryption)
-					hdcp2_force_encryption(
-							hdcp->hdcp2_ctx, 1);
-
 				cdata.cmd = HDCP_TRANSPORT_CMD_STATUS_SUCCESS;
 				sde_hdcp_2x_wakeup_client(hdcp, &cdata);
+
+				sde_hdcp_set_forced_encryption(hdcp);
 			} else {
 				pr_err("failed to enable encryption (%d)\n",
 						rc);
