@@ -52,6 +52,7 @@ struct dp_hdcp2p2_ctrl {
 	u8 sink_rx_status;
 	u8 rx_status;
 	char abort_mask;
+	u32 downstream_version;
 	u8 min_enc_level;
 	bool polling;
 };
@@ -158,13 +159,19 @@ static inline void dp_hdcp2p2_send_nofication(struct dp_hdcp2p2_ctrl *ctrl,
 
 static void dp_hdcp2p2_send_auth_status(struct dp_hdcp2p2_ctrl *ctrl)
 {
+	int version = HDCP_VERSION_2P2;
+	int state = atomic_read(&ctrl->auth_state);
+
+	if (ctrl->downstream_version)
+		version = HDCP_VERSION_1X;
+
 	dp_hdcp2p2_send_nofication(ctrl,
-			HDCP_VERSION_2P2,
-			atomic_read(&ctrl->auth_state),
+			version,
+			state,
 			ctrl->min_enc_level);
 
 	ctrl->init_data.notify_status(ctrl->init_data.cb_data,
-		atomic_read(&ctrl->auth_state));
+		state);
 }
 
 static void dp_hdcp2p2_set_interrupts(struct dp_hdcp2p2_ctrl *ctrl, bool enable)
@@ -950,6 +957,9 @@ static int dp_hdcp2p2_main(void *data)
 			break;
 		case HDCP_TRANSPORT_CMD_AUTHENTICATE:
 			dp_hdcp2p2_start_auth(ctrl);
+			break;
+		case HDCP_TRANSPORT_CMD_RX_INFO:
+			ctrl->downstream_version = ctrl->response.data[1] & 0x3;
 			break;
 		case HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION:
 			dp_hdcp2p2_send_nofication(ctrl,
