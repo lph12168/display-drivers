@@ -486,12 +486,6 @@ static int dp_display_hdcp_process_sink_sync(struct dp_display_private *dp)
 			queue_delayed_work(dp->wq, &dp->hdcp_cb_work, HZ);
 			return -EAGAIN;
 		}
-		/*
-		 * Some sinks need more time to stabilize after synchronization
-		 * and before it can handle an HDCP authentication request.
-		 * Adding the delay for better interoperability.
-		 */
-		msleep(6000);
 	}
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT);
 
@@ -2360,6 +2354,10 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	dp->cached_connector_status = connector_status_disconnected;
+
+	dp->debug->hdcp_wait_sink_sync =
+		dp->parser->hdcp_wait_sink_sync_enabled;
+
 	dp->tot_dsc_blks_in_use = 0;
 
 	dp->debug->hdcp_disabled = hdcp_disabled;
