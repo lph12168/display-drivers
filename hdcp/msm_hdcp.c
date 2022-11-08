@@ -41,6 +41,8 @@ struct msm_hdcp {
 	struct msm_hdcp *master_hdcp;
 	struct list_head head;
 	struct list_head slave_list;
+	int state;
+	int version;
 };
 
 void msm_hdcp_register_cb(struct device *dev, void *ctx,
@@ -63,6 +65,30 @@ void msm_hdcp_register_cb(struct device *dev, void *ctx,
 	hdcp->client_ctx = ctx;
 }
 EXPORT_SYMBOL(msm_hdcp_register_cb);
+
+void msm_hdcp_notify_status(struct device *dev,
+	       int state, int version)
+{
+	char *envp[2];
+	struct msm_hdcp *hdcp = NULL;
+
+	hdcp = dev_get_drvdata(dev);
+	if (!hdcp) {
+		pr_err("invalid driver pointer\n");
+		return;
+	}
+
+	if ((state != hdcp->state) ||
+			(version != hdcp->version)) {
+		hdcp->state = state;
+		hdcp->version = version;
+
+		envp[0] = "HDCP_UPDATE=1";
+		envp[1] = NULL;
+		kobject_uevent_env(&hdcp->device->kobj,
+				KOBJ_CHANGE, envp);
+	}
+}
 
 void msm_hdcp_notify_topology(struct device *dev)
 {
@@ -288,13 +314,56 @@ static ssize_t min_level_change_store(struct device *dev,
 	return ret;
 }
 
+static ssize_t hdcp_state_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct msm_hdcp *hdcp = NULL;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return -ENODEV;
+	}
+
+	hdcp = dev_get_drvdata(dev);
+	if (!hdcp) {
+		pr_err("invalid driver pointer\n");
+		return -ENODEV;
+	}
+	return scnprintf(buf, PAGE_SIZE, "%zu\n", hdcp->state);
+}
+
+static ssize_t hdcp_version_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct msm_hdcp *hdcp = NULL;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return -ENODEV;
+	}
+
+	hdcp = dev_get_drvdata(dev);
+	if (!hdcp) {
+		pr_err("invalid driver pointer\n");
+		return -ENODEV;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%zu\n", hdcp->version);
+}
+
 static DEVICE_ATTR_RW(tp);
 
 static DEVICE_ATTR_WO(min_level_change);
 
+static DEVICE_ATTR_RO(hdcp_state);
+
+static DEVICE_ATTR_RO(hdcp_version);
+
 static struct attribute *msm_hdcp_fs_attrs[] = {
 	&dev_attr_tp.attr,
 	&dev_attr_min_level_change.attr,
+	&dev_attr_hdcp_state.attr,
+	&dev_attr_hdcp_version.attr,
 	NULL
 };
 
@@ -336,6 +405,8 @@ static int msm_hdcp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	hdcp->pdev = pdev;
+	hdcp->state = 0;
+	hdcp->version = 0;
 
 	platform_set_drvdata(pdev, hdcp);
 

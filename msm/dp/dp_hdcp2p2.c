@@ -144,6 +144,10 @@ static int dp_hdcp2p2_copy_buf(struct dp_hdcp2p2_ctrl *ctrl,
 
 static void dp_hdcp2p2_send_auth_status(struct dp_hdcp2p2_ctrl *ctrl)
 {
+	msm_hdcp_notify_status(ctrl->init_data.msm_hdcp_dev,
+				atomic_read(&ctrl->auth_state),
+				HDCP_VERSION_2P2);
+
 	ctrl->init_data.notify_status(ctrl->init_data.cb_data,
 		atomic_read(&ctrl->auth_state));
 }
@@ -300,6 +304,10 @@ static void dp_hdcp2p2_off(void *input)
 	rc = dp_hdcp2p2_valid_handle(ctrl);
 	if (rc)
 		return;
+
+	msm_hdcp_notify_status(ctrl->init_data.msm_hdcp_dev,
+				HDCP_STATE_INACTIVE,
+				HDCP_VERSION_NONE);
 
 	dp_hdcp2p2_set_interrupts(ctrl, false);
 
