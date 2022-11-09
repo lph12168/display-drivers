@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/*
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -431,9 +434,6 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 	int rc = 0;
 	struct pinctrl_state *state;
 
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
-
 	if (enable)
 		state = panel->pinctrl.active;
 	else
@@ -502,6 +502,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
+
+	if (gpio_is_valid(panel->bl_config.en_gpio))
+		gpio_set_value(panel->bl_config.en_gpio, 0); /*turn off backlight*/
 
 	if (gpio_is_valid(panel->panel_test_gpio)) {
 		rc = gpio_direction_input(panel->panel_test_gpio);
@@ -579,9 +582,6 @@ static int dsi_panel_pinctrl_deinit(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
-
 	devm_pinctrl_put(panel->pinctrl.pinctrl);
 
 	return rc;
@@ -590,9 +590,6 @@ static int dsi_panel_pinctrl_deinit(struct dsi_panel *panel)
 static int dsi_panel_pinctrl_init(struct dsi_panel *panel)
 {
 	int rc = 0;
-
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
 
 	/* TODO:  pinctrl is defined in dsi dt node */
 	panel->pinctrl.pinctrl = devm_pinctrl_get(panel->parent);
@@ -618,6 +615,7 @@ static int dsi_panel_pinctrl_init(struct dsi_panel *panel)
 		DSI_ERR("failed to get pinctrl suspend state, rc=%d\n", rc);
 		goto error;
 	}
+	dsi_panel_set_pinctrl_state(panel, true); /*need to configure the pinctrl for pwm even if splash is enabled*/
 
 error:
 	return rc;
@@ -739,9 +737,6 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
-
 	DSI_DEBUG("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
@@ -820,9 +815,6 @@ static int dsi_panel_bl_register(struct dsi_panel *panel)
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
-
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = dsi_panel_wled_register(panel, bl);
@@ -855,9 +847,6 @@ static int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
-
-	if (panel->host_config.ext_bridge_mode)
-		return 0;
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
@@ -3475,6 +3464,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
 
+	device_initialize(&panel->mipi_device.dev);
 	rc = drm_panel_add(&panel->drm_panel);
 	if (rc)
 		goto error;
