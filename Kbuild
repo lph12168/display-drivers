@@ -21,5 +21,6 @@ LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmgen3dispconf.h
 endif
 
 obj-$(CONFIG_DRM_MSM) += msm/
-obj-$(CONFIG_DRM_MSM_HYP) += msm-hyp/
-obj-$(CONFIG_DRM_MSM_CFG) += msm-cfg/
+#TODO: Enable back when dependencies are merged
+#obj-$(CONFIG_DRM_MSM_HYP) += msm-hyp/
+#obj-$(CONFIG_DRM_MSM_CFG) += msm-cfg/
