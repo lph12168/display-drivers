@@ -21,6 +21,7 @@
 #include "sde_vm.h"
 #include <drm/drm_probe_helper.h>
 #include <linux/version.h>
+#include <shd_drm.h>
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -219,16 +220,23 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	struct sde_kms *sde_kms;
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
+	struct shd_display *shd_display;
 
 	sde_kms = sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
 		SDE_ERROR("invalid kms\n");
 		return -EINVAL;
-	} else if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI) {
+	} else if (!c_conn->ops.set_backlight) {
 		return 0;
 	}
 
-	display = (struct dsi_display *) c_conn->display;
+	if (c_conn->shared) {
+		shd_display = c_conn->display;
+		display = shd_display->dsi_base;
+	} else {
+		display = (struct dsi_display *) c_conn->display;
+	}
+
 	bl_config = &display->panel->bl_config;
 
 	if (bl_config->type != DSI_BACKLIGHT_DCS &&
@@ -450,6 +458,12 @@ static void sde_connector_get_avail_res_info(struct drm_connector *conn,
 		avail_res->num_dsc = sde_kms->catalog->dsc_count;
 
 	avail_res->max_mixer_width = sde_kms->catalog->max_mixer_width;
+}
+
+void sde_connector_get_avail_res_info_shd(struct drm_connector *conn,
+					  struct msm_resource_caps_info *avail_res)
+{
+	sde_connector_get_avail_res_info(conn, avail_res);
 }
 
 int sde_connector_set_msm_mode(struct drm_connector_state *conn_state,
@@ -3576,21 +3590,4 @@ int sde_connector_event_notify(struct drm_connector *connector, uint32_t type,
 			connector->base.id, type, val);
 
 	return ret;
-}
-
-bool sde_connector_is_line_insertion_supported(struct sde_connector *sde_conn)
-{
-	struct dsi_display *display = NULL;
-
-	if (!sde_conn)
-		return false;
-
-	if (sde_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
-		return false;
-
-	display = (struct dsi_display *)sde_conn->display;
-	if (!display || !display->panel)
-		return false;
-
-	return display->panel->host_config.line_insertion_enable;
 }

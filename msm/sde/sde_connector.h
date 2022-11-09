@@ -567,6 +567,7 @@ struct sde_misr_sign {
  * @misr_event_notify_enabled: Flag to indicate if misr event notify is enabled or not
  * @previous_misr_sign: store previous misr signature
  * @hwfence_wb_retire_fences_enable: enable hw-fences for wb retire-fence
+ * @shared: If a connector is sharing resource of its parent
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -646,6 +647,7 @@ struct sde_connector {
 	struct sde_misr_sign previous_misr_sign;
 
 	bool hwfence_wb_retire_fences_enable;
+	bool shared;
 };
 
 /**
@@ -1311,13 +1313,5 @@ int sde_connector_esd_status(struct drm_connector *connector);
 
 const char *sde_conn_get_topology_name(struct drm_connector *conn,
 		struct msm_display_topology topology);
-
-/*
- * sde_connector_is_line_insertion_supported - get line insertion
- * feature bit value from panel
- * @sde_conn:    Pointer to sde connector structure
- * @Return: line insertion support status
- */
-bool sde_connector_is_line_insertion_supported(struct sde_connector *sde_conn);
 
 #endif /* _SDE_CONNECTOR_H_ */

@@ -201,10 +201,6 @@ enum {
 #define SYS_CACHE_OP_TYPE	BIT(3)
 #define SYS_CACHE_NO_ALLOC	BIT(4)
 
-/* default line padding ratio limitation */
-#define MAX_VPADDING_RATIO_M	93
-#define MAX_VPADDING_RATIO_N	45
-
 /**
  * sde_sys_cache_type: Types of system cache supported
  * SDE_SYS_CACHE_DISP: System cache for static display read/write path use case
@@ -314,8 +310,8 @@ enum {
  * @SDE_SSPP_FP16_UNMULT     FP16 alpha unmult color processing block support
  * @SDE_SSPP_UBWC_STATS:     Support for ubwc stats
  * @SDE_SSPP_SCALER_DE_LPF_BLEND:     Support for detail enhancer
- * @SDE_SSPP_LINE_INSERTION  Line insertion support
  * @SDE_SSPP_MAX             maximum value
+ * @SDE_SSPP_LINE_INSERTION  Line insertion support
  */
 enum {
 	SDE_SSPP_SRC = 0x1,
@@ -1841,7 +1837,6 @@ struct sde_perf_cfg {
  * @perf                performance control settings
  * @uidle_cfg           settings for uidle feature
  * @irq_offset_list     list of sde_intr_irq_offsets to initialize irq table
- * @has_line_insertion  line insertion support status
  * @features            bitmap of supported SDE_FEATUREs
  * @dma_formats         supported formats for dma pipe
  * @vig_formats         supported formats for vig pipe
@@ -1868,6 +1863,7 @@ struct sde_mdss_cfg {
 	u32 true_inline_rot_rev;
 	u32 dnsc_blur_rev;
 	u32 hw_fence_rev;
+	bool has_line_insertion;
 
 	/* HW Blocks */
 	u32 mdss_count;
@@ -1958,7 +1954,6 @@ struct sde_mdss_cfg {
 	struct sde_uidle_cfg uidle_cfg;
 	struct list_head irq_offset_list;
 	DECLARE_BITMAP(features, SDE_FEATURE_MAX);
-	bool has_line_insertion;
 
 	/* Supported Pixel Format Lists */
 	struct sde_format_extended *dma_formats;

@@ -89,6 +89,28 @@ struct sde_encoder_kickoff_params {
 	enum frame_trigger_mode_type frame_trigger_mode;
 };
 
+struct sde_encoder_ops {
+	/**
+	 * phys_init - phys initialization function
+	 * @type: controller type
+	 * @controller_id: controller id
+	 * @phys_init_params: Pointer of structure sde_enc_phys_init_params
+	 * Returns: Pointer of sde_encoder_phys, NULL if failed
+	 */
+	void *(*phys_init)(enum sde_intf_type type, u32 controller_id, void *phys_init_params);
+};
+
+/**
+ * sde_encoder_init_with_ops - initialize virtual encoder object with init ops
+ * @dev:        Pointer to drm device structure
+ * @disp_info:  Pointer to display information structure
+ * @ops:        Pointer to encoder ops structure
+ * Returns:     Pointer to newly created drm encoder
+ */
+struct drm_encoder *sde_encoder_init_with_ops(struct drm_device *dev,
+					      struct msm_display_info *disp_info,
+					      const struct sde_encoder_ops *ops);
+
 /*
  * enum sde_enc_rc_states - states that the resource control maintains
  * @SDE_ENC_RC_STATE_OFF: Resource is in OFF state
@@ -186,6 +208,7 @@ enum sde_enc_rc_states {
  *				encoder due to autorefresh concurrency.
  * @ctl_done_supported          boolean flag to indicate the availability of
  *                              ctl done irq support for the hardware
+ * @ops:			Encoder ops from init function
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -254,6 +277,7 @@ struct sde_encoder_virt {
 	bool delay_kickoff;
 	bool autorefresh_solver_disable;
 	bool ctl_done_supported;
+	struct sde_encoder_ops ops;
 };
 
 #define to_sde_encoder_virt(x) container_of(x, struct sde_encoder_virt, base)
@@ -689,14 +713,6 @@ static inline bool sde_encoder_is_widebus_enabled(struct drm_encoder *drm_enc)
 	sde_enc = to_sde_encoder_virt(drm_enc);
 	return sde_enc->mode_info.wide_bus_en;
 }
-
-/*
- * sde_encoder_is_line_insertion_supported - get line insertion
- * feature bit value from panel
- * @drm_enc:    Pointer to drm encoder structure
- * @Return: line insertion support status
- */
-bool sde_encoder_is_line_insertion_supported(struct drm_encoder *drm_enc);
 
 /**
  * sde_encoder_get_hw_ctl - gets hw ctl from the connector
