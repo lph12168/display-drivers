@@ -4366,6 +4366,25 @@ static void sde_kms_init_shared_hw(struct sde_kms *sde_kms)
 	if (!sde_kms || !sde_kms->hw_mdp || !sde_kms->catalog)
 		return;
 
+	if (sde_kms->hw_mdp->ops.intf_dp_select) {
+		struct dp_display_info dp_info = {0};
+		u32 dp_intf_sel[DP_CTRL_MAX] = {0};
+		int i;
+
+		for (i = 0; i < sde_kms->dp_display_count; i++) {
+			if (dp_display_get_info(sde_kms->dp_displays[i],
+					&dp_info))
+				continue;
+
+			if (dp_info.cell_idx < DP_CTRL_MAX)
+				dp_intf_sel[dp_info.cell_idx] =
+					dp_info.phy_idx + 1;
+		}
+
+		sde_kms->hw_mdp->ops.intf_dp_select(sde_kms->hw_mdp,
+				dp_intf_sel);
+	}
+
 	if (sde_kms->hw_mdp->ops.reset_ubwc)
 		sde_kms->hw_mdp->ops.reset_ubwc(sde_kms->hw_mdp,
 						sde_kms->catalog);
