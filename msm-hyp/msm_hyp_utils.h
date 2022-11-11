@@ -7,6 +7,7 @@
 #define _MSM_HYP_UTILS_H_
 
 #include <drm/drm_connector.h>
+#include <drm/drm_plane_helper.h>
 
 #define MAX_BLOB_INFO_SIZE          4096
 

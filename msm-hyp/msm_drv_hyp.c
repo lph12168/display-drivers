@@ -89,12 +89,14 @@
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_drv.h>
 #include "msm_drv_hyp.h"
 #include "msm_hyp_utils.h"
 #include "msm_hyp_trace.h"
+#include "msm_drv.h"
 
 #define CRTC_INPUT_FENCE_TIMEOUT    10000
-#define MAX_PLANES                  32
+#define MSM_HYP_MAX_PLANES          MAX_PLANES
 #define MAX_CONNECTORS              16
 #define MAX_CRTCS                   16
 
@@ -707,7 +709,7 @@ static int _msm_hyp_connector_encoder_init(struct drm_device *ddev,
 	if (info->bridge_funcs) {
 		connector->bridge.funcs = info->bridge_funcs;
 		ret = drm_bridge_attach(&connector->encoder,
-				&connector->bridge, NULL);
+				&connector->bridge, NULL, 0);
 		if (ret)
 			return ret;
 	}
@@ -716,13 +718,13 @@ static int _msm_hyp_connector_encoder_init(struct drm_device *ddev,
 }
 
 static void msm_hyp_crtc_atomic_enable(struct drm_crtc *crtc,
-	struct drm_crtc_state *old_state)
+	struct drm_atomic_state *old_state)
 {
 	drm_crtc_vblank_on(crtc);
 }
 
 static void msm_hyp_crtc_atomic_disable(struct drm_crtc *crtc,
-	struct drm_crtc_state *old_state)
+	struct drm_atomic_state *old_state)
 {
 	drm_crtc_vblank_off(crtc);
 }
@@ -1109,7 +1111,7 @@ static int msm_hyp_plane_set_property(
 		p_state->alpha = val;
 	} else if (property == priv->prop_csc) {
 		if (val)
-			copy_from_user(&p_state->csc,
+			ret = copy_from_user(&p_state->csc,
 				(void __user *)val,
 				sizeof(p_state->csc));
 		else
@@ -1118,7 +1120,7 @@ static int msm_hyp_plane_set_property(
 				sizeof(p_state->csc));
 	} else if (property == priv->prop_scaler) {
 		if (val)
-			copy_from_user(&p_state->scaler,
+			ret = copy_from_user(&p_state->scaler,
 				(void __user *)val,
 				sizeof(p_state->scaler));
 		else
@@ -1363,7 +1365,7 @@ static int _msm_hyp_planes_init(struct drm_device *ddev)
 {
 	struct msm_hyp_drm_private *priv = ddev->dev_private;
 	struct msm_hyp_kms *kms = priv->kms;
-	struct msm_hyp_plane_info *plane_infos[MAX_PLANES];
+	struct msm_hyp_plane_info *plane_infos[MSM_HYP_MAX_PLANES];
 	uint32_t num = 0, i;
 	int ret;
 
@@ -1374,7 +1376,7 @@ static int _msm_hyp_planes_init(struct drm_device *ddev)
 	if (ret)
 		return ret;
 
-	if (num >= MAX_PLANES)
+	if (num >= MSM_HYP_MAX_PLANES)
 		return -EINVAL;
 
 	ret = kms->funcs->get_plane_infos(kms, plane_infos, &num);
@@ -1458,7 +1460,7 @@ void msm_hyp_framebuffer_destroy(struct drm_framebuffer *framebuffer)
 	if (fb->info && fb->info->destroy)
 		fb->info->destroy(framebuffer);
 
-	drm_gem_object_put_unlocked(fb->bo);
+	drm_gem_object_put(fb->bo);
 	drm_framebuffer_cleanup(&fb->base);
 	kfree(fb);
 }
@@ -1503,6 +1505,8 @@ static struct drm_framebuffer *msm_hyp_framebuffer_create(
 		goto fail;
 	}
 
+	fb->base.obj[0] = bo;
+
 	if (kms->funcs && kms->funcs->get_framebuffer_info) {
 		ret = kms->funcs->get_framebuffer_info(kms, &fb->base,
 				&fb->info);
@@ -1520,7 +1524,7 @@ cleanup:
 	drm_framebuffer_cleanup(&fb->base);
 fail:
 	kfree(fb);
-	drm_gem_object_put_unlocked(bo);
+	drm_gem_object_put(bo);
 	return ERR_PTR(ret);
 }
 
@@ -1640,7 +1644,7 @@ void msm_hyp_crtc_commit_done(struct drm_crtc *crtc)
 
 	write_seqlock(&vblank->seqlock);
 	vblank->time = ktime_get();
-	vblank->count++;
+	atomic64_inc(&vblank->count);
 	write_sequnlock(&vblank->seqlock);
 
 	spin_unlock(&dev->vblank_time_lock);
@@ -1928,35 +1932,6 @@ fail:
 	return ret;
 }
 
-static int msm_hyp_enable_vblank(struct drm_device *dev, unsigned int pipe)
-{
-	struct msm_hyp_drm_private *priv = dev->dev_private;
-	struct msm_hyp_kms *kms = priv->kms;
-	struct drm_crtc *crtc;
-
-	crtc = drm_crtc_from_index(dev, pipe);
-	if (WARN_ON(!crtc))
-		return 0;
-
-	if (kms->funcs && kms->funcs->enable_vblank)
-		kms->funcs->enable_vblank(kms, crtc);
-
-	return 0;
-}
-
-static void msm_hyp_disable_vblank(struct drm_device *dev, unsigned int pipe)
-{
-	struct msm_hyp_drm_private *priv = dev->dev_private;
-	struct msm_hyp_kms *kms = priv->kms;
-	struct drm_crtc *crtc;
-
-	crtc = drm_crtc_from_index(dev, pipe);
-	if (WARN_ON(!crtc))
-		return;
-
-	if (kms->funcs && kms->funcs->disable_vblank)
-		kms->funcs->disable_vblank(kms, crtc);
-}
 
 static int msm_hyp_open(struct drm_device *dev, struct drm_file *file)
 {
@@ -1972,7 +1947,7 @@ static void msm_hyp_lastclose(struct drm_device *dev)
 	struct msm_hyp_drm_private *priv = dev->dev_private;
 	int ret;
 
-	ret = drm_client_modeset_commit_force(&priv->client);
+	ret = drm_client_modeset_commit_locked(&priv->client);
 	if (ret)
 		DRM_ERROR("client modeset commit failed: %d\n", ret);
 }
@@ -2088,22 +2063,19 @@ static const struct drm_ioctl_desc msm_hyp_ioctls[] = {
 			DRM_RENDER_ALLOW),
 };
 
-static int msm_hyp_gem_open_object(struct drm_gem_object *obj,
-		struct drm_file *file)
+static int msm_hyp_gem_shmem_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct sg_table *sgt;
+	int ret;
 
-	if (obj->import_attach)
-		return 0;
+	ret = drm_gem_mmap(filp, vma);
+	if (ret)
+	{
+		pr_err("drm_gem_mmap failed! ret = %d", ret);
+		return ret;
+	}
 
-	sgt = drm_gem_shmem_get_pages_sgt(obj);
-	if (IS_ERR(sgt))
-		return PTR_ERR(sgt);
-
-	dma_sync_sg_for_device(obj->dev->dev, sgt->sgl,
-			sgt->nents, DMA_BIDIRECTIONAL);
-
-	return 0;
+    ret = drm_gem_shmem_mmap(vma->vm_private_data, vma);
+	return ret;
 }
 
 DEFINE_DRM_GEM_SHMEM_FOPS(fops);
@@ -2116,10 +2088,7 @@ static struct drm_driver msm_hyp_driver = {
 	.open               = msm_hyp_open,
 	.postclose          = msm_hyp_postclose,
 	.lastclose          = msm_hyp_lastclose,
-	.enable_vblank      = msm_hyp_enable_vblank,
-	.disable_vblank     = msm_hyp_disable_vblank,
 	DRM_GEM_SHMEM_DRIVER_OPS,
-	.gem_open_object    = msm_hyp_gem_open_object,
 	.ioctls             = msm_hyp_ioctls,
 	.num_ioctls         = ARRAY_SIZE(msm_hyp_ioctls),
 	.fops               = &fops,
@@ -2161,7 +2130,6 @@ static int msm_hyp_bind(struct device *dev)
 	platform_set_drvdata(pdev, ddev);
 
 	ddev->dev_private = priv;
-	ddev->irq_enabled = true;
 	priv->dev = ddev;
 
 	ret = component_bind_all(dev, ddev);
@@ -2291,7 +2259,6 @@ static struct platform_driver msm_platform_driver = {
 static int __init msm_drm_register(void)
 {
 	DRM_DEBUG("init");
-	msm_lease_drm_register();
 	wfd_kms_register();
 	return platform_driver_register(&msm_platform_driver);
 }
@@ -2301,7 +2268,6 @@ static void __exit msm_drm_unregister(void)
 	DRM_DEBUG("fini");
 	platform_driver_unregister(&msm_platform_driver);
 	wfd_kms_unregister();
-	msm_lease_drm_unregister();
 }
 
 module_init(msm_drm_register);

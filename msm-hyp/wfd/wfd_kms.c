@@ -675,7 +675,7 @@ static int _wfd_kms_hw_init(struct wfd_kms *kms)
 	int i, j, num_port, port_idx;
 	int rc;
 	int all_ports_cnt = 0;
-	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {0};
+	struct wfd_kms_port wfd_kms_ports[MAX_PORT_CNT] = {{0, 0, 0}};
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
 
 	attribs[0] = WFD_DEVICE_CLIENT_TYPE;
@@ -817,9 +817,9 @@ static void wfd_kms_bridge_mode_set(struct drm_bridge *drm_bridge,
 	for (i = 0; i < priv->mode_count; i++) {
 		mode = &priv->modes[i];
 		if ((adjusted_mode->hdisplay == mode->hdisplay) &&
-		    (adjusted_mode->vdisplay == mode->vdisplay) &&
-		    (adjusted_mode->vrefresh == mode->vrefresh)) {
-			wfd_port_mode = (WFDPortMode)mode->private;
+		    (adjusted_mode->vdisplay == mode->vdisplay)) {
+			/* TODO: Find a way to pass the wfd_port_mode */
+			/* wfd_port_mode = (WFDPortMode)mode->private; */
 			break;
 		}
 	}
@@ -980,23 +980,21 @@ static int wfd_kms_get_connector_infos(struct msm_hyp_kms *kms,
 						priv->wfd_port,
 						port_mode[j],
 						WFD_PORT_MODE_HEIGHT);
-			mode->vrefresh =
-					wfdGetPortModeAttribi_User(
-						priv->wfd_device,
-						priv->wfd_port,
-						port_mode[j],
-						WFD_PORT_MODE_REFRESH_RATE);
-			mode->private = (int *)port_mode[j];
+			/* TODO: Find a way to pass the wfd_port_mode */
+			/* mode->private = (int *)port_mode[j]; */
 			mode->hsync_end = mode->hdisplay;
 			mode->htotal = mode->hdisplay;
 			mode->hsync_start = mode->hdisplay;
 			mode->vsync_end = mode->vdisplay;
 			mode->vtotal = mode->vdisplay;
 			mode->vsync_start = mode->vdisplay;
-			mode->clock = mode->vrefresh *
+			mode->clock = wfdGetPortModeAttribi_User(
+						priv->wfd_device,
+						priv->wfd_port,
+						port_mode[j],
+						WFD_PORT_MODE_REFRESH_RATE) *
 					mode->vtotal *
-					mode->htotal /
-					1000LL;
+					mode->htotal / 1000LL;
 			drm_mode_set_name(mode);
 		}
 
@@ -1099,18 +1097,20 @@ static int wfd_kms_get_crtc_infos(struct msm_hyp_kms *kms,
 }
 
 static void wfd_kms_plane_atomic_update(struct drm_plane *plane,
-		struct drm_plane_state *old_state)
+		struct drm_atomic_state *old_atomic_state)
 {
 	struct msm_hyp_plane *p = to_msm_hyp_plane(plane);
 	struct wfd_plane_info_priv *priv = container_of(p->info,
 			struct wfd_plane_info_priv, base);
 	struct msm_hyp_framebuffer *fb;
 	struct wfd_framebuffer_priv *fb_priv;
+	struct drm_plane_state *old_state;
 	struct msm_hyp_plane_state *old_pstate, *new_pstate;
 	WFDint src_rect[4];
 	WFDint dst_rect[4];
 	WFDint color_space;
 
+	old_state = drm_atomic_get_old_plane_state(old_atomic_state, plane);
 	new_pstate = to_msm_hyp_plane_state(plane->state);
 	old_pstate = to_msm_hyp_plane_state(old_state);
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -297,7 +298,7 @@ int msm_hyp_fence_create(struct msm_hyp_fence_context *ctx,
 		uint64_t __user *user_fd_addr, uint32_t offset)
 {
 	uint32_t trigger_value;
-	int fd, rc = -EINVAL;
+	int fd, rc = -EINVAL, retval = 0;
 	uint64_t user_fd;
 	unsigned long flags;
 
@@ -313,7 +314,7 @@ int msm_hyp_fence_create(struct msm_hyp_fence_context *ctx,
 
 	fd = _msm_hyp_fence_create_fd(ctx, trigger_value);
 	user_fd = fd;
-	copy_to_user(user_fd_addr, &user_fd, sizeof(uint64_t));
+	retval = copy_to_user(user_fd_addr, &user_fd, sizeof(uint64_t));
 
 	pr_debug("fence_create::fd:%d trigger:%d commit:%d\n",
 			fd, trigger_value, ctx->commit_count);

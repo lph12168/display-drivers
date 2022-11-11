@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -8,7 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/types.h>
-#include <drm/drmP.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_print.h>
 #include <drm/drm_edid.h>
 #include "msm_hyp_utils.h"
 
