@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012, 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_HDCP_H__
@@ -70,6 +71,7 @@ struct sde_hdcp_init_data {
 	u32 phy_addr;
 	bool sec_access;
 	enum sde_hdcp_client_id client_id;
+	u8 client_index;
 };
 
 struct sde_hdcp_ops {

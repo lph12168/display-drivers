@@ -503,6 +503,9 @@ bool sde_rm_get_hw(struct sde_rm *rm, struct sde_rm_hw_iter *i)
 	return ret;
 }
 
+#define to_sde_rm_priv_state(x) \
+		container_of((x), struct sde_rm_state, base)
+
 bool sde_rm_request_hw_blk(struct sde_rm *rm, struct sde_rm_hw_request *hw)
 {
 	bool ret;
@@ -2684,6 +2687,7 @@ int sde_rm_reserve(
 	struct sde_rm_requirements reqs = {0,};
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
+	struct sde_connector *sde_conn;
 	struct msm_compression_info *comp_info;
 	int ret = 0;
 
@@ -2702,6 +2706,11 @@ int sde_rm_reserve(
 		return -EINVAL;
 	}
 	sde_kms = to_sde_kms(priv->kms);
+
+	sde_conn = to_sde_connector(conn_state->connector);
+
+	if (sde_conn->shared)
+		return 0;
 
 	/* Check if this is just a page-flip */
 	if (!_sde_rm_is_display_in_cont_splash(sde_kms, enc) &&
@@ -2805,6 +2814,7 @@ int sde_rm_reserve(
 		 */
 		SDE_DEBUG("test_only: rsvp[s%de%d]\n",
 				rsvp_nxt->seq, rsvp_nxt->enc_id);
+		_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
 		goto end;
 	} else {
 		if (test_only && RM_RQ_LOCK(&reqs))
@@ -2821,5 +2831,164 @@ end:
 	_sde_rm_print_rsvps(rm, SDE_RM_STAGE_FINAL);
 	mutex_unlock(&rm->rm_lock);
 
+	return ret;
+}
+
+int sde_rm_ext_blk_create_reserve(struct sde_rm *rm, struct drm_atomic_state *atomic_state,
+				  struct sde_rm_hw_blk *hw, struct drm_encoder *enc,
+				  struct sde_hw_blk_reg_map *pp_shd_hw)
+{
+	struct sde_rm_hw_blk *blk;
+	struct sde_rm_rsvp *rsvp;
+	int ret = 0;
+
+	if (!rm || !hw || !enc) {
+		SDE_ERROR("invalid parameters\n");
+		return -EINVAL;
+	}
+
+	if (hw->type >= SDE_HW_BLK_MAX) {
+		SDE_ERROR("invalid HW type\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&rm->rm_lock);
+
+	rsvp = _sde_rm_get_rsvp_cur(rm, enc);
+	if (!rsvp) {
+		rsvp = kzalloc(sizeof(*rsvp), GFP_KERNEL);
+		if (!rsvp) {
+			ret = -ENOMEM;
+			goto end;
+		}
+
+		rsvp->seq = ++rm->rsvp_next_seq;
+		rsvp->enc_id = enc->base.id;
+		list_add_tail(&rsvp->list, &rm->rsvps);
+
+		SDE_DEBUG("create rsvp %d for enc %d\n", rsvp->seq, rsvp->enc_id);
+	}
+
+	blk = kzalloc(sizeof(*blk), GFP_KERNEL);
+	if (!blk) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	blk->type = hw->type;
+	blk->id = hw->id;
+	blk->hw = pp_shd_hw;
+	blk->rsvp = rsvp;
+	list_add_tail(&blk->list, &rm->hw_blks[hw->type]);
+	SDE_DEBUG("create blk %d %d for rsvp %d enc %d\n", blk->type, blk->id, rsvp->seq,
+		  rsvp->enc_id);
+end:
+	mutex_unlock(&rm->rm_lock);
+	return ret;
+}
+
+int sde_rm_ext_blk_create_reserve_lm(struct sde_rm *rm, struct drm_atomic_state *atomic_state,
+				     struct sde_rm_hw_blk *hw, struct drm_encoder *enc,
+				     struct sde_hw_mixer *sde_hw_lm)
+{
+	struct sde_rm_hw_blk *blk;
+	struct sde_rm_rsvp *rsvp;
+	int ret = 0;
+
+	if (!rm || !hw || !enc || !sde_hw_lm) {
+		SDE_ERROR("invalid parameters\n");
+		return -EINVAL;
+	}
+
+	if (hw->type >= SDE_HW_BLK_MAX) {
+		SDE_ERROR("invalid HW type\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&rm->rm_lock);
+
+	rsvp = _sde_rm_get_rsvp_cur(rm, enc);
+	if (!rsvp) {
+		rsvp = kzalloc(sizeof(*rsvp), GFP_KERNEL);
+		if (!rsvp) {
+			ret = -ENOMEM;
+			goto end;
+		}
+
+		rsvp->seq = ++rm->rsvp_next_seq;
+		rsvp->enc_id = enc->base.id;
+		list_add_tail(&rsvp->list, &rm->rsvps);
+
+		SDE_DEBUG("create rsvp %d for enc %d\n", rsvp->seq, rsvp->enc_id);
+	}
+
+	blk = kzalloc(sizeof(*blk), GFP_KERNEL);
+	if (!blk) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	blk->type = hw->type;
+	blk->id = hw->id;
+	blk->hw = &sde_hw_lm->hw;
+	blk->rsvp = rsvp;
+	list_add_tail(&blk->list, &rm->hw_blks[hw->type]);
+	SDE_DEBUG("create blk %d %d for rsvp %d enc %d\n", blk->type, blk->id,
+		  rsvp->seq, rsvp->enc_id);
+end:
+	mutex_unlock(&rm->rm_lock);
+	return ret;
+}
+
+int sde_rm_ext_blk_create_reserve_ctl(struct sde_rm *rm, struct drm_atomic_state *atomic_state,
+				      struct sde_rm_hw_blk *hw, struct drm_encoder *enc,
+				      struct sde_hw_ctl *sde_hw_ctl)
+{
+	struct sde_rm_hw_blk *blk;
+	struct sde_rm_rsvp *rsvp;
+	int ret = 0;
+
+	if (!rm || !hw || !enc || !sde_hw_ctl) {
+		SDE_ERROR("invalid parameters\n");
+		return -EINVAL;
+	}
+
+	if (hw->type >= SDE_HW_BLK_MAX) {
+		SDE_ERROR("invalid HW type\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&rm->rm_lock);
+
+	rsvp = _sde_rm_get_rsvp_cur(rm, enc);
+	if (!rsvp) {
+		rsvp = kzalloc(sizeof(*rsvp), GFP_KERNEL);
+		if (!rsvp) {
+			ret = -ENOMEM;
+			goto end;
+		}
+
+		rsvp->seq = ++rm->rsvp_next_seq;
+		rsvp->enc_id = enc->base.id;
+		list_add_tail(&rsvp->list, &rm->rsvps);
+
+		SDE_DEBUG("create rsvp %d for enc %d\n", rsvp->seq, rsvp->enc_id);
+	}
+
+	blk = kzalloc(sizeof(*blk), GFP_KERNEL);
+	if (!blk) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	blk->type = hw->type;
+	blk->id = hw->id;
+	blk->hw = &sde_hw_ctl->hw;
+	blk->rsvp = rsvp;
+	list_add_tail(&blk->list, &rm->hw_blks[hw->type]);
+	SDE_DEBUG("create blk %d %d for rsvp %d enc %d\n", blk->type, blk->id,
+		  rsvp->seq, rsvp->enc_id);
+end:
+	mutex_unlock(&rm->rm_lock);
 	return ret;
 }

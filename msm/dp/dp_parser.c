@@ -178,29 +178,14 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (!parser->display_type)
 		parser->display_type = "unknown";
 
-	return 0;
-}
+	parser->no_link_rate_reduction = of_property_read_bool(of_node,
+			"qcom,no-link-rate-reduction");
 
-static int dp_parser_msm_hdcp_dev(struct dp_parser *parser)
-{
-	struct device_node *node;
-	struct platform_device *pdev;
+	parser->no_lane_count_reduction = of_property_read_bool(of_node,
+			"qcom,no-lane-count-reduction");
 
-	node = of_find_compatible_node(NULL, NULL, "qcom,msm-hdcp");
-	if (!node) {
-		// This is a non-fatal error, module initialization can proceed
-		DP_WARN("couldn't find msm-hdcp node\n");
-		return 0;
-	}
-
-	pdev = of_find_device_by_node(node);
-	if (!pdev) {
-		// This is a non-fatal error, module initialization can proceed
-		DP_WARN("couldn't find msm-hdcp pdev\n");
-		return 0;
-	}
-
-	parser->msm_hdcp_dev = &pdev->dev;
+	parser->force_connect_mode = of_property_read_bool(of_node,
+			"qcom,dp-force-connect-mode");
 
 	return 0;
 }
@@ -844,10 +829,7 @@ static int dp_parser_parse(struct dp_parser *parser)
 		goto err;
 
 	rc = dp_parser_pinctrl(parser);
-	if (rc)
-		goto err;
 
-	rc = dp_parser_msm_hdcp_dev(parser);
 	if (rc)
 		goto err;
 
@@ -931,7 +913,7 @@ static void dp_parser_clear_io_buf(struct dp_parser *dp_parser)
 	}
 }
 
-struct dp_parser *dp_parser_get(struct platform_device *pdev)
+struct dp_parser *dp_parser_get(struct platform_device *pdev, u32 cell_idx)
 {
 	struct dp_parser *parser;
 
@@ -944,6 +926,7 @@ struct dp_parser *dp_parser_get(struct platform_device *pdev)
 	parser->get_io_buf = dp_parser_get_io_buf;
 	parser->clear_io_buf = dp_parser_clear_io_buf;
 	parser->pdev = pdev;
+	parser->cell_idx = cell_idx;
 
 	return parser;
 }

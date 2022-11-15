@@ -3,6 +3,7 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 // SPDX-License-Identifier: GPL-2.0-or-later
@@ -100,7 +101,7 @@
 #include <linux/debugfs.h>
 #include <linux/component.h>
 #include <drm/drm_of.h>
-#include <drm/drmP.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_encoder.h>
@@ -120,6 +121,7 @@ struct msm_lease {
 	struct device *dev;
 	struct drm_device *drm_dev;
 	struct drm_minor *minor;
+	struct drm_device *minor_dev;
 	struct drm_master *master;
 	struct list_head head;
 	struct notifier_block notifier;
@@ -657,7 +659,9 @@ static int msm_lease_add_connector(struct drm_device *dev, const char *name,
 		goto out;
 	}
 
-	encoder = drm_encoder_find(dev, NULL, connector->encoder_ids[0]);
+	drm_connector_for_each_possible_encoder(connector, encoder)
+		break;
+
 	if (!encoder) {
 		DRM_ERROR("failed to find encoder for %s\n", name);
 		rc = -ENOENT;
@@ -841,7 +845,7 @@ static int msm_lease_parse_objs(struct drm_device *dev,
 	return 0;
 }
 
-static void msm_lease_parse_remain_objs(void)
+static void msm_lease_parse_remain_objs(u32 hw_dev_id)
 {
 	struct device_node *of_node;
 	struct msm_lease *lease, *target = NULL;
@@ -859,8 +863,11 @@ static void msm_lease_parse_remain_objs(void)
 	bool found;
 
 	list_for_each_entry(lease, &g_lease_list, head) {
-		if (!lease->minor)
+		if (lease->hw_dev_id != hw_dev_id)
 			continue;
+
+		if (!lease->minor)
+			return;
 
 		if (!lease->obj_cnt)
 			target = lease;
@@ -995,8 +1002,9 @@ static void msm_lease_parse_remain_objs(void)
 					object_ids, object_count, target->hw_dev_id))
 				continue;
 
-			encoder = drm_encoder_find(dev, NULL,
-					connector->encoder_ids[0]);
+			drm_connector_for_each_possible_encoder(connector, encoder)
+				break;
+
 			if (!encoder)
 				continue;
 
@@ -1065,7 +1073,8 @@ static int msm_lease_notifier(struct notifier_block *nb,
 		unsigned long action, void *data)
 {
 	struct msm_lease *lease_drv;
-	struct drm_device *ddev, *master_ddev;
+	struct drm_device *master_ddev;
+	struct drm_driver *ddev_drv;
 	u32 object_ids[MAX_LEASE_OBJECT_COUNT] = {0};
 	int object_count = 0;
 	int ret;
@@ -1075,6 +1084,7 @@ static int msm_lease_notifier(struct notifier_block *nb,
 
 	lease_drv = container_of(nb, struct msm_lease, notifier);
 	master_ddev = lease_drv->drm_dev;
+	ddev_drv = (struct drm_driver *)master_ddev->driver;
 
 	/* parse misc options */
 	msm_lease_parse_misc(lease_drv);
@@ -1086,14 +1096,14 @@ static int msm_lease_notifier(struct notifier_block *nb,
 		goto fail;
 
 	/* create temporary device */
-	ddev = drm_dev_alloc(&msm_lease_driver, master_ddev->dev);
-	if (!ddev) {
+	lease_drv->minor_dev = drm_dev_alloc(&msm_lease_driver, master_ddev->dev);
+	if (!lease_drv->minor_dev) {
 		dev_err(lease_drv->dev, "failed to allocate drm_device\n");
 		goto fail;
 	}
 
 	/* update ids list */
-	lease_drv->minor = ddev->primary;
+	lease_drv->minor = lease_drv->minor_dev->primary;
 	lease_drv->obj_cnt = object_count;
 	if (object_count > 0)
 		memcpy(lease_drv->object_ids, object_ids, sizeof(u32) * object_count);
@@ -1103,47 +1113,43 @@ static int msm_lease_notifier(struct notifier_block *nb,
 
 	/* hook open/close function */
 	if (!g_master_open && !g_master_postclose) {
-		g_master_open = master_ddev->driver->open;
-		g_master_postclose = master_ddev->driver->postclose;
-		master_ddev->driver->open = msm_lease_open;
-		master_ddev->driver->postclose = msm_lease_postclose;
+		g_master_open = ddev_drv->open;
+		g_master_postclose = ddev_drv->postclose;
+		ddev_drv->open = msm_lease_open;
+		ddev_drv->postclose = msm_lease_postclose;
 	}
 
 	/* hook ioctl function if dev_name is defined */
 	if (!g_master_ddev_fops && lease_drv->dev_name) {
-		g_master_ddev_fops = master_ddev->driver->fops;
-		master_ddev->driver->fops = &msm_lease_fops;
+		g_master_ddev_fops = ddev_drv->fops;
+		ddev_drv->fops = &msm_lease_fops;
 	}
 
 	/* if lease device has the same name, hide the original name */
 	if (lease_drv->dev_name &&
-	    !strcmp(lease_drv->dev_name, master_ddev->driver->name)) {
+	    !strcmp(lease_drv->dev_name, ddev_drv->name)) {
 		g_lease_master[lease_drv->hw_dev_id].name_overridden = true;
 		snprintf(g_lease_master[lease_drv->hw_dev_id].name,
 				sizeof(g_lease_master[lease_drv->hw_dev_id].name),
-				"%s_orig_%d", master_ddev->driver->name,
+				"%s_orig_%d", ddev_drv->name,
 				lease_drv->hw_dev_id);
 	}
 
 	/* redirect primary minor to master dev */
-	ddev->primary->dev = master_ddev;
-	ddev->primary->type = -1;
+	lease_drv->minor_dev->primary->dev = master_ddev;
+	lease_drv->minor_dev->primary->type = -1;
 
 	/* register primary minor */
-	ret = drm_dev_register(ddev, 0);
+	ret = drm_dev_register(lease_drv->minor_dev, 0);
 	if (ret) {
 		dev_err(lease_drv->dev, "failed to register drm device\n");
-		drm_dev_put(ddev);
+		lease_drv->minor_dev->primary->dev = lease_drv->minor_dev;
+		drm_dev_put(lease_drv->minor_dev);
 		goto fail;
 	}
 
-	/* unregister temporary driver and keep primary minor */
-	ddev->primary = NULL;
-	drm_dev_unregister(ddev);
-	drm_dev_put(ddev);
-
 	/* check if there are remaining objs */
-	msm_lease_parse_remain_objs();
+	msm_lease_parse_remain_objs(lease_drv->hw_dev_id);
 fail:
 	return ret;
 }
@@ -1206,6 +1212,11 @@ static void msm_lease_unbind(struct device *dev, struct device *master,
 	}
 
 	msm_drm_unregister_component(lease_drv->drm_dev, &lease_drv->notifier);
+
+	/* unregister lease driver */
+	lease_drv->minor_dev->primary->dev = lease_drv->minor_dev;
+	drm_dev_unregister(lease_drv->minor_dev);
+	drm_dev_put(lease_drv->minor_dev);
 
 	mutex_lock(&g_lease_mutex);
 	list_del_init(&lease_drv->head);

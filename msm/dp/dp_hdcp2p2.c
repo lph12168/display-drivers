@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -243,7 +244,7 @@ static void dp_hdcp2p2_reset(struct dp_hdcp2p2_ctrl *ctrl)
 
 static int dp_hdcp2p2_register(void *input, bool mst_enabled)
 {
-	int rc;
+	int rc, index = 0;
 	struct dp_hdcp2p2_ctrl *ctrl = input;
 	struct sde_hdcp_2x_wakeup_data cdata = {HDCP_2X_CMD_ENABLE};
 
@@ -251,10 +252,19 @@ static int dp_hdcp2p2_register(void *input, bool mst_enabled)
 	if (rc)
 		return rc;
 
+	if (ctrl->init_data.client_index >= 0 &&
+			ctrl->init_data.client_index <
+			(HDCP_TXMTR_MAX - HDCP_TXMTR_DP))
+		index = 2 * ctrl->init_data.client_index;
+	else {
+		pr_err("DP Client_index in not defined\n");
+		return -EINVAL;
+	}
+
 	if (mst_enabled)
-		cdata.device_type = HDCP_TXMTR_DP_MST;
+		cdata.device_type = HDCP_TXMTR_DP_MST + index;
 	else
-		cdata.device_type = HDCP_TXMTR_DP;
+		cdata.device_type = HDCP_TXMTR_DP + index;
 
 	cdata.context = ctrl->lib_ctx;
 	rc = ctrl->lib->wakeup(&cdata);
@@ -1008,7 +1018,7 @@ void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data)
 		goto error;
 	}
 
-	if (IS_ENABLED(CONFIG_HDCP_QSEECOM))
+	if (IS_ENABLED(CONFIG_HDCP_QSEECOM) && init_data->msm_hdcp_dev)
 		msm_hdcp_register_cb(init_data->msm_hdcp_dev, ctrl,
 				dp_hdcp2p2_min_level_change);
 

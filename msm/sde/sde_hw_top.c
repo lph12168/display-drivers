@@ -400,6 +400,30 @@ void sde_hw_reset_ubwc(struct sde_hw_mdp *mdp, struct sde_mdss_cfg *m)
 	}
 }
 
+static void sde_hw_intf_dp_select(struct sde_hw_mdp *mdp,
+		u32 dp_intf_sel[DP_CTRL_MAX])
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 reg;
+	int i, j;
+
+	if (!mdp)
+		return;
+
+	c = &mdp->hw;
+
+	reg = 0;
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < DP_CTRL_MAX; j++) {
+			if (dp_intf_sel[j] == i + 1)
+				reg |= ((i + 1) << (j * 3)) |
+					((j + 1) << (i * 3 + 6));
+		}
+	}
+
+	SDE_REG_WRITE(c, DP_PHY_INTF_SEL, reg);
+}
+
 static void sde_hw_intf_audio_select(struct sde_hw_mdp *mdp)
 {
 	struct sde_hw_blk_reg_map *c;
@@ -753,6 +777,7 @@ static void _setup_mdp_ops(struct sde_hw_mdp_ops *ops, unsigned long cap, u32 hw
 	ops->get_clk_ctrl_status = sde_hw_get_clk_ctrl_status;
 	ops->set_cwb_ppb_cntl = sde_hw_program_cwb_ppb_ctrl;
 	ops->reset_ubwc = sde_hw_reset_ubwc;
+	ops->intf_dp_select = sde_hw_intf_dp_select;
 	ops->intf_audio_select = sde_hw_intf_audio_select;
 	ops->set_mdp_hw_events = sde_hw_mdp_events;
 	if (cap & BIT(SDE_MDP_VSYNC_SEL))

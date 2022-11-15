@@ -5899,13 +5899,17 @@ static int dsi_display_init(struct dsi_display *display)
 		if (rc) {
 			DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
 					display->panel->name, rc);
-			return rc;
+			_dsi_display_dev_deinit(display);
+			goto end;
 		}
 	}
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
-	if (rc)
+	if (rc) {
 		DSI_ERR("component add failed, rc=%d\n", rc);
+		_dsi_display_dev_deinit(display);
+		goto end;
+	}
 
 	DSI_DEBUG("component add success: %s\n", display->name);
 end:
@@ -6097,12 +6101,18 @@ int dsi_display_dev_remove(struct platform_device *pdev)
 	return rc;
 }
 
-int dsi_display_get_num_of_displays(void)
+int dsi_display_get_num_of_displays(struct drm_device *dev)
 {
 	int i, count = 0;
 
 	for (i = 0; i < MAX_DSI_ACTIVE_DISPLAY; i++) {
 		struct dsi_display *display = boot_displays[i].disp;
+
+		if (!display || !display->drm_dev)
+			continue;
+
+		if (display->drm_dev != dev)
+			continue;
 
 		if ((display && display->panel_node) ||
 					(display && display->fw))
@@ -6112,7 +6122,8 @@ int dsi_display_get_num_of_displays(void)
 	return count;
 }
 
-int dsi_display_get_active_displays(void **display_array, u32 max_display_count)
+int dsi_display_get_active_displays(struct drm_device *dev,
+		void **display_array, u32 max_display_count)
 {
 	int index = 0, count = 0;
 
@@ -6123,6 +6134,9 @@ int dsi_display_get_active_displays(void **display_array, u32 max_display_count)
 
 	for (index = 0; index < MAX_DSI_ACTIVE_DISPLAY; index++) {
 		struct dsi_display *display = boot_displays[index].disp;
+
+		if (display->drm_dev != dev)
+			continue;
 
 		if ((display && display->panel_node) ||
 					(display && display->fw))

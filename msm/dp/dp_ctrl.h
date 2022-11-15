@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DP_CTRL_H_
@@ -14,11 +15,17 @@
 #include "dp_catalog.h"
 #include "dp_debug.h"
 
+enum {
+	LINK_TRAINING_MODE_NORMAL	= 0,
+	LINK_TRAINING_MODE_FORCE,
+	LINK_TRAINING_MODE_SHALLOW,
+};
+
 struct dp_ctrl {
 	int (*init)(struct dp_ctrl *dp_ctrl, bool flip, bool reset);
 	void (*deinit)(struct dp_ctrl *dp_ctrl);
 	int (*on)(struct dp_ctrl *dp_ctrl, bool mst_mode, bool fec_en,
-			bool dsc_en, bool shallow);
+			bool dsc_en, int training_mode);
 	void (*off)(struct dp_ctrl *dp_ctrl);
 	void (*abort)(struct dp_ctrl *dp_ctrl, bool abort);
 	void (*isr)(struct dp_ctrl *dp_ctrl);
