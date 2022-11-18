@@ -34,6 +34,8 @@
 
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
 
+#define DCI_4K_HORIZ_ACTIVE 4096
+
 #define dp_display_state_show(x) { \
 	DP_ERR("%s: state (0x%x): %s\n", x, dp->state, \
 		dp_display_state_name(dp->state)); \
@@ -202,14 +204,16 @@ static const struct of_device_id dp_dt_match[] = {
 };
 
 static void dp_display_update_hdcp_info(struct dp_display_private *dp);
-static bool dp_display_framework_ready(struct dp_display_private *dp)
-{
-	return dp->dp_display.post_open ? false : true;
-}
 
 static inline bool dp_display_is_hdcp_enabled(struct dp_display_private *dp)
 {
 	return dp->link->hdcp_status.hdcp_version && dp->hdcp.ops;
+}
+
+static bool is_drm_bootsplash_enabled(struct device *dev)
+{
+	return of_property_read_bool(dev->of_node,
+		"qcom,sde-drm-fb-splash-logo-enabled");
 }
 
 static irqreturn_t dp_display_irq(int irq, void *dev_id)
@@ -738,36 +742,6 @@ static void dp_display_send_hpd_event(struct dp_display_private *dp)
 	}
 }
 
-static void dp_display_post_open(struct dp_display *dp_display)
-{
-	struct drm_connector *connector;
-	struct dp_display_private *dp;
-
-	if (!dp_display) {
-		pr_err("invalid input\n");
-		return;
-	}
-
-	dp = container_of(dp_display, struct dp_display_private, dp_display);
-	if (IS_ERR_OR_NULL(dp)) {
-		pr_err("invalid params\n");
-		return;
-	}
-
-	connector = dp->dp_display.base_connector;
-
-	if (!connector) {
-		pr_err("connector not set\n");
-		return;
-	}
-
-	/* if cable is already connected, send notification */
-	if (dp->hpd->hpd_high)
-		queue_work(dp->wq, &dp->connect_work);
-	else
-		dp_display->post_open = NULL;
-}
-
 static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 {
 	int ret = 0;
@@ -800,14 +774,12 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 	else
 		dp->dp_display.is_sst_connected = false;
 
-	if (!dp_display_framework_ready(dp)) {
-		pr_debug("%s: dp display framework not ready\n", __func__);
-		if (!dp->dp_display.is_bootsplash_en && !bootsplash_count) {
-			dp->dp_display.is_bootsplash_en = true;
-			bootsplash_count++;
-			drm_client_dev_register(dp->dp_display.drm_dev);
-		}
-		return ret;
+	if (!dp->dp_display.is_bootsplash_en
+		&& is_drm_bootsplash_enabled(dp->dp_display.drm_dev->dev)
+		&& !bootsplash_count) {
+		dp->dp_display.is_bootsplash_en = true;
+		bootsplash_count++;
+		drm_client_dev_register(dp->dp_display.drm_dev);
 	}
 
 	reinit_completion(&dp->notification_comp);
@@ -1504,7 +1476,7 @@ static int dp_display_usbpd_attention_cb(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (dp->hpd->hpd_high && dp->hpd->hpd_irq)
+	if (dp->parser->dp_cec_feature && dp->hpd->hpd_high && dp->hpd->hpd_irq)
 		drm_dp_cec_irq(dp->aux->drm_aux);
 
 	DP_DEBUG("hpd_irq:%d, hpd_high:%d, power_on:%d, is_connected:%d\n",
@@ -1539,11 +1511,6 @@ static void dp_display_connect_work(struct work_struct *work)
 
 	if (dp_display_state_is(DP_STATE_ABORTED)) {
 		DP_WARN("HPD off requested\n");
-		return;
-	}
-
-	if (dp->dp_display.is_sst_connected && dp_display_framework_ready(dp)) {
-		pr_debug("HPD already on\n");
 		return;
 	}
 
@@ -2134,7 +2101,6 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		dp_panel->audio->on(dp_panel->audio);
 	}
 end:
-	dp_display->post_open = NULL;
 	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
 
 	complete_all(&dp->notification_comp);
@@ -2408,6 +2374,14 @@ static enum drm_mode_status dp_display_validate_mode(
 	debug = dp->debug;
 	if (!debug)
 		goto end;
+
+	if (dp->parser->no_4k_dci_support) {
+		if (mode->hdisplay == DCI_4K_HORIZ_ACTIVE) {
+			DP_DEBUG("%s not supported\n", mode->name);
+			mode_status = MODE_BAD;
+			goto end;
+		}
+	}
 
 	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
@@ -3178,7 +3152,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	g_dp_display->unprepare     = dp_display_unprepare;
 	g_dp_display->request_irq   = dp_request_irq;
 	g_dp_display->get_debug     = dp_get_debug;
-	g_dp_display->post_open     = dp_display_post_open;
+	g_dp_display->post_open     = NULL;
 	g_dp_display->post_init     = dp_display_post_init;
 	g_dp_display->config_hdr    = dp_display_config_hdr;
 	g_dp_display->get_display_type = dp_display_get_display_type;
