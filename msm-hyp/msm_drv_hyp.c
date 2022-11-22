@@ -2063,22 +2063,7 @@ static const struct drm_ioctl_desc msm_hyp_ioctls[] = {
 			DRM_RENDER_ALLOW),
 };
 
-static int msm_hyp_gem_shmem_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-	int ret;
-
-	ret = drm_gem_mmap(filp, vma);
-	if (ret)
-	{
-		pr_err("drm_gem_mmap failed! ret = %d", ret);
-		return ret;
-	}
-
-    ret = drm_gem_shmem_mmap(vma->vm_private_data, vma);
-	return ret;
-}
-
-DEFINE_DRM_GEM_SHMEM_FOPS(fops);
+DEFINE_DRM_GEM_FOPS(fops);
 
 static struct drm_driver msm_hyp_driver = {
 	.driver_features    = DRIVER_GEM |
