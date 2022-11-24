@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"msm-dsi-panel:[%s:%d] " fmt, __func__, __LINE__
@@ -832,6 +833,8 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 	u32 val = 0;
 	struct dsi_display_mode *display_mode;
 	struct dsi_display_mode_priv_info *priv_info;
+	u32 pixel_clk_hz = 0;
+	u32 htotal = 0, vtotal = 0;
 
 	display_mode = container_of(mode, struct dsi_display_mode, timing);
 
@@ -869,6 +872,12 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 		       rc);
 		goto error;
 	}
+
+	rc = utils->read_u32(utils->data,
+			"qcom,mdss-dsi-panel-pixel-clk-hz",
+			&pixel_clk_hz);
+	display_mode->priv_info->pixel_clk_hz_override =
+			rc ? 0 : pixel_clk_hz;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-panel-width",
 				  &mode->h_active);
@@ -947,6 +956,15 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 	pr_debug("panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
 		mode->v_active, mode->v_front_porch, mode->v_back_porch,
 		mode->v_sync_width);
+
+	htotal = mode->h_active + mode->h_front_porch
+			+ mode->h_back_porch + mode->h_sync_width;
+	vtotal = mode->v_active + mode->v_front_porch
+			+ mode->v_back_porch + mode->v_sync_width;
+
+	if (display_mode->priv_info->pixel_clk_hz_override)
+		mode->refresh_rate = DIV_ROUND_CLOSEST(pixel_clk_hz,
+				(htotal * vtotal));
 
 error:
 	return rc;
