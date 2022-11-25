@@ -9,6 +9,7 @@ ifeq ($(TARGET_SUPPORT),genericarmv8)
 endif
 
 obj-m += msm/
+obj-m += bridge-drivers/
 
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
