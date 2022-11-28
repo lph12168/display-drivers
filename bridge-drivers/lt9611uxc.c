@@ -29,7 +29,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/firmware.h>
 #include <linux/hdmi.h>
-#include <drm/drmP.h>
+#include <drm/drm_print.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
@@ -37,10 +37,14 @@
 #include <drm/drm_crtc_helper.h>
 #include <linux/string.h>
 
-#include <linux/msm_ext_display.h>
+#include <drm/drm_bridge.h>
+#include <drm/drm_probe_helper.h>
+#include <drm/drm_file.h>
 
-// CEC Support form lt9611uxc
-#include <media/cec.h>
+#include <linux/soc/qcom/msm_ext_display.h>
+
+/* CEC Support form lt9611uxc */
+#include <media/cec-notifier.h>
 
 #define CFG_HPD_INTERRUPTS BIT(0)
 #define CFG_EDID_INTERRUPTS BIT(1)
@@ -77,6 +81,12 @@ struct lt9611_vreg {
 	int post_on_sleep;
 	int pre_off_sleep;
 	int post_off_sleep;
+};
+
+struct lt9611_mode {
+	u16 hdisplay;
+	u16 vdisplay;
+	u8 vrefresh;
 };
 
 struct lt9611 {
@@ -135,7 +145,7 @@ struct lt9611 {
 	struct workqueue_struct *cec_wq;
 	struct delayed_work cec_transmit_timeout_work;
 	wait_queue_head_t edid_wq;
-	struct drm_display_mode debug_mode;
+	struct lt9611_mode debug_mode;
 
 	u8 edid_buf[EDID_SEG_SIZE];
 	u8 i2c_wbuf[WRITE_BUF_MAX_SIZE];
@@ -182,11 +192,11 @@ static int lt9611_setup_audio_infoframes(struct lt9611 *pdata,
 		return err;
 	}
 
-	/*frame.coding_type*/
+	/* frame.coding_type */
 	frame.channels = params->num_of_channels;
 	frame.sample_frequency = params->sample_rate_hz;
-	/*frame.sample_size*/
-	/*frame.coding_type_ext*/
+	/* frame.sample_size */
+	/* frame.coding_type_ext */
 	frame.channel_allocation = params->channel_allocation;
 	frame.downmix_inhibit = params->down_mix;
 	frame.level_shift_value = params->level_shift;
@@ -453,13 +463,13 @@ void lt9611_helper_read_edid(struct lt9611 *pdata)
 	pdata->edid = drm_do_get_edid(&pdata->connector,
 			lt9611_get_edid_block, pdata);
 
-	// Detect interface and setup registers after we get new edid.
+	/* Detect interface and setup registers after we get new edid. */
 	if (!drm_detect_hdmi_monitor(pdata->edid))
 		lt9611_change_to_dvi(pdata);
 	else
 		lt9611_change_to_hdmi(pdata);
 
-	// Get new CEC physical address after EDID changed.
+	/* Get new CEC physical address after EDID changed. */
 	if (pdata->cec_support)
 		cec_notifier_set_phys_addr_from_edid(notify, pdata->edid);
 }
@@ -920,7 +930,7 @@ static void lt9611_parse_dt_modes(struct device_node *np,
 		}
 
 		rc = of_property_read_u32(node, "lt,mode-h-active",
-						&mode->hdisplay);
+						(u32 *)&mode->hdisplay);
 		if (rc) {
 			pr_err("failed to read h-active, rc=%d\n", rc);
 			goto fail;
@@ -951,7 +961,7 @@ static void lt9611_parse_dt_modes(struct device_node *np,
 						"lt,mode-h-active-high");
 
 		rc = of_property_read_u32(node, "lt,mode-v-active",
-						&mode->vdisplay);
+						(u32 *)&mode->vdisplay);
 		if (rc) {
 			pr_err("failed to read v-active, rc=%d\n", rc);
 			goto fail;
@@ -980,13 +990,6 @@ static void lt9611_parse_dt_modes(struct device_node *np,
 
 		v_active_high = of_property_read_bool(node,
 						"lt,mode-v-active-high");
-
-		rc = of_property_read_u32(node, "lt,mode-refresh-rate",
-						&mode->vrefresh);
-		if (rc) {
-			pr_err("failed to read refresh-rate, rc=%d\n", rc);
-			goto fail;
-		}
 
 		rc = of_property_read_u32(node, "lt,mode-clock-in-khz",
 						&mode->clock);
@@ -1018,11 +1021,11 @@ static void lt9611_parse_dt_modes(struct device_node *np,
 
 		drm_mode_set_name(mode);
 
-		pr_debug("mode[%s] h[%d,%d,%d,%d] v[%d,%d,%d,%d] %d %x %dkHZ\n",
+		pr_debug("mode[%s] h[%d,%d,%d,%d] v[%d,%d,%d,%d] %x %dkHZ\n",
 			mode->name, mode->hdisplay, mode->hsync_start,
 			mode->hsync_end, mode->htotal, mode->vdisplay,
 			mode->vsync_start, mode->vsync_end, mode->vtotal,
-			mode->vrefresh, mode->flags, mode->clock);
+			mode->flags, mode->clock);
 fail:
 		if (rc) {
 			kfree(mode);
@@ -1105,7 +1108,7 @@ static int lt9611_parse_dt(struct device *dev,
 	pdata->audio_support =
 		of_property_read_bool(np, "lt,audio-support");
 	pr_debug("audio support = %d\n", pdata->audio_support);
-	/*get display modes from device tree*/
+	/* get display modes from device tree */
 	INIT_LIST_HEAD(&pdata->mode_list);
 	lt9611_parse_dt_modes(np,
 			&pdata->mode_list, &pdata->num_of_modes);
@@ -1138,7 +1141,7 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 					"hdmi_1p2_en");
 			if (ret) {
 				pr_err("hdmi_1p2_en request failed\n");
-				goto hdmi_3p3_en__error;
+				goto hdmi_3p3_en_error;
 			}
 
 			ret = gpio_direction_output(pdata->hdmi_1p2_en, 0);
@@ -1306,7 +1309,7 @@ int lt9611_read_cec_msg(struct lt9611 *pdata, struct cec_msg *msg)
 		goto end;
 	}
 
-	// Set bit7 = 0 to tell LT9611UXC message received.
+	/* Set bit7 = 0 to tell LT9611UXC message received. */
 	reg_cec_flag &= ~0x80;
 	lt9611_write_byte(pdata, 0x24, reg_cec_flag);
 end:
@@ -1373,14 +1376,14 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 	mutex_lock(&pdata->lock);
 	edid_old_status = pdata->edid_status;
 	lt9611_ctl_en(pdata);
-	// Switch to bank 0xB0 for reading IRQ type.
+	/* Switch to bank 0xB0 for reading IRQ type. */
 	lt9611_write_byte(pdata, 0xFF, 0xB0);
-	// Get LT9611 interrupt flags from address 0x22.
+	/* Get LT9611 interrupt flags from address 0x22. */
 	if (!lt9611_read(pdata, 0x22, &irq_type, 1)) {
 		if (irq_type) {
-			// Clear LT9611 interrupt flags.
+			/* Clear LT9611 interrupt flags. */
 			lt9611_write_byte(pdata, 0x22, 0);
-			// Read edid and hpd status.
+			/* Read edid and hpd status. */
 			lt9611_read(pdata, 0x23, &irq_status, 1);
 			lt9611_read(pdata, 0x24, &cec_status, 1);
 			lt9611_read(pdata, 0x27, &cec_msg_status, 1);
@@ -1427,18 +1430,20 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 	}
 
 	if (!pdata->hpd_status && (irq_type & BIT(1))) {
-		// HDMI removed, delete stored edid information.
+		/* HDMI removed, delete stored edid information. */
 		kfree(pdata->edid);
 		pdata->edid = NULL;
-		// Unconfigure existing cec physical address
+		/* Unconfigure existing cec physical address */
 		cec_notifier_phys_addr_invalidate(pdata->cec_notifier);
 		cec_queue_pin_hpd_event(pdata->cec_adapter, false, 0);
 	}
 	if (pdata->hpd_status && (irq_type & BIT(1)))
 		cec_queue_pin_hpd_event(pdata->cec_adapter, true, 0);
 
-	// If edid interrupted and edid ready,
-	// then call edid workqueue to get edid from LT9611.
+	/*
+	 * If edid interrupted and edid ready,
+	 * then call edid workqueue to get edid from LT9611.
+	 */
 	if ((irq_type & BIT(0)) && pdata->edid_status)
 		queue_work(pdata->wq, &pdata->edid_work);
 
@@ -1449,8 +1454,10 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		queue_work(pdata->wq, &pdata->work);
 	}
 
-	// If cec interrupted and cec ready,
-	// then call cec workqueue to process cec message.
+	/*
+	 * If cec interrupted and cec ready,
+	 * then call cec workqueue to process cec message.
+	 */
 	if (irq_type & BIT(3) && pdata->cec_status)
 		queue_work(pdata->wq, &pdata->cec_work);
 
@@ -1496,7 +1503,7 @@ static int lt9611_config_vreg(struct device *dev,
 			curr_vreg = &in_vreg[i];
 			curr_vreg->vreg = regulator_get(dev,
 					curr_vreg->vreg_name);
-			rc = PTR_RET(curr_vreg->vreg);
+			rc = IS_ERR_OR_NULL(curr_vreg->vreg);
 			if (rc) {
 				pr_err("%s get failed. rc=%d\n",
 						curr_vreg->vreg_name, rc);
@@ -1710,7 +1717,7 @@ static int lt9611_enable_vreg(struct lt9611 *pdata, int enable)
 			gpio_set_value(pdata->hdmi_1p2_en, 1);
 
 		for (i = 0; i < num_vreg; i++) {
-			rc = PTR_RET(in_vreg[i].vreg);
+			rc = IS_ERR_OR_NULL(in_vreg[i].vreg);
 			if (rc) {
 				pr_err("%s regulator error. rc=%d\n",
 						in_vreg[i].vreg_name, rc);
@@ -1824,18 +1831,20 @@ static int lt9611_read_edid(struct lt9611 *pdata)
 	lt9611_edid_en(pdata);
 
 	memset(buf, 0, EDID_SEG_SIZE);
-	// Switch to bank 0xB0 for reading edid.
+	/* Switch to bank 0xB0 for reading edid. */
 	lt9611_write_byte(pdata, 0xFF, 0xB0);
 	for (num = 0; num < 2; num++) {
 		lt9611_write_byte(pdata, 0x0A, num * 128);
 		lt9611_read(pdata, 0xB0, buf + num * 128, 128);
 		if (num == 0) {
-			// Get no. of extension edid blocks from edid
-			//block[0][0x7e]
+			/*
+			 * Get no. of extension edid blocks from edid
+			 * block[0][0x7e]
+			 */
 			num_of_edid_ext_blk = buf[0x7e];
 			pdata->edid_with_ext_blk = true;
 			pdata->cec_support = true;
-			// If no extension blocks exist, stop reading edid.
+			/* If no extension blocks exist, stop reading edid. */
 			if (num_of_edid_ext_blk == 0) {
 				pdata->edid_with_ext_blk = false;
 				pdata->cec_support = false;
@@ -1886,18 +1895,15 @@ static void lt9611_choose_best_mode(struct drm_connector *connector)
 		if (cur_mode == preferred_mode)
 			continue;
 
-		/*Largest mode is preferred*/
+		/* Largest mode is preferred */
 		if (MODE_SIZE(cur_mode) > MODE_SIZE(preferred_mode))
 			preferred_mode = cur_mode;
 
-		cur_vrefresh = cur_mode->vrefresh ?
-			cur_mode->vrefresh : drm_mode_vrefresh(cur_mode);
+		cur_vrefresh = drm_mode_vrefresh(cur_mode);
 
-		preferred_vrefresh = preferred_mode->vrefresh ?
-			preferred_mode->vrefresh :
-			drm_mode_vrefresh(preferred_mode);
+		preferred_vrefresh = drm_mode_vrefresh(preferred_mode);
 
-		/*At a given size, try to get closest to target refresh*/
+		/* At a given size, try to get closest to target refresh */
 		if ((MODE_SIZE(cur_mode) == MODE_SIZE(preferred_mode)) &&
 			MODE_REFRESH_DIFF(cur_vrefresh, target_refresh) <
 			MODE_REFRESH_DIFF(preferred_vrefresh, target_refresh) &&
@@ -1920,7 +1926,7 @@ static void lt9611_set_preferred_mode(struct drm_connector *connector)
 			mode->type &= ~DRM_MODE_TYPE_PREFERRED;
 			if (pdata->debug_mode.vdisplay == mode->vdisplay &&
 				pdata->debug_mode.hdisplay == mode->hdisplay &&
-				pdata->debug_mode.vrefresh == mode->vrefresh) {
+				pdata->debug_mode.vrefresh == drm_mode_vrefresh(mode)) {
 				mode->type |= DRM_MODE_TYPE_PREFERRED;
 			}
 		}
@@ -2018,15 +2024,15 @@ static enum drm_mode_status lt9611_connector_mode_valid(
 	struct lt9611 *pdata = connector_to_lt9611(connector);
 	struct drm_display_mode *mode, *n;
 
-	pr_debug("mode valid h=%d v=%d fps=%d\n", drm_mode->hdisplay,
-		drm_mode->vdisplay, drm_mode->vrefresh);
+	pr_debug("mode valid h=%d v=%d\n", drm_mode->hdisplay,
+		drm_mode->vdisplay);
 
 	list_for_each_entry_safe(mode, n, &pdata->mode_list, head) {
-		if (drm_mode->vdisplay == mode->vdisplay &&
-			drm_mode->vtotal == mode->vtotal &&
-			drm_mode->hdisplay == mode->hdisplay &&
-			drm_mode->htotal == mode->htotal &&
-			drm_mode->vrefresh == mode->vrefresh)
+                if (drm_mode->vdisplay == mode->vdisplay &&
+                        drm_mode->vtotal == mode->vtotal &&
+                        drm_mode->hdisplay == mode->hdisplay &&
+                        drm_mode->htotal == mode->htotal &&
+                        drm_mode_vrefresh(drm_mode) == drm_mode_vrefresh(mode))
 			return MODE_OK;
 	}
 
@@ -2079,14 +2085,14 @@ static void lt9611_bridge_disable(struct drm_bridge *bridge)
 }
 
 static void lt9611_bridge_mode_set(struct drm_bridge *bridge,
-				    struct drm_display_mode *mode,
-				    struct drm_display_mode *adj_mode)
+				    const struct drm_display_mode *mode,
+				    const struct drm_display_mode *adj_mode)
 {
 	struct lt9611 *pdata = bridge_to_lt9611(bridge);
 
-	pr_debug(" hdisplay=%d, vdisplay=%d, vrefresh=%d, clock=%d\n",
+	pr_debug(" hdisplay=%d, vdisplay=%d, clock=%d\n",
 		adj_mode->hdisplay, adj_mode->vdisplay,
-		adj_mode->vrefresh, adj_mode->clock);
+		adj_mode->clock);
 
 	drm_mode_copy(&pdata->curr_mode, adj_mode);
 }
@@ -2108,7 +2114,8 @@ static const struct drm_connector_funcs lt9611_connector_funcs = {
 };
 
 
-static int lt9611_bridge_attach(struct drm_bridge *bridge)
+static int lt9611_bridge_attach(struct drm_bridge *bridge,
+		enum drm_bridge_attach_flags flags)
 {
 	struct mipi_dsi_host *host;
 	struct mipi_dsi_device *dsi;
@@ -2166,8 +2173,7 @@ static int lt9611_bridge_attach(struct drm_bridge *bridge)
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
-			  MIPI_DSI_MODE_VIDEO_HSE | MIPI_DSI_MODE_VIDEO_BLLP |
-			  MIPI_DSI_MODE_VIDEO_EOF_BLLP;
+			  MIPI_DSI_MODE_VIDEO_HSE;
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
@@ -2287,9 +2293,8 @@ static ssize_t edid_mode_show(struct device *dev,
 {
 	struct lt9611 *pdata = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%dx%d@%d\n",
-			pdata->curr_mode.hdisplay, pdata->curr_mode.vdisplay,
-			pdata->curr_mode.vrefresh);
+	return scnprintf(buf, PAGE_SIZE, "%dx%d\n",
+			pdata->curr_mode.hdisplay, pdata->curr_mode.vdisplay);
 }
 
 static ssize_t edid_mode_store(struct device *dev,
@@ -2405,7 +2410,7 @@ static int lt9611_cec_transmit(struct cec_adapter *adap, u8 attempts,
 	for (i = 0; i < len; i++)
 		lt9611_write_byte(pdata, 0x42 + i, msg->msg[i]);
 
-	// Set bit 6 = 1 to tell LT9611UXC sending CEC message.
+	/* Set bit 6 = 1 to tell LT9611UXC sending CEC message. */
 	reg_cec_flag |= 0x40;
 	lt9611_write_byte(pdata, 0x24, reg_cec_flag);
 	lt9611_ctl_disable(pdata);
@@ -2441,7 +2446,8 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		return -ENOMEM;
 	}
 
-	pdata->cec_notifier = cec_notifier_get(pdata->dev);
+	pdata->cec_notifier = cec_notifier_cec_adap_register(pdata->dev,
+					NULL, pdata->cec_adapter);
 	if (!pdata->cec_notifier) {
 		pr_err("Get CEC notifier failed!\n");
 		cec_delete_adapter(adap);
@@ -2463,10 +2469,6 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		pdata->cec_en = true;
 		pdata->cec_support = true;
 		pdata->cec_log_addr = CEC_LOG_ADDR_PLAYBACK_1;
-
-		pdata->cec_adapter = adap;
-		cec_register_cec_notifier(pdata->cec_adapter,
-					pdata->cec_notifier);
 	}
 	return ret;
 }
@@ -2541,7 +2543,7 @@ static int lt9611_probe(struct i2c_client *client,
 	}
 
 	if (lt9611_get_version(pdata)) {
-		// AmTran LT9611 CEC support,
+		/* AmTran LT9611 CEC support. */
 		ret = lt9611_cec_adap_init(pdata);
 		pr_info("LT9611 works, no need to upgrade FW\n");
 		if (ret != 0)
@@ -2590,7 +2592,7 @@ static int lt9611_probe(struct i2c_client *client,
 	}
 	INIT_WORK(&pdata->work, lt9611_hpd_work);
 
-	// Make sure LT9611 initialized, then enable irq.
+	/* Make sure LT9611 initialized, then enable irq. */
 	pdata->irq = gpio_to_irq(pdata->irq_gpio);
 	ret = request_threaded_irq(pdata->irq, NULL, lt9611_irq_thread_handler,
 		IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "lt9611_irq", pdata);
@@ -2657,8 +2659,6 @@ static int lt9611_remove(struct i2c_client *client)
 		destroy_workqueue(pdata->cec_wq);
 	if (pdata->cec_adapter)
 		cec_unregister_adapter(pdata->cec_adapter);
-	if (pdata->cec_notifier)
-		cec_notifier_put(pdata->cec_notifier);
 
 end:
 	return ret;
@@ -2701,4 +2701,4 @@ MODULE_PARM_DESC(cont_splash_en,
 			"lt9611.cont_splash_en=1 or 0; where 1 represent enabled and 0 for disabled");
 module_init(lt9611_init);
 module_exit(lt9611_exit);
-
+MODULE_LICENSE("GPL v2");
