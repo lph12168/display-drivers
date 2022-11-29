@@ -1498,7 +1498,9 @@ static const struct file_operations fops = {
 	.open               = drm_open,
 	.release            = msm_release,
 	.unlocked_ioctl     = drm_ioctl,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl       = drm_compat_ioctl,
+#endif
 	.poll               = drm_poll,
 	.read               = drm_read,
 	.llseek             = no_llseek,
