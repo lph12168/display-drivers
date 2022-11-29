@@ -1495,6 +1495,23 @@ static const struct drm_framebuffer_funcs msm_hyp_framebuffer_funcs = {
 	.destroy = msm_hyp_framebuffer_destroy,
 };
 
+static int msm_hyp_shmem_sync_sg_for_device(struct drm_gem_object *obj)
+{
+	struct sg_table *sgt;
+
+	if (obj->import_attach)
+		return 0;
+
+	sgt = drm_gem_shmem_get_pages_sgt(obj);
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	dma_sync_sg_for_device(obj->dev->dev, sgt->sgl,
+			sgt->nents, DMA_BIDIRECTIONAL);
+
+	return 0;
+}
+
 static struct drm_framebuffer *msm_hyp_framebuffer_create(
 		struct drm_device *dev, struct drm_file *file,
 		const struct drm_mode_fb_cmd2 *mode_cmd)
@@ -1513,6 +1530,12 @@ static struct drm_framebuffer *msm_hyp_framebuffer_create(
 	if (IS_ERR_OR_NULL(bo)) {
 		DRM_ERROR("failed to find gem bo %d\n", mode_cmd->handles[0]);
 		return ERR_PTR(-EINVAL);
+	}
+
+	ret = msm_hyp_shmem_sync_sg_for_device(bo);
+	if (ret) {
+		DRM_ERROR("failed to do dumb buffer sync\n");
+		return ERR_PTR(ret);
 	}
 
 	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
