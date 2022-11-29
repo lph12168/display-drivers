@@ -877,15 +877,40 @@ static int msm_hyp_crtc_get_property(
 	return ret;
 }
 
+static int msm_hyp_enable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->enable_vblank)
+		kms->funcs->enable_vblank(kms, crtc);
+
+	return 0;
+}
+
+static void msm_hyp_disable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->disable_vblank)
+		kms->funcs->disable_vblank(kms, crtc);
+}
+
 static const struct drm_crtc_funcs msm_hyp_crtc_funcs = {
-	.set_config = drm_atomic_helper_set_config,
-	.destroy = msm_hyp_crtc_destroy,
-	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_set_property = msm_hyp_crtc_set_property,
-	.atomic_get_property = msm_hyp_crtc_get_property,
-	.reset = msm_hyp_crtc_reset,
+	.set_config             = drm_atomic_helper_set_config,
+	.destroy                = msm_hyp_crtc_destroy,
+	.page_flip              = drm_atomic_helper_page_flip,
+	.atomic_set_property    = msm_hyp_crtc_set_property,
+	.atomic_get_property    = msm_hyp_crtc_get_property,
+	.reset                  = msm_hyp_crtc_reset,
 	.atomic_duplicate_state = msm_hyp_crtc_duplicate_state,
-	.atomic_destroy_state = msm_hyp_crtc_destroy_state,
+	.atomic_destroy_state   = msm_hyp_crtc_destroy_state,
+	.enable_vblank          = msm_hyp_enable_vblank,
+	.disable_vblank         = msm_hyp_disable_vblank,
+
 };
 
 static int _msm_hyp_crtc_init_caps(struct msm_hyp_crtc *crtc)
