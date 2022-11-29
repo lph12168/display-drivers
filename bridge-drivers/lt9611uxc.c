@@ -109,6 +109,7 @@ struct lt9611 {
 	u8 cec_log_addr;
 	bool cec_en;
 	bool cec_support;
+	bool cec_hw_support;
 	struct work_struct cec_work;
 	bool cec_status;
 	struct cec_notifier *cec_notifier;
@@ -1108,6 +1109,10 @@ static int lt9611_parse_dt(struct device *dev,
 	pdata->audio_support =
 		of_property_read_bool(np, "lt,audio-support");
 	pr_debug("audio support = %d\n", pdata->audio_support);
+
+	pdata->cec_hw_support = of_property_read_bool(np, "lt,cec-support");
+	pr_debug("HW cec support %d\n", pdata->cec_hw_support);
+
 	/* get display modes from device tree */
 	INIT_LIST_HEAD(&pdata->mode_list);
 	lt9611_parse_dt_modes(np,
@@ -1385,8 +1390,12 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 			lt9611_write_byte(pdata, 0x22, 0);
 			/* Read edid and hpd status. */
 			lt9611_read(pdata, 0x23, &irq_status, 1);
-			lt9611_read(pdata, 0x24, &cec_status, 1);
-			lt9611_read(pdata, 0x27, &cec_msg_status, 1);
+
+			if (pdata->cec_hw_support) {
+				lt9611_read(pdata, 0x24, &cec_status, 1);
+				lt9611_read(pdata, 0x27, &cec_msg_status, 1);
+			}
+
 			lt9611_write_byte(pdata, 0x27, 0);
 			pdata->hpd_status = irq_status & BIT(1);
 			pdata->edid_status = irq_status & BIT(0);
@@ -1433,11 +1442,14 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		/* HDMI removed, delete stored edid information. */
 		kfree(pdata->edid);
 		pdata->edid = NULL;
-		/* Unconfigure existing cec physical address */
-		cec_notifier_phys_addr_invalidate(pdata->cec_notifier);
-		cec_queue_pin_hpd_event(pdata->cec_adapter, false, 0);
+		if (pdata->cec_hw_support) {
+			/* Unconfigure existing cec physical address */
+			cec_notifier_phys_addr_invalidate(pdata->cec_notifier);
+			cec_queue_pin_hpd_event(pdata->cec_adapter, false, 0);
+		}
 	}
-	if (pdata->hpd_status && (irq_type & BIT(1)))
+	if (pdata->cec_hw_support && pdata->hpd_status
+			&& (irq_type & BIT(1)))
 		cec_queue_pin_hpd_event(pdata->cec_adapter, true, 0);
 
 	/*
@@ -1458,7 +1470,8 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 	 * If cec interrupted and cec ready,
 	 * then call cec workqueue to process cec message.
 	 */
-	if (irq_type & BIT(3) && pdata->cec_status)
+	if (pdata->cec_hw_support && irq_type & BIT(3)
+			&& pdata->cec_status)
 		queue_work(pdata->wq, &pdata->cec_work);
 
 	return IRQ_HANDLED;
@@ -1843,11 +1856,15 @@ static int lt9611_read_edid(struct lt9611 *pdata)
 			 */
 			num_of_edid_ext_blk = buf[0x7e];
 			pdata->edid_with_ext_blk = true;
-			pdata->cec_support = true;
+
+			if (pdata->cec_hw_support)
+				pdata->cec_support = true;
+
 			/* If no extension blocks exist, stop reading edid. */
 			if (num_of_edid_ext_blk == 0) {
 				pdata->edid_with_ext_blk = false;
-				pdata->cec_support = false;
+				if (pdata->cec_hw_support)
+					pdata->cec_support = false;
 				break;
 			}
 		}
@@ -2543,13 +2560,17 @@ static int lt9611_probe(struct i2c_client *client,
 	}
 
 	if (lt9611_get_version(pdata)) {
-		/* AmTran LT9611 CEC support. */
-		ret = lt9611_cec_adap_init(pdata);
 		pr_info("LT9611 works, no need to upgrade FW\n");
-		if (ret != 0)
-			pr_err("LT9611 CEC initialize failed.\n");
-		else
-			pr_info("LT9611 CEC initialize success.\n");
+		/* AmTran LT9611 CEC support. */
+		if (pdata->cec_hw_support) {
+			ret = lt9611_cec_adap_init(pdata);
+			if (ret != 0) {
+				pdata->cec_hw_support = false;
+				pdata->cec_support = false;
+				pr_err("LT9611 CEC initialize failed.\n");
+			} else
+				pr_info("LT9611 CEC initialize success.\n");
+		}
 	} else {
 		ret = request_firmware_nowait(THIS_MODULE, true,
 			"lt9611_fw.bin", &client->dev, GFP_KERNEL, pdata,
@@ -2576,15 +2597,18 @@ static int lt9611_probe(struct i2c_client *client,
 		pr_err("Error creating lt9611 workqueue\n");
 		goto err_i2c_prog;
 	}
-	pdata->cec_wq = create_singlethread_workqueue("lt9611_cec_workqueue");
-	if (!pdata->cec_wq) {
-		pr_err("Error creating lt9611 cec workqueue\n");
-		goto err_i2c_prog;
+
+	if (pdata->cec_hw_support) {
+		pdata->cec_wq = create_singlethread_workqueue("lt9611_cec_workqueue");
+		if (!pdata->cec_wq) {
+			pr_err("Error creating lt9611 cec workqueue\n");
+			goto err_i2c_prog;
+		}
+
+		INIT_WORK(&pdata->cec_work, lt9611_cec_work);
 	}
 
 	INIT_WORK(&pdata->edid_work, lt9611_edid_work);
-	INIT_WORK(&pdata->cec_work, lt9611_cec_work);
-
 	pdata->wq = create_singlethread_workqueue("lt9611_wk");
 	if (!pdata->wq) {
 		pr_err("Error creating lt9611 wq\n");
@@ -2655,10 +2679,13 @@ static int lt9611_remove(struct i2c_client *client)
 	devm_kfree(&client->dev, pdata);
 	if (pdata->wq)
 		destroy_workqueue(pdata->wq);
-	if (pdata->cec_wq)
-		destroy_workqueue(pdata->cec_wq);
-	if (pdata->cec_adapter)
-		cec_unregister_adapter(pdata->cec_adapter);
+
+	if (pdata->cec_hw_support) {
+		if (pdata->cec_wq)
+			destroy_workqueue(pdata->cec_wq);
+		if (pdata->cec_adapter)
+			cec_unregister_adapter(pdata->cec_adapter);
+	}
 
 end:
 	return ret;
