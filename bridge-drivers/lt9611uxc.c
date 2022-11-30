@@ -111,6 +111,8 @@ struct lt9611 {
 	u32 reset_gpio;
 	u32 hdmi_ps_gpio;
 	u32 hdmi_en_gpio;
+	u32 hdmi_3p3_en;
+	u32 hdmi_1p2_en;
 
 	unsigned int num_vreg;
 	struct lt9611_vreg *vreg_config;
@@ -1084,6 +1086,16 @@ static int lt9611_parse_dt(struct device *dev,
 	else
 		pr_debug("hdmi_en_gpio=%d\n", pdata->hdmi_en_gpio);
 
+	pdata->hdmi_3p3_en =
+		of_get_named_gpio(np, "lt,hdmi-3p3-en", 0);
+	if (!gpio_is_valid(pdata->hdmi_3p3_en))
+		pr_debug("hdmi_3p3_en not specified\n");
+
+	pdata->hdmi_1p2_en =
+		of_get_named_gpio(np, "lt,hdmi-1p2-en", 0);
+	if (!gpio_is_valid(pdata->hdmi_1p2_en))
+		pr_debug("hdmi_1p2_en not specified\n");
+
 	pdata->ac_mode = of_property_read_bool(np, "lt,ac-mode");
 	pr_debug("ac_mode=%d\n", pdata->ac_mode);
 
@@ -1105,11 +1117,42 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 	int ret = 0;
 
 	if (on) {
+		if (gpio_is_valid(pdata->hdmi_3p3_en)) {
+			ret = gpio_request(pdata->hdmi_3p3_en,
+					"hdmi_3p3_en");
+			if (ret) {
+				pr_err("hdmi_3p3_en request failed\n");
+				goto error;
+			}
+
+			ret = gpio_direction_output(pdata->hdmi_3p3_en, 0);
+			if (ret) {
+				pr_err("lt9611 hdmi en hdmi_3p3_en direction failed\n");
+				goto hdmi_3p3_en_error;
+			}
+		}
+
+
+		if (gpio_is_valid(pdata->hdmi_1p2_en)) {
+			ret = gpio_request(pdata->hdmi_1p2_en,
+					"hdmi_1p2_en");
+			if (ret) {
+				pr_err("hdmi_1p2_en request failed\n");
+				goto hdmi_3p3_en__error;
+			}
+
+			ret = gpio_direction_output(pdata->hdmi_1p2_en, 0);
+			if (ret) {
+				pr_err("lt9611 hdmi en hdmi_1p2_en direction failed\n");
+				goto hdmi_1p2_en_error;
+			}
+		}
+
 		ret = gpio_request(pdata->reset_gpio,
 			"lt9611-reset-gpio");
 		if (ret) {
 			pr_err("lt9611 reset gpio request failed\n");
-			goto error;
+			goto hdmi_1p2_en_error;
 		}
 
 		ret = gpio_direction_output(pdata->reset_gpio, 1);
@@ -1166,6 +1209,10 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 		if (gpio_is_valid(pdata->hdmi_en_gpio))
 			gpio_free(pdata->hdmi_en_gpio);
 		gpio_free(pdata->reset_gpio);
+		if (gpio_is_valid(pdata->hdmi_1p2_en))
+			gpio_free(pdata->hdmi_1p2_en);
+		if (gpio_is_valid(pdata->hdmi_3p3_en))
+			gpio_free(pdata->hdmi_3p3_en);
 	}
 
 	return ret;
@@ -1181,6 +1228,12 @@ hdmi_en_error:
 		gpio_free(pdata->hdmi_en_gpio);
 reset_error:
 	gpio_free(pdata->reset_gpio);
+hdmi_1p2_en_error:
+	if (gpio_is_valid(pdata->hdmi_1p2_en))
+		gpio_free(pdata->hdmi_1p2_en);
+hdmi_3p3_en_error:
+	if (gpio_is_valid(pdata->hdmi_3p3_en))
+		gpio_free(pdata->hdmi_3p3_en);
 error:
 	return ret;
 }
@@ -1650,6 +1703,12 @@ static int lt9611_enable_vreg(struct lt9611 *pdata, int enable)
 	int num_vreg = pdata->num_vreg;
 
 	if (enable) {
+		if (gpio_is_valid(pdata->hdmi_3p3_en))
+			gpio_set_value(pdata->hdmi_3p3_en, 1);
+
+		if (gpio_is_valid(pdata->hdmi_1p2_en))
+			gpio_set_value(pdata->hdmi_1p2_en, 1);
+
 		for (i = 0; i < num_vreg; i++) {
 			rc = PTR_RET(in_vreg[i].vreg);
 			if (rc) {
@@ -1695,6 +1754,12 @@ static int lt9611_enable_vreg(struct lt9611 *pdata, int enable)
 				usleep_range(in_vreg[i].post_off_sleep * 1000,
 					in_vreg[i].post_off_sleep * 1000);
 		}
+
+		if (gpio_is_valid(pdata->hdmi_3p3_en))
+			gpio_set_value(pdata->hdmi_3p3_en, 0);
+
+		if (gpio_is_valid(pdata->hdmi_1p2_en))
+			gpio_set_value(pdata->hdmi_1p2_en, 0);
 	}
 	return rc;
 
