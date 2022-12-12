@@ -393,6 +393,16 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 		return;
 	}
 
+	if (display->panel->host_config.ext_bridge_dynamic_mode_set) {
+		if (mode->hdisplay > 2560)
+			display->ctrl_count = 2;
+		else
+			display->ctrl_count = 1;
+
+		dsi_display_clk_mngr_update_ctrl_count(display->clk_mngr,
+			display->ctrl_count);
+	}
+
 	DSI_DEBUG("clk_rate: %llu\n", c_bridge->dsi_mode.timing.clk_rate_hz);
 }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1406,6 +1407,19 @@ int dsi_display_dump_clk_handle_state(void *client)
 	mutex_unlock(&mngr->clk_mutex);
 
 	return 0;
+}
+
+void dsi_display_clk_mngr_update_ctrl_count(void *clk_mgr, u32 ctrl_count)
+{
+	struct dsi_clk_mngr *mngr;
+
+	if (!clk_mgr) {
+		DSI_ERR("Invalid params\n");
+		return;
+	}
+
+	mngr = (struct dsi_clk_mngr *)clk_mgr;
+	mngr->dsi_ctrl_count = ctrl_count;
 }
 
 void *dsi_display_clk_mngr_register(struct dsi_clk_info *info)
