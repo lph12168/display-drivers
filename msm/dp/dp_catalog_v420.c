@@ -80,6 +80,20 @@ static const u8 dp_pre_emp_hbr_rbr_v600[MAX_VOLTAGE_LEVELS][MAX_PRE_EMP_LEVELS] 
 	{0x02, 0xFF, 0xFF, 0xFF}  /* pe3, 9.5 db */
 };
 
+static u8 const dp_pre_emp_hbr_rbr_v300[MAX_VOLTAGE_LEVELS][MAX_PRE_EMP_LEVELS] = {
+        {0x00, 0x0E, 0x15, 0x1A}, /* pe0, 0 db */
+        {0x00, 0x0E, 0x15, 0xFF}, /* pe1, 3.5 db */
+        {0x00, 0x0E, 0xFF, 0xFF}, /* pe2, 6.0 db */
+        {0x04, 0xFF, 0xFF, 0xFF}  /* pe3, 9.5 db */
+};
+
+static u8 const dp_pre_emp_hbr2_hbr3_v300[MAX_VOLTAGE_LEVELS][MAX_PRE_EMP_LEVELS] = {
+        {0x00, 0x0C, 0x15, 0x1A}, /* pe0, 0 db */
+        {0x02, 0x0E, 0x16, 0xFF}, /* pe1, 3.5 db */
+        {0x02, 0x11, 0xFF, 0xFF}, /* pe2, 6.0 db */
+        {0x04, 0xFF, 0xFF, 0xFF}  /* pe3, 9.5 db */
+};
+
 struct dp_catalog_private_v420 {
 	struct device *dev;
 	struct dp_catalog_sub sub;
@@ -271,11 +285,18 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 	if (version >= 0x10020003) {
 		if (high) {
 			value0 = dp_swing_hbr2_hbr3[v_level][p_level];
-			value1 = dp_pre_emp_hbr2_hbr3[v_level][p_level];
+			/* For Phy Version 3.0.0 & 3.0.1 */
+			if ((phy_version >> 24) == 0x30)
+				value1 = dp_pre_emp_hbr2_hbr3_v300[v_level][p_level];
+			else
+				value1 = dp_pre_emp_hbr2_hbr3[v_level][p_level];
 		} else {
 			value0 = dp_swing_hbr_rbr[v_level][p_level];
 			if (phy_version >= 0x60000000)
 				value1 = dp_pre_emp_hbr_rbr_v600[v_level][p_level];
+			/* For Phy Version 3.0.0 & 3.0.1 */
+			else if ((phy_version >> 24) == 0x30)
+			        value1 = dp_pre_emp_hbr_rbr_v300[v_level][p_level];
 			else
 				value1 = dp_pre_emp_hbr_rbr[v_level][p_level];
 		}
