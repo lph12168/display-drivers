@@ -7,7 +7,9 @@
 /*
  * Copyright © 2017 Keith Packard <keithp@keithp.com>
  */
-
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 /*
  * Created: Tue Feb  2 08:37:54 1999 by faith@valinux.com
  *
@@ -516,6 +518,7 @@ static long msm_lease_ioctl(struct file *filp,
 	return g_master_ddev_fops->unlocked_ioctl(filp, cmd, arg);
 }
 
+#ifdef CONFIG_COMPAT
 static long msm_lease_compat_ioctl(struct file *filp,
 		unsigned int cmd, unsigned long arg)
 {
@@ -553,6 +556,7 @@ static long msm_lease_compat_ioctl(struct file *filp,
 
 	return g_master_ddev_fops->compat_ioctl(filp, cmd, arg);
 }
+#endif
 
 static int msm_lease_add_connector(struct drm_device *dev, const char *name,
 		u32 *object_ids, int *object_count)
@@ -983,7 +987,9 @@ static const struct file_operations msm_lease_fops = {
 	.open               = drm_open,
 	.release            = msm_lease_release,
 	.unlocked_ioctl     = msm_lease_ioctl,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl       = msm_lease_compat_ioctl,
+#endif
 	.poll               = drm_poll,
 	.read               = drm_read,
 	.llseek             = no_llseek,
