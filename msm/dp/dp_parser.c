@@ -202,6 +202,9 @@ static int dp_parser_misc(struct dp_parser *parser)
 	parser->no_lane_count_reduction = of_property_read_bool(of_node,
 			"qcom,no-lane-count-reduction");
 
+	parser->force_bond_mode = of_property_read_bool(of_node,
+			"qcom,dp-force-bond-mode");
+
 	parser->force_connect_mode = of_property_read_bool(of_node,
 			"qcom,dp-force-connect-mode");
 
