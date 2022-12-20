@@ -124,6 +124,8 @@ struct dp_display {
 	int (*mst_get_fixed_topology_display_type)(
 			struct dp_display *dp_display, u32 strm_id,
 			const char **display_type);
+	int (*set_phy_bond_mode)(struct dp_display *dp_display,
+			enum dp_phy_bond_mode mode);
 };
 
 #if IS_ENABLED(CONFIG_DRM_MSM_DP)

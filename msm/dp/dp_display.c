@@ -217,6 +217,7 @@ struct dp_display_private {
 	u32 intf_idx[DP_STREAM_MAX];
 	u32 phy_idx;
 	u32 stream_cnt;
+	enum dp_phy_bond_mode phy_bond_mode;
 
 	struct device *msm_hdcp_dev;
 };
@@ -1105,6 +1106,18 @@ static void dp_display_set_mst_mgr_state(struct dp_display_private *dp,
 	DP_MST_DEBUG("mst_mgr_state: %d\n", state);
 }
 
+static void dp_display_change_phy_bond_mode(struct dp_display_private *dp,
+		enum dp_phy_bond_mode mode)
+{
+	if (dp->phy_bond_mode != mode)
+		pr_info("DP%d  %d -> %d\n", dp->cell_idx,
+				dp->phy_bond_mode, mode);
+
+	dp->phy_bond_mode = mode;
+	/* Propagate to dp_ctrl, dp_catalog, dp_power and dp_panel */
+	dp->ctrl->set_phy_bond_mode(dp->ctrl, mode);
+}
+
 static int dp_display_host_init(struct dp_display_private *dp)
 {
 	bool flip = false;
@@ -1699,7 +1712,12 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	dp->aux->abort(dp->aux, true);
 
 	mutex_lock(&dp->session_lock);
-	if (!dp->active_stream_cnt) {
+	/**
+	 * Can't disable the clock for the bond PLL here.
+	 * The clock tear down sequence need to be guaranteed.
+	 * Will be handled in dp_display_unprepare via bond bridge.
+	 */
+	if (!dp->active_stream_cnt && !IS_BOND_MODE(dp->phy_bond_mode)) {
 		dp_display_clean(dp);
 		dp_display_host_unready(dp);
 	}
@@ -3010,8 +3028,9 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	 * powering down host as aux need keep alive
 	 * to handle hot-plug sideband message.
 	 */
-	 if (dp_display_is_ready(dp) && (dp->suspended || !dp->mst.mst_active)
-	 		|| dp->parser->force_connect_mode)
+	if ((dp_display_is_ready(dp) && !dp->mst.mst_active)
+			|| dp->parser->force_connect_mode
+			|| IS_BOND_MODE(dp->phy_bond_mode))
 		 flags |= DP_PANEL_SRC_INITIATED_POWER_DOWN;
 
 	/*
@@ -3039,6 +3058,12 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	/* log this as it results from user action of cable dis-connection */
 	DP_INFO("DP%d [OK]\n", dp->cell_idx);
 end:
+	/**
+	 * Once the DP driver is turned off, set to non-bond mode.
+	 * If bond mode is required afterwards, call set_phy_bond_mode.
+	 */
+	dp_display_change_phy_bond_mode(dp, DP_PHY_BOND_MODE_NONE);
+
 	dp_panel->deinit(dp_panel, flags);
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -3867,6 +3892,40 @@ static int dp_display_mst_get_fixed_topology_display_type(
 	return 0;
 }
 
+static int dp_display_set_phy_bond_mode(struct dp_display *dp_display,
+		enum dp_phy_bond_mode mode)
+{
+	struct dp_display_private *dp;
+
+	if (!dp_display) {
+		pr_err("invalid input\n");
+		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	mutex_lock(&dp->session_lock);
+
+	if (dp->phy_bond_mode != mode) {
+		/*
+		 * The DP driver has been firstly inited in process_hpd_high.
+		 * Then the upper layer will decide the display mode after
+		 * receiving the HPD event.
+		 * If the bond mode need to be changed afterwards, tear it
+		 * down here and allow it to be re-init in dp_display_prepare,
+		 * where the master/slave order is guaranteed by the bond
+		 * bridge.
+		 */
+		dp_display_clean(dp);
+		dp_display_host_unready(dp);
+		dp_display_change_phy_bond_mode(dp, mode);
+	}
+
+	mutex_unlock(&dp->session_lock);
+
+	return 0;
+}
+
 static int dp_display_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -3962,6 +4021,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	dp_display->get_display_type = dp_display_get_display_type;
 	dp_display->mst_get_fixed_topology_display_type =
 				dp_display_mst_get_fixed_topology_display_type;
+	dp_display->set_phy_bond_mode = dp_display_set_phy_bond_mode;
 
 	rc = component_add(&pdev->dev, &dp_display_comp_ops);
 	if (rc) {
@@ -4101,7 +4161,7 @@ int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 	if (!dp->parser->bond_cfg[type].enable)
 		return 0;
 
-	dp_bond_info->dp_display_num = type + 2;
+	dp_bond_info->dp_display_num = num_bond_dp[type];
 
 	for (i = 0; i < MAX_DP_ACTIVE_DISPLAY; i++) {
 		struct dp_display *display = g_dp_display[i];

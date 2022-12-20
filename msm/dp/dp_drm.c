@@ -168,6 +168,13 @@ static void dp_bridge_pre_enable(struct drm_bridge *drm_bridge)
 		return;
 	}
 
+	/*
+	 * Non-bond mode, associated with the CRTC,
+	 * set non-bond mode to the display
+	 */
+	if (bridge->base.encoder->crtc != NULL)
+		dp->set_phy_bond_mode(dp, DP_PHY_BOND_MODE_NONE);
+
 	/* By this point mode should have been validated through mode_fixup */
 	rc = dp->set_mode(dp, bridge->dp_panel, &bridge->dp_mode);
 	if (rc) {
@@ -452,6 +459,47 @@ static void dp_bond_bridge_pre_enable(struct drm_bridge *drm_bridge)
 
 	bridge = to_dp_bond_bridge(drm_bridge);
 
+	/* Set the corresponding bond mode to bonded displays */
+	for (i = 0; i < bridge->bridge_num; i++) {
+		enum dp_phy_bond_mode mode;
+
+		if (i == 0) {
+			switch (bridge->type)
+			{
+			case DP_BOND_DUAL_PHY:
+			case DP_BOND_TRIPLE_PHY:
+				mode = DP_PHY_BOND_MODE_PLL_MASTER;
+				break;
+			case DP_BOND_DUAL_PCLK:
+			case DP_BOND_TRIPLE_PCLK:
+				mode = DP_PHY_BOND_MODE_PCLK_MASTER;
+				break;
+			default:
+				mode = DP_PHY_BOND_MODE_NONE;
+				break;
+			}
+		} else {
+			switch (bridge->type)
+			{
+			case DP_BOND_DUAL_PHY:
+			case DP_BOND_TRIPLE_PHY:
+				mode = DP_PHY_BOND_MODE_PLL_SLAVE;
+				break;
+			case DP_BOND_DUAL_PCLK:
+			case DP_BOND_TRIPLE_PCLK:
+				mode = DP_PHY_BOND_MODE_PCLK_SLAVE;
+				break;
+			default:
+				mode = DP_PHY_BOND_MODE_NONE;
+				break;
+			}
+		}
+		if (bridge->bridges[i]->display)
+			bridge->bridges[i]->display->set_phy_bond_mode(
+					bridge->bridges[i]->display, mode);
+	}
+
+	/* In the order of from master PHY to slave PHY */
 	for (i = 0; i < bridge->bridge_num; i++)
 		drm_bridge_chain_pre_enable(&bridge->bridges[i]->base);
 }
@@ -468,6 +516,7 @@ static void dp_bond_bridge_enable(struct drm_bridge *drm_bridge)
 
 	bridge = to_dp_bond_bridge(drm_bridge);
 
+	/* In the order of from master PHY to slave PHY */
 	for (i = 0; i < bridge->bridge_num; i++)
 		drm_bridge_chain_enable(&bridge->bridges[i]->base);
 }
@@ -484,7 +533,8 @@ static void dp_bond_bridge_disable(struct drm_bridge *drm_bridge)
 
 	bridge = to_dp_bond_bridge(drm_bridge);
 
-	for (i = 0; i < bridge->bridge_num; i++)
+	/* In the order of from slave PHY to master PHY */
+	for (i = bridge->bridge_num - 1; i >= 0; i--)
 		drm_bridge_chain_disable(&bridge->bridges[i]->base);
 }
 
@@ -500,7 +550,8 @@ static void dp_bond_bridge_post_disable(struct drm_bridge *drm_bridge)
 
 	bridge = to_dp_bond_bridge(drm_bridge);
 
-	for (i = 0; i < bridge->bridge_num; i++)
+	/* In the order of from slave PHY to master PHY */
+	for (i = bridge->bridge_num - 1; i >= 0; i--)
 		drm_bridge_chain_post_disable(&bridge->bridges[i]->base);
 }
 
@@ -546,10 +597,11 @@ enum dp_bond_type dp_bond_get_bond_type(struct drm_connector *connector)
 	if (!dp_display->dp_bond_prv_info || !connector->has_tile)
 		return DP_BOND_MAX;
 
-	type = connector->num_h_tile - 2;
-	if (type < 0 || type >= DP_BOND_MAX ||
-			!bond_info->bond_bridge[type])
-		return DP_BOND_MAX;
+	for (type = 0 ; type < DP_BOND_MAX; type++)
+		if ((num_bond_dp[type] == connector->num_h_tile)
+			&& bond_info->bond_bridge[type]
+			&& bond_info->bond_bridge[type]->bridge_num == num_bond_dp[type])
+			break;
 
 	return type;
 }
@@ -673,7 +725,7 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 
 	connector->has_tile = false;
 
-	for (type = DP_BOND_DUAL; type < DP_BOND_MAX; type++) {
+	for (type = DP_BOND_DUAL_PHY; type < DP_BOND_MAX; type++) {
 		if (!dp_bond_check_connector(connector, type))
 			continue;
 
@@ -684,7 +736,7 @@ static void dp_bond_check_force_mode(struct drm_connector *connector)
 		return;
 
 	connector->has_tile = true;
-	connector->num_h_tile = preferred_type + 2;
+	connector->num_h_tile = num_bond_dp[preferred_type];
 	connector->num_v_tile = 1;
 }
 

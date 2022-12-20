@@ -858,52 +858,47 @@ static void dp_parser_force_encryption(struct dp_parser *parser)
 static int dp_parser_bond(struct dp_parser *parser)
 {
 	struct device *dev = &parser->pdev->dev;
-	int count, i;
-	int rc;
+	int count, i, j;
+	int rc = -EINVAL;
+	struct {
+		const char *name;
+		enum dp_bond_type type;
+	} static const bond_types[] =
+	{
+		{ "qcom,bond-dual-ctrl-phy", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-dual-ctrl-pclk", DP_BOND_DUAL_PCLK },
+		{ "qcom,bond-tri-ctrl-phy", DP_BOND_TRIPLE_PHY },
+		{ "qcom,bond-tri-ctrl-pclk", DP_BOND_TRIPLE_PCLK },
+		/* for backward compatiblity */
+		{ "qcom,bond-dual-ctrl", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-tri-ctrl", DP_BOND_TRIPLE_PCLK },
+	};
 
-	count = of_property_count_u32_elems(dev->of_node,
-			"qcom,bond-dual-ctrl");
-	if (count > 0) {
-		if (count != 2) {
-			pr_warn("dual bond ctrl num doesn't match\n");
-			goto next;
-		}
-		for (i = 0; i < 2; i++) {
-			rc = of_property_read_u32_index(dev->of_node,
-				"qcom,bond-dual-ctrl", i,
-				&parser->bond_cfg[DP_BOND_DUAL].ctrl[i]);
-			if (rc) {
-				pr_warn("failed to read bond index %d", i);
-				goto next;
+	for (j = 0; j < ARRAY_SIZE(bond_types); j++) {
+		count = of_property_count_u32_elems(dev->of_node,
+				bond_types[j].name);
+		if (count > 0) {
+			if (count != num_bond_dp[bond_types[j].type]) {
+				DP_WARN("%s bond ctrl num doesn't match %d:%d\n",
+						bond_types[j].name, count,
+						num_bond_dp[bond_types[j].type]);
+				continue;
+			}
+			for (i = 0; i < num_bond_dp[bond_types[j].type]; i++) {
+				rc = of_property_read_u32_index(dev->of_node,
+					bond_types[j].name, i,
+					&parser->bond_cfg[bond_types[j].type].ctrl[i]);
+				if (rc) {
+					DP_WARN("failed to read bond index %d\n", i);
+					break;
+				}
+			}
+			if (!rc) {
+				parser->bond_cfg[bond_types[j].type].enable = true;
+				DP_DEBUG("bond type %d enabled\n", bond_types[j].type);
 			}
 		}
-		parser->bond_cfg[DP_BOND_DUAL].enable = true;
 	}
-
-next:
-	count = of_property_count_u32_elems(dev->of_node,
-			"qcom,bond-tri-ctrl");
-	if (count > 0) {
-		if (count != 3) {
-			pr_warn("tri bond ctrl num doesn't match\n");
-			goto out;
-		}
-		for (i = 0; i < 3; i++) {
-			rc = of_property_read_u32_index(dev->of_node,
-				"qcom,bond-tri-ctrl", i,
-				&parser->bond_cfg[DP_BOND_TRIPLE].ctrl[i]);
-			if (rc) {
-				pr_warn("failed to read bond index %d", i);
-				goto out;
-			}
-		}
-		parser->bond_cfg[DP_BOND_TRIPLE].enable = true;
-	}
-
-out:
-	pr_debug("dual-bond:%d tri-bond:%d\n",
-			parser->bond_cfg[DP_BOND_DUAL].enable,
-			parser->bond_cfg[DP_BOND_TRIPLE].enable);
 
 	return 0;
 }

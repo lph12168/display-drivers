@@ -830,7 +830,8 @@ static int edp_vco_set_rate_5nm(struct dp_pll *pll, unsigned long rate)
 	return rc;
 }
 
-static int edp_pll_configure(struct dp_pll *pll, unsigned long rate)
+static int edp_pll_configure(struct dp_pll *pll, unsigned long rate,
+		enum dp_phy_bond_mode bond_mode)
 {
 	int rc = 0;
 

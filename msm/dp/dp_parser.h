@@ -146,6 +146,39 @@ enum dp_phy_version {
 	DP_PHY_VERSION_MAX
 };
 
+
+/**
+ * enum dp_phy_bond_mode - bond mode of the dp phy
+ * @DP_PHY_BOND_MODE_NONE:        Non-bond mode
+ * @DP_PHY_BOND_MODE_PLL_MASTER:  PLL bond mode master
+ * @DP_PHY_BOND_MODE_PLL_SLAVE:   PLL bond mode slave
+ * @DP_PHY_BOND_MODE_PCLK_MASTER: Pixel clock bond mode master
+ * @DP_PHY_BOND_MODE_PCLK_SLAVE:  Pixel clock bond mode slave
+ * @DP_PHY_BOND_MODE_MAX:         max bond mode
+ */
+enum dp_phy_bond_mode {
+	DP_PHY_BOND_MODE_NONE = 0,
+	DP_PHY_BOND_MODE_PLL_MASTER,
+	DP_PHY_BOND_MODE_PLL_SLAVE,
+	DP_PHY_BOND_MODE_PCLK_MASTER,
+	DP_PHY_BOND_MODE_PCLK_SLAVE,
+	DP_PHY_BOND_MODE_MAX
+};
+
+#define IS_BOND_MODE(x)		((x) != DP_PHY_BOND_MODE_NONE)
+#define IS_PLL_BOND_MODE(x)	\
+	((x) == DP_PHY_BOND_MODE_PLL_MASTER \
+		|| (x) == DP_PHY_BOND_MODE_PLL_SLAVE)
+#define IS_PCLK_BOND_MODE(x)	\
+	((x) == DP_PHY_BOND_MODE_PCLK_MASTER \
+		|| (x) == DP_PHY_BOND_MODE_PCLK_SLAVE)
+#define IS_BOND_MODE_MASTER_PHY(x)	\
+	((x) == DP_PHY_BOND_MODE_PLL_MASTER \
+		|| (x) == DP_PHY_BOND_MODE_PCLK_MASTER)
+#define IS_BOND_MODE_SLAVE_PHY(x)	\
+	((x) == DP_PHY_BOND_MODE_PLL_SLAVE \
+		|| (x) == DP_PHY_BOND_MODE_PCLK_SLAVE)
+
 /**
  * enum dp_phy_mode - mode of the dp phy
  * @DP_PHY_MODE_UNKNOWN: Unknown PHY mode
@@ -175,10 +208,14 @@ struct dp_hw_cfg {
 };
 
 enum dp_bond_type {
-	DP_BOND_DUAL,
-	DP_BOND_TRIPLE,
+	DP_BOND_DUAL_PHY,
+	DP_BOND_DUAL_PCLK,
+	DP_BOND_TRIPLE_PHY,
+	DP_BOND_TRIPLE_PCLK,
 	DP_BOND_MAX,
 };
+
+static const int num_bond_dp[DP_BOND_MAX] = { 2, 2, 3, 3 };
 
 struct dp_bond_cfg {
 	bool enable;
