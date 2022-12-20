@@ -155,6 +155,17 @@ struct drm_encoder *dp_connector_atomic_best_encoder(
 		struct drm_connector_state *state);
 
 /**
+ * dp_connector_get_tile_map - callback to get tile map
+ * @connector: Pointer to drm connector structure
+ * @display: Pointer to private display handle
+ * @num_tile: Number of tiles
+ * @tile_map: Pointer to tile indices
+ * Returns: Zero on success
+ */
+int dp_connector_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map);
+
+/**
  * dp_drm_bridge_init- drm dp bridge initialize
  * @display: Pointer to private display structure
  * @encoder: encoder for this dp bridge
@@ -266,6 +277,12 @@ static inline void dp_connector_post_open(struct drm_connector *connector,
 
 static inline int dp_connnector_set_info_blob(struct drm_connector *connector,
 		void *info, void *display, struct msm_mode_info *mode_info)
+{
+	return 0;
+}
+
+int dp_connector_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map)
 {
 	return 0;
 }

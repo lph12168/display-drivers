@@ -666,6 +666,7 @@ struct dsi_host_config {
  * @widebus_support       48 bit wide data bus is supported by hw
  * @allowed_mode_switch: BIT mask to mark allowed mode switches
  * @disable_rsc_solver: Dynamically disable RSC solver for the timing mode.
+ * @swap_intf:		Swap left/right intfs
  */
 struct dsi_display_mode_priv_info {
 	struct dsi_panel_cmd_set cmd_sets[DSI_CMD_SET_MAX];
@@ -697,6 +698,7 @@ struct dsi_display_mode_priv_info {
 	bool widebus_support;
 	u32 allowed_mode_switch;
 	bool disable_rsc_solver;
+	bool swap_intf;
 };
 
 /**

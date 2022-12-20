@@ -1834,6 +1834,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.set_submode_info = dsi_conn_set_submode_blob_info,
 		.get_num_lm_from_mode = dsi_conn_get_lm_from_mode,
 		.update_transfer_time = dsi_display_update_transfer_time,
+		.get_tile_map = dsi_conn_get_tile_map,
 	};
 	static const struct sde_connector_ops wb_ops = {
 		.post_init =    sde_wb_connector_post_init,
@@ -1880,6 +1881,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.set_allowed_mode_switch = NULL,
 		.set_dyn_bit_clk = NULL,
 		.update_transfer_time = NULL,
+		.get_tile_map = dp_connector_get_tile_map,
 	};
 	struct msm_display_info info;
 	struct drm_encoder *encoder;
