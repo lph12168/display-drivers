@@ -458,6 +458,9 @@ int dp_sim_update_port_edid(struct dp_aux_bridge *bridge,
 	struct dp_sim_device *sim_dev;
 	struct dp_mst_sim_port *sim_port;
 
+	if (!size)
+		return -EINVAL;
+
 	if (!bridge || !(bridge->flag & DP_SIM_BRIDGE_PRIV_FLAG))
 		return -EINVAL;
 

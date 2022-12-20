@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -166,8 +166,9 @@ TRACE_EVENT(sde_evtlog,
 			if (cnt > SDE_TRACE_EVTLOG_SIZE)
 				cnt = SDE_TRACE_EVTLOG_SIZE;
 			memcpy(__entry->data, data, cnt * sizeof(u32));
-			memset(&__entry->data[cnt], 0,
-				(SDE_TRACE_EVTLOG_SIZE - cnt) * sizeof(u32));
+			if (cnt < SDE_TRACE_EVTLOG_SIZE)
+				memset(&__entry->data[cnt], 0,
+					(SDE_TRACE_EVTLOG_SIZE - cnt) * sizeof(u32));
 			__entry->d00 = __entry->data[0];
 			__entry->d01 = __entry->data[1];
 			__entry->d02 = __entry->data[2];
