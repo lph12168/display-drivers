@@ -1689,6 +1689,7 @@ static void sde_kms_prepare_fence(struct msm_kms *kms,
 static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 {
 	int rc = -ENOMEM;
+	int i;
 
 	if (!sde_kms) {
 		SDE_ERROR("invalid sde kms\n");
@@ -1743,6 +1744,11 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 					sde_kms->dp_display_count);
 
 		sde_kms->dp_stream_count = dp_display_get_num_of_streams(sde_kms->dev);
+		for (i = 0; i < sde_kms->dp_display_count; i++) {
+			sde_kms->dp_bond_count +=
+				dp_display_get_num_of_bonds(
+					sde_kms->dp_displays[i]);
+		}
 	}
 	return 0;
 
@@ -1862,6 +1868,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.post_open  = dp_connector_post_open,
 		.check_status = NULL,
 		.set_colorspace = dp_connector_set_colorspace,
+		.atomic_best_encoder = dp_connector_atomic_best_encoder,
 		.config_hdr = dp_connector_config_hdr,
 		.cmd_transfer = NULL,
 		.cont_splash_config = NULL,
@@ -1890,7 +1897,8 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 	max_encoders = sde_kms->dsi_display_count + sde_kms->wb_display_count +
 				sde_kms->dp_display_count +
 				sde_kms->dp_stream_count +
-				(sde_kms->dp_stream_count >> 1);
+				(sde_kms->dp_stream_count >> 1) +
+				sde_kms->dp_bond_count;
 	if (max_encoders > ARRAY_SIZE(priv->encoders)) {
 		max_encoders = ARRAY_SIZE(priv->encoders);
 		SDE_ERROR("capping number of displays to %d", max_encoders);
@@ -2015,7 +2023,9 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 	/* dp */
 	for (i = 0; i < sde_kms->dp_display_count &&
 			priv->num_encoders < max_encoders; ++i) {
+#if IS_ENABLED(CONFIG_DRM_MSM_DP_MST)
 		int idx;
+#endif
 		struct dp_display_info dp_info = {0};
 
 		display = sde_kms->dp_displays[i];
@@ -2065,6 +2075,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 			sde_encoder_destroy(encoder);
 		}
 
+#if IS_ENABLED(CONFIG_DRM_MSM_DP_MST)
 		/* update display cap to MST_MODE for DP MST encoders */
 		info.capabilities |= MSM_DISPLAY_CAP_MST_MODE;
 
@@ -2103,6 +2114,70 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 			rc = dp_mst_drm_super_bridge_init(display, encoder);
 			if (rc) {
 				SDE_ERROR("dp mst bridge %d init failed, %d\n",
+						i, rc);
+				sde_encoder_destroy(encoder);
+				continue;
+			}
+			priv->encoders[priv->num_encoders++] = encoder;
+		}
+#endif
+	}
+
+	/* create dp bond encoder */
+	for (i = 0; i < sde_kms->dp_display_count; ++i) {
+		int idx, type, h_idx;
+		int dp_bond_count;
+		struct dp_display_bond_displays bond_displays;
+		struct dp_display_info dp_info;
+
+		display = sde_kms->dp_displays[i];
+		dp_bond_count = dp_display_get_num_of_bonds(display);
+		if (!dp_bond_count)
+			continue;
+
+		for (type = 0; type < DP_BOND_MAX &&
+				priv->num_encoders < max_encoders; type++) {
+			rc = dp_display_get_bond_displays(display,
+					type, &bond_displays);
+			if (rc) {
+				SDE_ERROR("failed to get bond displays\n");
+				continue;
+			}
+
+			if (!bond_displays.dp_display_num)
+				continue;
+
+			memset(&info, 0x0, sizeof(info));
+			rc = dp_connector_get_info(NULL, &info, display);
+			if (rc) {
+				SDE_ERROR("dp get_info %d failed\n", i);
+				continue;
+			}
+
+			info.num_of_h_tiles = bond_displays.dp_display_num;
+			h_idx = 1;
+			for (idx = 0; idx < info.num_of_h_tiles; idx++) {
+				dp_display_get_info(
+						bond_displays.dp_display[idx],
+						&dp_info);
+				if (bond_displays.dp_display[idx] != display)
+					info.h_tile_instance[h_idx++] =
+							dp_info.intf_idx[0];
+				else
+					info.h_tile_instance[0] =
+							dp_info.intf_idx[0];
+			}
+
+			encoder = sde_encoder_init(dev, &info);
+			if (IS_ERR_OR_NULL(encoder)) {
+				SDE_ERROR("dp bond super enc init failed\n");
+				continue;
+			}
+
+			rc = dp_drm_bond_bridge_init(display, encoder,
+				type, &bond_displays);
+			if (rc) {
+				SDE_ERROR("bond bridge %d init failed, %d\n",
 						i, rc);
 				sde_encoder_destroy(encoder);
 				continue;
