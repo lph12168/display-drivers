@@ -125,7 +125,8 @@ struct dp_display {
 			struct dp_display *dp_display, u32 strm_id,
 			const char **display_type);
 	int (*set_phy_bond_mode)(struct dp_display *dp_display,
-			enum dp_phy_bond_mode mode);
+			enum dp_phy_bond_mode mode,
+			struct drm_connector *primary_connector);
 };
 
 #if IS_ENABLED(CONFIG_DRM_MSM_DP)
