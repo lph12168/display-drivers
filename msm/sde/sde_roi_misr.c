@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <drm/drm_encoder.h>
@@ -183,6 +184,7 @@ int sde_roi_misr_get_mode_info(struct drm_connector *connector,
 	misr_mode_info->mixer_width = drm_mode->hdisplay
 			/ mode_info->topology.num_lm;
 	misr_mode_info->num_misrs = num_misrs;
+	misr_mode_info->misr_width = misr_width;
 
 	for (i = 0; i < all_roi_num; i++) {
 		roi_id = roi_factor * SDE_ROI_MISR_GET_HW_IDX(i)
@@ -348,7 +350,7 @@ static void sde_roi_misr_roi_calc(struct sde_crtc *sde_crtc,
 		 */
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].x =
 			roi_misr_cfg->roi_rects[i].x1
-			% misr_mode_info->mixer_width;
+			% misr_mode_info->misr_width;
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].y =
 			roi_misr_cfg->roi_rects[i].y1;
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].w =

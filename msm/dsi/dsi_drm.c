@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -60,6 +61,8 @@ static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 	if (dsi_mode->priv_info) {
 		dsi_mode->timing.dsc_enabled = dsi_mode->priv_info->dsc_enabled;
 		dsi_mode->timing.dsc = &dsi_mode->priv_info->dsc;
+		dsi_mode->timing.pixel_clk_hz_override =
+				dsi_mode->priv_info->pixel_clk_hz_override;
 	}
 
 	if (msm_is_mode_seamless(drm_mode))
