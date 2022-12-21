@@ -24,6 +24,7 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/regmap.h>
+#include <linux/usb/usbpd.h>
 #include "clk-regmap-mux.h"
 #include "dp_hpd.h"
 #include "dp_debug.h"

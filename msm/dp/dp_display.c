@@ -16,6 +16,7 @@
 #include <linux/jiffies.h>
 #include <linux/pm_qos.h>
 #include <linux/ipc_logging.h>
+#include <linux/usb/usbpd.h>
 
 #include "sde_connector.h"
 

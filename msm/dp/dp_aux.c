@@ -6,6 +6,7 @@
 
 #include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/delay.h>
+#include <linux/usb/usbpd.h>
 
 #include "dp_aux.h"
 #include "dp_hpd.h"

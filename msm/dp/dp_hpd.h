@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -12,18 +13,6 @@
 #include "dp_aux_bridge.h"
 
 struct device;
-
-/**
- * enum dp_hpd_plug_orientation - plug orientation
- * @ORIENTATION_NONE:	Undefined or unspecified
- * @ORIENTATION_CC1:	CC1
- * @ORIENTATION_CC2:	CC2
- */
-enum dp_hpd_plug_orientation {
-	ORIENTATION_NONE,
-	ORIENTATION_CC1,
-	ORIENTATION_CC2,
-};
 
 /**
  * enum dp_hpd_type - dp hpd type

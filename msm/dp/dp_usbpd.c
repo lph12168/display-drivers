@@ -4,6 +4,7 @@
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/err.h>
 #include <linux/usb/usbpd.h>
 #include <linux/slab.h>
 #include <linux/device.h>
