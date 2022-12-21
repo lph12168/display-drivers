@@ -815,7 +815,8 @@ enum drm_connector_status shd_connector_detect(struct drm_connector *conn,
 	b_conn =  disp->base->connector;
 	if (b_conn) {
 		sde_conn = to_sde_connector(b_conn);
-		status = disp->base->ops.detect(b_conn,
+		if (disp->base->ops.detect)
+			status = disp->base->ops.detect(b_conn,
 						force, sde_conn->display);
 	}
 
