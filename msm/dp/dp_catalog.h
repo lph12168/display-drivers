@@ -241,6 +241,7 @@ struct dp_catalog_io {
 	struct dp_io_data *dp_phy;
 	struct dp_io_data *dp_ln_tx0;
 	struct dp_io_data *dp_ln_tx1;
+	struct dp_io_data *ahb2phy;
 	struct dp_io_data *dp_mmss_cc;
 	struct dp_io_data *dp_pll;
 	struct dp_io_data *usb3_dp_com;
@@ -336,6 +337,9 @@ struct dp_catalog_sub *dp_catalog_get_v420(struct device *dev,
 			struct dp_catalog *catalog, struct dp_catalog_io *io);
 
 struct dp_catalog_sub *dp_catalog_get_v200(struct device *dev,
+			struct dp_catalog *catalog, struct dp_catalog_io *io);
+
+struct dp_catalog_sub *dp_catalog_get_v500(struct device *dev,
 			struct dp_catalog *catalog, struct dp_catalog_io *io);
 
 u32 dp_catalog_get_dp_core_version(struct dp_catalog *dp_catalog);

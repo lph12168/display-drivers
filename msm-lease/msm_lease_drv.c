@@ -1247,7 +1247,9 @@ static int msm_lease_probe(struct platform_device *pdev)
 
 	ret = component_add(&pdev->dev, &msm_lease_comp_ops);
 	if (ret) {
-		pr_err("component add failed, rc=%d\n", ret);
+		pr_err("lease component add failed, rc=%d\n", ret);
+		list_del_init(&lease_drv->head);
+		devm_kfree(dev, lease_drv);
 		return ret;
 	}
 

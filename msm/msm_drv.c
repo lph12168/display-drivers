@@ -51,6 +51,7 @@
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #include <drm/drm_irq.h>
 #endif
+#include <soc/qcom/boot_stats.h>
 
 #include "msm_drv.h"
 #include "msm_gem.h"
@@ -1037,6 +1038,7 @@ static int msm_drm_component_init(struct device *dev)
 	}
 
 	drm_kms_helper_poll_init(ddev);
+	place_marker("M - DISPLAY Driver Ready");
 
 	return 0;
 

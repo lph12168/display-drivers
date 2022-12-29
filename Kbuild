@@ -21,8 +21,8 @@ LINUXINCLUDE    += \
 USERINCLUDE     += -I$(DISPLAY_ROOT)/include/uapi/display
 
 ifeq (y, $(findstring y, $(CONFIG_QTI_QUIN_GVM)))
-include $(DISPLAY_ROOT)/config/gvmgen3disp.conf
-LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmgen3dispconf.h
+include $(DISPLAY_ROOT)/config/gvmdisp.conf
+LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmdispconf.h
 endif
 
 obj-$(CONFIG_DRM_MSM) += msm/

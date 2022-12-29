@@ -877,15 +877,40 @@ static int msm_hyp_crtc_get_property(
 	return ret;
 }
 
+static int msm_hyp_enable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->enable_vblank)
+		kms->funcs->enable_vblank(kms, crtc);
+
+	return 0;
+}
+
+static void msm_hyp_disable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->disable_vblank)
+		kms->funcs->disable_vblank(kms, crtc);
+}
+
 static const struct drm_crtc_funcs msm_hyp_crtc_funcs = {
-	.set_config = drm_atomic_helper_set_config,
-	.destroy = msm_hyp_crtc_destroy,
-	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_set_property = msm_hyp_crtc_set_property,
-	.atomic_get_property = msm_hyp_crtc_get_property,
-	.reset = msm_hyp_crtc_reset,
+	.set_config             = drm_atomic_helper_set_config,
+	.destroy                = msm_hyp_crtc_destroy,
+	.page_flip              = drm_atomic_helper_page_flip,
+	.atomic_set_property    = msm_hyp_crtc_set_property,
+	.atomic_get_property    = msm_hyp_crtc_get_property,
+	.reset                  = msm_hyp_crtc_reset,
 	.atomic_duplicate_state = msm_hyp_crtc_duplicate_state,
-	.atomic_destroy_state = msm_hyp_crtc_destroy_state,
+	.atomic_destroy_state   = msm_hyp_crtc_destroy_state,
+	.enable_vblank          = msm_hyp_enable_vblank,
+	.disable_vblank         = msm_hyp_disable_vblank,
+
 };
 
 static int _msm_hyp_crtc_init_caps(struct msm_hyp_crtc *crtc)
@@ -1470,6 +1495,23 @@ static const struct drm_framebuffer_funcs msm_hyp_framebuffer_funcs = {
 	.destroy = msm_hyp_framebuffer_destroy,
 };
 
+static int msm_hyp_shmem_sync_sg_for_device(struct drm_gem_object *obj)
+{
+	struct sg_table *sgt;
+
+	if (obj->import_attach)
+		return 0;
+
+	sgt = drm_gem_shmem_get_pages_sgt(obj);
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	dma_sync_sg_for_device(obj->dev->dev, sgt->sgl,
+			sgt->nents, DMA_BIDIRECTIONAL);
+
+	return 0;
+}
+
 static struct drm_framebuffer *msm_hyp_framebuffer_create(
 		struct drm_device *dev, struct drm_file *file,
 		const struct drm_mode_fb_cmd2 *mode_cmd)
@@ -1488,6 +1530,12 @@ static struct drm_framebuffer *msm_hyp_framebuffer_create(
 	if (IS_ERR_OR_NULL(bo)) {
 		DRM_ERROR("failed to find gem bo %d\n", mode_cmd->handles[0]);
 		return ERR_PTR(-EINVAL);
+	}
+
+	ret = msm_hyp_shmem_sync_sg_for_device(bo);
+	if (ret) {
+		DRM_ERROR("failed to do dumb buffer sync\n");
+		return ERR_PTR(ret);
 	}
 
 	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
@@ -2063,22 +2111,7 @@ static const struct drm_ioctl_desc msm_hyp_ioctls[] = {
 			DRM_RENDER_ALLOW),
 };
 
-static int msm_hyp_gem_shmem_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-	int ret;
-
-	ret = drm_gem_mmap(filp, vma);
-	if (ret)
-	{
-		pr_err("drm_gem_mmap failed! ret = %d", ret);
-		return ret;
-	}
-
-    ret = drm_gem_shmem_mmap(vma->vm_private_data, vma);
-	return ret;
-}
-
-DEFINE_DRM_GEM_SHMEM_FOPS(fops);
+DEFINE_DRM_GEM_FOPS(fops);
 
 static struct drm_driver msm_hyp_driver = {
 	.driver_features    = DRIVER_GEM |
