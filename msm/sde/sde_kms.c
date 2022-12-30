@@ -1697,7 +1697,7 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 
 	/* dsi */
 	sde_kms->dsi_displays = NULL;
-	sde_kms->dsi_display_count = dsi_display_get_num_of_displays();
+	sde_kms->dsi_display_count = dsi_display_get_num_of_displays(sde_kms->dev);
 	if (sde_kms->dsi_display_count) {
 		sde_kms->dsi_displays = kcalloc(sde_kms->dsi_display_count,
 				sizeof(void *),
@@ -1707,13 +1707,13 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 			goto exit_deinit_dsi;
 		}
 		sde_kms->dsi_display_count =
-			dsi_display_get_active_displays(sde_kms->dsi_displays,
+			dsi_display_get_active_displays(sde_kms->dev, sde_kms->dsi_displays,
 					sde_kms->dsi_display_count);
 	}
 
 	/* wb */
 	sde_kms->wb_displays = NULL;
-	sde_kms->wb_display_count = sde_wb_get_num_of_displays();
+	sde_kms->wb_display_count = sde_wb_get_num_of_displays(sde_kms->dev);
 	if (sde_kms->wb_display_count) {
 		sde_kms->wb_displays = kcalloc(sde_kms->wb_display_count,
 				sizeof(void *),
@@ -1723,13 +1723,13 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 			goto exit_deinit_wb;
 		}
 		sde_kms->wb_display_count =
-			wb_display_get_displays(sde_kms->wb_displays,
+			wb_display_get_displays(sde_kms->dev, sde_kms->wb_displays,
 					sde_kms->wb_display_count);
 	}
 
 	/* dp */
 	sde_kms->dp_displays = NULL;
-	sde_kms->dp_display_count = dp_display_get_num_of_displays();
+	sde_kms->dp_display_count = dp_display_get_num_of_displays(sde_kms->dev);
 	if (sde_kms->dp_display_count) {
 		sde_kms->dp_displays = kcalloc(sde_kms->dp_display_count,
 				sizeof(void *), GFP_KERNEL);
@@ -1738,10 +1738,11 @@ static int _sde_kms_get_displays(struct sde_kms *sde_kms)
 			goto exit_deinit_dp;
 		}
 		sde_kms->dp_display_count =
-			dp_display_get_displays(sde_kms->dp_displays,
+			dp_display_get_displays(sde_kms->dev,
+					sde_kms->dp_displays,
 					sde_kms->dp_display_count);
 
-		sde_kms->dp_stream_count = dp_display_get_num_of_streams();
+		sde_kms->dp_stream_count = dp_display_get_num_of_streams(sde_kms->dev);
 	}
 	return 0;
 
@@ -4365,6 +4366,25 @@ static void sde_kms_init_shared_hw(struct sde_kms *sde_kms)
 	if (!sde_kms || !sde_kms->hw_mdp || !sde_kms->catalog)
 		return;
 
+	if (sde_kms->hw_mdp->ops.intf_dp_select) {
+		struct dp_display_info dp_info = {0};
+		u32 dp_intf_sel[DP_CTRL_MAX] = {0};
+		int i;
+
+		for (i = 0; i < sde_kms->dp_display_count; i++) {
+			if (dp_display_get_info(sde_kms->dp_displays[i],
+					&dp_info))
+				continue;
+
+			if (dp_info.cell_idx < DP_CTRL_MAX)
+				dp_intf_sel[dp_info.cell_idx] =
+					dp_info.phy_idx + 1;
+		}
+
+		sde_kms->hw_mdp->ops.intf_dp_select(sde_kms->hw_mdp,
+				dp_intf_sel);
+	}
+
 	if (sde_kms->hw_mdp->ops.reset_ubwc)
 		sde_kms->hw_mdp->ops.reset_ubwc(sde_kms->hw_mdp,
 						sde_kms->catalog);
@@ -4643,7 +4663,7 @@ static int _sde_kms_get_demura_plane_data(struct sde_splash_data *data)
 	return ret;
 }
 
-static int _sde_kms_get_splash_data(struct sde_splash_data *data)
+static int _sde_kms_get_splash_data(struct drm_device *dev, struct sde_splash_data *data)
 {
 	int i = 0;
 	int ret = 0;
@@ -4683,7 +4703,7 @@ static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 	 * cont_splash_region  should be collection of all memory regions
 	 * Ex: <r1.start r1.end r2.start r2.end  ... rn.start, rn.end>
 	 */
-	num_displays = dsi_display_get_num_of_displays();
+	num_displays = dsi_display_get_num_of_displays(dev);
 	num_regions = of_property_count_u64_elems(node, "reg") / 2;
 
 	data->num_splash_displays = num_displays;
@@ -5115,7 +5135,7 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 	if (rc)
 		goto error;
 
-	rc = _sde_kms_get_splash_data(&sde_kms->splash_data);
+	rc = _sde_kms_get_splash_data(dev, &sde_kms->splash_data);
 	if (rc)
 		SDE_DEBUG("sde splash data fetch failed: %d\n", rc);
 

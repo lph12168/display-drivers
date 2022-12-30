@@ -51,6 +51,7 @@
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #include <drm/drm_irq.h>
 #endif
+#include <soc/qcom/boot_stats.h>
 
 #include "msm_drv.h"
 #include "msm_gem.h"
@@ -1037,6 +1038,7 @@ static int msm_drm_component_init(struct device *dev)
 	}
 
 	drm_kms_helper_poll_init(ddev);
+	place_marker("M - DISPLAY Driver Ready");
 
 	return 0;
 
@@ -2343,6 +2345,7 @@ static int __init msm_drm_register(void)
 	msm_edp_register();
 	msm_hdmi_register();
 	msm_lease_drm_register();
+	sde_shd_register();
 	sde_shp_register();
 	return 0;
 }
@@ -2351,6 +2354,7 @@ static void __exit msm_drm_unregister(void)
 {
 	DBG("fini");
 	sde_shp_unregister();
+	sde_shd_unregister();
 	msm_lease_drm_unregister();
 	sde_wb_unregister();
 	msm_hdmi_unregister();

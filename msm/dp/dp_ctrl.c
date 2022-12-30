@@ -85,6 +85,7 @@ struct dp_ctrl_private {
 	u32 stream_count;
 	u32 training_2_pattern;
 	struct dp_mst_channel_info mst_ch_info;
+	u32 cell_idx;
 };
 
 enum notification_status {
@@ -139,7 +140,8 @@ static void dp_ctrl_push_idle(struct dp_ctrl_private *ctrl,
 	}
 
 	if (strm >= DP_STREAM_MAX) {
-		DP_ERR("mst push idle, invalid stream:%d\n", strm);
+		DP_ERR("DP%d mst push idle, invalid stream:%d\n",
+				ctrl->cell_idx, strm);
 		return;
 	}
 
@@ -151,9 +153,9 @@ trigger_idle:
 
 	if (!wait_for_completion_timeout(&ctrl->idle_comp,
 			idle_pattern_completion_timeout_ms))
-		DP_WARN("time out\n");
+		DP_WARN("DP%d time out\n", ctrl->cell_idx);
 	else
-		DP_DEBUG("mainlink off done\n");
+		DP_DEBUG("DP%d mainlink off done\n", ctrl->cell_idx);
 }
 
 /**
@@ -196,9 +198,9 @@ static void dp_ctrl_configure_source_link_params(struct dp_ctrl_private *ctrl,
 static void dp_ctrl_wait4video_ready(struct dp_ctrl_private *ctrl)
 {
 	if (!wait_for_completion_timeout(&ctrl->video_comp, HZ / 2))
-		DP_WARN("SEND_VIDEO time out\n");
+		DP_WARN("DP%d SEND_VIDEO time out\n", ctrl->cell_idx);
 	else
-		DP_DEBUG("SEND_VIDEO triggered\n");
+		DP_DEBUG("DP%d SEND_VIDEO triggered\n", ctrl->cell_idx);
 }
 
 static int dp_ctrl_update_sink_vx_px(struct dp_ctrl_private *ctrl)
@@ -211,12 +213,14 @@ static int dp_ctrl_update_sink_vx_px(struct dp_ctrl_private *ctrl)
 	u32 max_level_reached = 0;
 
 	if (v_level == ctrl->link->phy_params.max_v_level) {
-		DP_DEBUG("max voltage swing level reached %d\n", v_level);
+		DP_DEBUG("DP%d max voltage swing level reached %d\n",
+				ctrl->cell_idx, v_level);
 		max_level_reached |= DP_TRAIN_MAX_SWING_REACHED;
 	}
 
 	if (p_level == ctrl->link->phy_params.max_p_level) {
-		DP_DEBUG("max pre-emphasis level reached %d\n", p_level);
+		DP_DEBUG("DP%d max pre-emphasis level reached %d\n",
+				ctrl->cell_idx, p_level);
 		max_level_reached |= DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
 	}
 
@@ -225,8 +229,8 @@ static int dp_ctrl_update_sink_vx_px(struct dp_ctrl_private *ctrl)
 	for (i = 0; i < size; i++)
 		buf[i] = v_level | p_level | max_level_reached;
 
-	DP_DEBUG("lanes: %d, swing: 0x%x, pre-emp: 0x%x\n",
-			size, v_level, p_level);
+	DP_DEBUG("DP%d lanes: %d, swing: 0x%x, pre-emp: 0x%x\n",
+			ctrl->cell_idx, size, v_level, p_level);
 
 	ret = drm_dp_dpcd_write(ctrl->aux->drm_aux,
 		DP_TRAINING_LANE0_SET, buf, size);
@@ -252,7 +256,7 @@ static int dp_ctrl_update_sink_pattern(struct dp_ctrl_private *ctrl, u8 pattern)
 	u8 buf = pattern;
 	int ret;
 
-	DP_DEBUG("sink: pattern=%x\n", pattern);
+	DP_DEBUG("DP%d sink: pattern=%x\n", ctrl->cell_idx, pattern);
 
 	if (pattern && pattern != DP_TRAINING_PATTERN_4)
 		buf |= DP_LINK_SCRAMBLING_DISABLE;
@@ -271,7 +275,8 @@ static int dp_ctrl_read_link_status(struct dp_ctrl_private *ctrl,
 	len = drm_dp_dpcd_read_link_status(ctrl->aux->drm_aux,
 		link_status);
 	if (len != DP_LINK_STATUS_SIZE) {
-		DP_ERR("DP link status read failed, err: %d\n", len);
+		DP_ERR("DP%d DP link status read failed, err: %d\n",
+				ctrl->cell_idx, len);
 		ret = len;
 	}
 
@@ -282,6 +287,9 @@ static int dp_ctrl_lane_count_down_shift(struct dp_ctrl_private *ctrl)
 {
 	int ret = 0;
 	u8 lanes = ctrl->link->link_params.lane_count;
+
+	if (ctrl->parser->no_lane_count_reduction)
+		return -EINVAL;
 
 	if (ctrl->panel->link_info.revision < 0x14)
 		return -EINVAL;
@@ -299,7 +307,8 @@ static int dp_ctrl_lane_count_down_shift(struct dp_ctrl_private *ctrl)
 		break;
 	}
 
-	DP_DEBUG("new lane count=%d\n", ctrl->link->link_params.lane_count);
+	DP_DEBUG("DP%d new lane count=%d\n",
+			ctrl->cell_idx, ctrl->link->link_params.lane_count);
 
 	return ret;
 }
@@ -326,6 +335,9 @@ static int dp_ctrl_link_rate_down_shift(struct dp_ctrl_private *ctrl)
 	if (!ctrl)
 		return -EINVAL;
 
+	if (ctrl->parser->no_link_rate_reduction)
+		return -EINVAL;
+
 	switch (ctrl->link->link_params.bw_code) {
 	case DP_LINK_BW_8_1:
 		ctrl->link->link_params.bw_code = DP_LINK_BW_5_4;
@@ -342,7 +354,8 @@ static int dp_ctrl_link_rate_down_shift(struct dp_ctrl_private *ctrl)
 		break;
 	}
 
-	DP_DEBUG("new bw code=0x%x\n", ctrl->link->link_params.bw_code);
+	DP_DEBUG("DP%d new bw code=0x%x\n",
+			ctrl->cell_idx, ctrl->link->link_params.bw_code);
 
 	return ret;
 }
@@ -360,7 +373,8 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 	ctrl->aux->state |= DP_STATE_TRAIN_1_STARTED;
 
 	if (ctrl->sim_mode) {
-		DP_DEBUG("simulation enabled, skip clock recovery\n");
+		DP_DEBUG("DP%d simulation enabled, skip clock recovery\n",
+				ctrl->cell_idx);
 		ret = 0;
 		goto skip_training;
 	}
@@ -418,7 +432,8 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 
 		if (old_v_level == ctrl->link->phy_params.v_level) {
 			if (++tries >= maximum_retries_same_level) {
-				DP_ERR("max tries of same v_level reached\n");
+				DP_ERR("DP%d max tries of same v_level reached\n",
+						ctrl->cell_idx);
 				ret = -EAGAIN;
 				break;
 			}
@@ -428,12 +443,13 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 		}
 
 		if (++tries2 >= maximum_retries) {
-			DP_ERR("max tries reached\n");
+			DP_ERR("DP%d max tries reached\n", ctrl->cell_idx);
 			ret = -EAGAIN;
 			break;
 		}
 
-		DP_DEBUG("clock recovery not done, adjusting vx px\n");
+		DP_DEBUG("DP%d clock recovery not done, adjusting vx px\n",
+				ctrl->cell_idx);
 
 		ctrl->link->adjust_levels(ctrl->link, link_status);
 	}
@@ -449,7 +465,8 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 					link_status);
 
 			active_lanes = ctrl->link->link_params.lane_count / 2;
-			if (active_lanes) {
+			if (active_lanes &&
+				!ctrl->parser->no_lane_count_reduction) {
 				/*
 				 * Retry with initial link rate and
 				 * reduced lane count.
@@ -502,7 +519,8 @@ static int dp_ctrl_link_training_2(struct dp_ctrl_private *ctrl)
 	ctrl->aux->state |= DP_STATE_TRAIN_2_STARTED;
 
 	if (ctrl->sim_mode) {
-		DP_DEBUG("simulation enabled, skip channel equalization\n");
+		DP_DEBUG("DP%d simulation enabled, skip channel equalization\n",
+				ctrl->cell_idx);
 		ret = 0;
 		goto skip_training;
 	}
@@ -636,21 +654,21 @@ static int dp_ctrl_link_train(struct dp_ctrl_private *ctrl)
 
 	ret = dp_ctrl_link_training_1(ctrl);
 	if (ret) {
-		DP_ERR("link training #1 failed\n");
+		DP_ERR("DP%d link training #1 failed\n", ctrl->cell_idx);
 		goto end;
 	}
 
 	/* print success info as this is a result of user initiated action */
-	DP_INFO("link training #1 successful\n");
+	DP_INFO("DP%d link training #1 successful\n", ctrl->cell_idx);
 
 	ret = dp_ctrl_link_training_2(ctrl);
 	if (ret) {
-		DP_ERR("link training #2 failed\n");
+		DP_ERR("DP%d link training #2 failed\n", ctrl->cell_idx);
 		goto end;
 	}
 
 	/* print success info as this is a result of user initiated action */
-	DP_INFO("link training #2 successful\n");
+	DP_INFO("DP%d link training #2 successful\n", ctrl->cell_idx);
 
 end:
 	dp_ctrl_state_ctrl(ctrl, 0);
@@ -696,12 +714,13 @@ static void dp_ctrl_set_clock_rate(struct dp_ctrl_private *ctrl,
 		cfg++;
 	}
 
-	DP_DEBUG("setting rate=%d on clk=%s\n", rate, name);
+	DP_DEBUG("DP%d setting rate=%d on clk=%s\n", ctrl->cell_idx, rate, name);
 
 	if (num)
 		cfg->rate = rate;
 	else
-		DP_ERR("%s clock could not be set with rate %d\n", name, rate);
+		DP_ERR("DP%d %s clock could not be set with rate %d\n",
+				ctrl->cell_idx, name, rate);
 }
 
 static int dp_ctrl_enable_link_clock(struct dp_ctrl_private *ctrl)
@@ -710,14 +729,14 @@ static int dp_ctrl_enable_link_clock(struct dp_ctrl_private *ctrl)
 	u32 rate = drm_dp_bw_code_to_link_rate(ctrl->link->link_params.bw_code);
 	enum dp_pm_type type = DP_LINK_PM;
 
-	DP_DEBUG("rate=%d\n", rate);
+	DP_DEBUG("DP%d rate=%d\n", ctrl->cell_idx, rate);
 
 	dp_ctrl_set_clock_rate(ctrl, "link_clk_src", type, rate);
 
 	if (ctrl->pll->pll_cfg) {
 		ret = ctrl->pll->pll_cfg(ctrl->pll, rate);
 		if (ret < 0) {
-			DP_ERR("DP pll cfg failed\n");
+			DP_ERR("DP%d DP pll cfg failed\n", ctrl->cell_idx);
 			return ret;
 		}
 	}
@@ -725,14 +744,14 @@ static int dp_ctrl_enable_link_clock(struct dp_ctrl_private *ctrl)
 	if (ctrl->pll->pll_prepare) {
 		ret = ctrl->pll->pll_prepare(ctrl->pll);
 		if (ret < 0) {
-			DP_ERR("DP pll prepare failed\n");
+			DP_ERR("DP%d DP pll prepare failed\n", ctrl->cell_idx);
 			return ret;
 		}
 	}
 
 	ret = ctrl->power->clk_enable(ctrl->power, type, true);
 	if (ret) {
-		DP_ERR("Unabled to start link clocks\n");
+		DP_ERR("DP%d Unabled to start link clocks\n", ctrl->cell_idx);
 		ret = -EINVAL;
 	}
 
@@ -747,7 +766,7 @@ static void dp_ctrl_disable_link_clock(struct dp_ctrl_private *ctrl)
 	if (ctrl->pll->pll_unprepare) {
 		rc = ctrl->pll->pll_unprepare(ctrl->pll);
 		if (rc < 0)
-			DP_ERR("pll unprepare failed\n");
+			DP_ERR("DP%d pll unprepare failed\n", ctrl->cell_idx);
 	}
 }
 
@@ -804,7 +823,7 @@ static int dp_ctrl_link_setup(struct dp_ctrl_private *ctrl, bool shallow)
 	link_params = &ctrl->link->link_params;
 
 	while (1) {
-		DP_DEBUG("bw_code=%d, lane_count=%d\n",
+		DP_DEBUG("DP%d bw_code=%d, lane_count=%d\n", ctrl->cell_idx,
 			link_params->bw_code, link_params->lane_count);
 
 		dp_ctrl_config_phy(ctrl);
@@ -882,8 +901,8 @@ static int dp_ctrl_enable_stream_clocks(struct dp_ctrl_private *ctrl,
 		clk_type = DP_STREAM1_PM;
 		strlcpy(clk_name, "strm1_pixel_clk", 32);
 	} else {
-		DP_ERR("Invalid stream:%d for clk enable\n",
-				dp_panel->stream_id);
+		DP_ERR("DP%d Invalid stream:%d for clk enable\n",
+				ctrl->cell_idx, dp_panel->stream_id);
 		return -EINVAL;
 	}
 
@@ -895,8 +914,8 @@ static int dp_ctrl_enable_stream_clocks(struct dp_ctrl_private *ctrl,
 
 	ret = ctrl->power->clk_enable(ctrl->power, clk_type, true);
 	if (ret) {
-		DP_ERR("Unabled to start stream:%d clocks\n",
-				dp_panel->stream_id);
+		DP_ERR("DP%d Unabled to start stream:%d clocks\n",
+				ctrl->cell_idx, dp_panel->stream_id);
 		ret = -EINVAL;
 	}
 
@@ -915,8 +934,8 @@ static int dp_ctrl_disable_stream_clocks(struct dp_ctrl_private *ctrl,
 		return ctrl->power->clk_enable(ctrl->power,
 				DP_STREAM1_PM, false);
 	} else {
-		DP_ERR("Invalid stream:%d for clk disable\n",
-				dp_panel->stream_id);
+		DP_ERR("DP%d Invalid stream:%d for clk disable\n",
+				ctrl->cell_idx, dp_panel->stream_id);
 		ret = -EINVAL;
 	}
 	return ret;
@@ -966,7 +985,7 @@ static void dp_ctrl_host_deinit(struct dp_ctrl *dp_ctrl)
 
 	ctrl->catalog->enable_irq(ctrl->catalog, false);
 
-	DP_DEBUG("Host deinitialized successfully\n");
+	DP_DEBUG("DP%d Host deinitialized successfully\n", ctrl->cell_idx);
 }
 
 static void dp_ctrl_send_video(struct dp_ctrl_private *ctrl)
@@ -1034,6 +1053,7 @@ static int dp_ctrl_link_maintenance(struct dp_ctrl *dp_ctrl)
 {
 	int ret = 0;
 	struct dp_ctrl_private *ctrl;
+	int retry = 100;
 
 	if (!dp_ctrl) {
 		DP_ERR("Invalid input data\n");
@@ -1046,17 +1066,19 @@ static int dp_ctrl_link_maintenance(struct dp_ctrl *dp_ctrl)
 	ctrl->aux->state &= ~DP_STATE_LINK_MAINTENANCE_FAILED;
 
 	if (!ctrl->power_on) {
-		DP_ERR("ctrl off\n");
+		DP_ERR("DP%d ctrl off\n", ctrl->cell_idx);
 		ret = -EINVAL;
 		goto end;
 	}
 
-	if (atomic_read(&ctrl->aborted))
-		goto end;
+	do {
+		if (atomic_read(&ctrl->aborted))
+			goto end;
 
-	ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_STARTED;
-	ret = dp_ctrl_setup_main_link(ctrl);
-	ctrl->aux->state &= ~DP_STATE_LINK_MAINTENANCE_STARTED;
+		ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_STARTED;
+		ret = dp_ctrl_setup_main_link(ctrl);
+		ctrl->aux->state &= ~DP_STATE_LINK_MAINTENANCE_STARTED;
+	} while (ret && ctrl->parser->force_connect_mode && --retry);
 
 	if (ret) {
 		ctrl->aux->state |= DP_STATE_LINK_MAINTENANCE_FAILED;
@@ -1088,11 +1110,11 @@ static void dp_ctrl_process_phy_test_request(struct dp_ctrl *dp_ctrl)
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
 	if (!ctrl->link->phy_params.phy_test_pattern_sel) {
-		DP_DEBUG("no test pattern selected by sink\n");
+		DP_DEBUG("DP%d no test pattern selected by sink\n", ctrl->cell_idx);
 		return;
 	}
 
-	DP_DEBUG("start\n");
+	DP_DEBUG("DP%d start\n", ctrl->cell_idx);
 
 	/*
 	 * The global reset will need DP link ralated clocks to be
@@ -1109,10 +1131,10 @@ static void dp_ctrl_process_phy_test_request(struct dp_ctrl *dp_ctrl)
 	ret = ctrl->dp_ctrl.on(&ctrl->dp_ctrl, ctrl->mst_mode,
 			ctrl->fec_mode, ctrl->dsc_mode, false);
 	if (ret)
-		DP_ERR("failed to enable DP controller\n");
+		DP_ERR("DP%d failed to enable DP controller\n", ctrl->cell_idx);
 
 	ctrl->dp_ctrl.stream_on(&ctrl->dp_ctrl, ctrl->panel);
-	DP_DEBUG("end\n");
+	DP_DEBUG("DP%d end\n", ctrl->cell_idx);
 }
 
 static void dp_ctrl_send_phy_test_pattern(struct dp_ctrl_private *ctrl)
@@ -1127,7 +1149,7 @@ static void dp_ctrl_send_phy_test_pattern(struct dp_ctrl_private *ctrl)
 	ctrl->link->send_test_response(ctrl->link);
 
 	pattern_sent = ctrl->catalog->read_phy_pattern(ctrl->catalog);
-	DP_DEBUG("pattern_request: %s. pattern_sent: 0x%x\n",
+	DP_DEBUG("DP%d pattern_request: %s. pattern_sent: 0x%x\n", ctrl->cell_idx,
 			dp_link_get_phy_test_pattern(pattern_requested),
 			pattern_sent);
 
@@ -1158,7 +1180,7 @@ static void dp_ctrl_send_phy_test_pattern(struct dp_ctrl_private *ctrl)
 		break;
 	}
 
-	DP_DEBUG("%s: %s\n", success ? "success" : "failed",
+	DP_DEBUG("DP%d %s: %s\n", ctrl->cell_idx, success ? "success" : "failed",
 			dp_link_get_phy_test_pattern(pattern_requested));
 }
 
@@ -1196,8 +1218,10 @@ static void dp_ctrl_mst_calculate_rg(struct dp_ctrl_private *ctrl,
 	denominator = drm_fixp_from_fraction(2, 1);
 	raw_target_sc = drm_fixp_div(numerator, denominator);
 
-	DP_DEBUG("raw_target_sc before overhead:0x%llx\n", raw_target_sc);
-	DP_DEBUG("dsc_overhead_fp:0x%llx\n", panel->pinfo.dsc_overhead_fp);
+	DP_DEBUG("DP%d raw_target_sc before overhead:0x%llx\n",
+			ctrl->cell_idx, raw_target_sc);
+	DP_DEBUG("DP%d dsc_overhead_fp:0x%llx\n",
+			ctrl->cell_idx, panel->pinfo.dsc_overhead_fp);
 
 	/* apply fec and dsc overhead factor */
 	if (panel->pinfo.dsc_overhead_fp)
@@ -1208,7 +1232,8 @@ static void dp_ctrl_mst_calculate_rg(struct dp_ctrl_private *ctrl,
 		raw_target_sc = drm_fixp_mul(raw_target_sc,
 					panel->fec_overhead_fp);
 
-	DP_DEBUG("raw_target_sc after overhead:0x%llx\n", raw_target_sc);
+	DP_DEBUG("DP%d raw_target_sc after overhead:0x%llx\n",
+			ctrl->cell_idx, raw_target_sc);
 
 	/* target_sc */
 	temp = drm_fixp_from_fraction(256 * lanes, 1);
@@ -1253,7 +1278,8 @@ static void dp_ctrl_mst_calculate_rg(struct dp_ctrl_private *ctrl,
 	*p_x_int = x_int;
 	*p_y_frac_enum = y_frac_enum;
 
-	DP_DEBUG("x_int: %d, y_frac_enum: %d\n", x_int, y_frac_enum);
+	DP_DEBUG("DP%d x_int: %d, y_frac_enum: %d\n",
+			ctrl->cell_idx, x_int, y_frac_enum);
 }
 
 static void dp_ctrl_mst_stream_setup(struct dp_ctrl_private *ctrl,
@@ -1265,7 +1291,7 @@ static void dp_ctrl_mst_stream_setup(struct dp_ctrl_private *ctrl,
 	if (!ctrl->mst_mode)
 		return;
 
-	DP_MST_DEBUG("mst stream channel allocation\n");
+	DP_MST_DEBUG("DP%d mst stream channel allocation\n", ctrl->cell_idx);
 
 	for (i = DP_STREAM_0; i < DP_STREAM_MAX; i++) {
 		ctrl->catalog->channel_alloc(ctrl->catalog,
@@ -1282,12 +1308,12 @@ static void dp_ctrl_mst_stream_setup(struct dp_ctrl_private *ctrl,
 	ctrl->catalog->update_rg(ctrl->catalog, panel->stream_id,
 			x_int, y_frac_enum);
 
-	DP_MST_DEBUG("mst stream:%d, start_slot:%d, tot_slots:%d\n",
-			panel->stream_id,
+	DP_MST_DEBUG("DP%d mst stream:%d, start_slot:%d, tot_slots:%d\n",
+			ctrl->cell_idx, panel->stream_id,
 			panel->channel_start_slot, panel->channel_total_slots);
 
-	DP_MST_DEBUG("mst lane_cnt:%d, bw:%d, x_int:%d, y_frac:%d\n",
-			lanes, bw_code, x_int, y_frac_enum);
+	DP_MST_DEBUG("DP%d mst lane_cnt:%d, bw:%d, x_int:%d, y_frac:%d\n",
+			ctrl->cell_idx, lanes, bw_code, x_int, y_frac_enum);
 }
 
 static void dp_ctrl_dsc_setup(struct dp_ctrl_private *ctrl)
@@ -1302,7 +1328,7 @@ static void dp_ctrl_dsc_setup(struct dp_ctrl_private *ctrl)
 	rlen = drm_dp_dpcd_writeb(ctrl->aux->drm_aux, DP_DSC_ENABLE,
 			dsc_enable);
 	if (rlen < 1)
-		DP_WARN("failed to enable sink dsc\n");
+		DP_WARN("DP%d failed to enable sink dsc\n", ctrl->cell_idx);
 }
 
 static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
@@ -1316,14 +1342,18 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
+	/* Abort is requested, exit */
+	if (atomic_read(&ctrl->aborted))
+		return -EPERM;
+
 	if (!ctrl->power_on) {
-		DP_DEBUG("controller powered off\n");
+		DP_DEBUG("DP%d controller powered off\n", ctrl->cell_idx);
 		return -EPERM;
 	}
 
 	rc = dp_ctrl_enable_stream_clocks(ctrl, panel);
 	if (rc) {
-		DP_ERR("failure on stream clock enable\n");
+		DP_ERR("DP%d failure on stream clock enable\n", ctrl->cell_idx);
 		return rc;
 	}
 
@@ -1347,7 +1377,8 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 	ctrl->stream_count++;
 
 	link_ready = ctrl->catalog->mainlink_ready(ctrl->catalog);
-	DP_DEBUG("mainlink %s\n", link_ready ? "READY" : "NOT READY");
+	DP_DEBUG("DP%d mainlink %s\n", ctrl->cell_idx,
+			link_ready ? "READY" : "NOT READY");
 
 	/* wait for link training completion before fec config as per spec */
 	dp_ctrl_fec_setup(ctrl);
@@ -1380,9 +1411,11 @@ static void dp_ctrl_mst_stream_pre_off(struct dp_ctrl *dp_ctrl,
 	ctrl->catalog->read_act_complete_sts(ctrl->catalog, &act_complete);
 
 	if (!act_complete)
-		DP_ERR("mst stream_off act trigger complete failed\n");
+		DP_ERR("DP%d mst stream_off act trigger complete failed\n",
+				ctrl->cell_idx);
 	else
-		DP_MST_DEBUG("mst stream_off ACT trigger complete SUCCESS\n");
+		DP_MST_DEBUG("DP%d mst stream_off ACT trigger complete SUCCESS\n",
+				ctrl->cell_idx);
 }
 
 static void dp_ctrl_stream_pre_off(struct dp_ctrl *dp_ctrl,
@@ -1421,7 +1454,7 @@ static void dp_ctrl_stream_off(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 }
 
 static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
-		bool fec_mode, bool dsc_mode, bool shallow)
+		bool fec_mode, bool dsc_mode, int training_mode)
 {
 	int rc = 0;
 	struct dp_ctrl_private *ctrl;
@@ -1434,7 +1467,10 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
-	if (ctrl->power_on)
+	DP_DEBUG("DP%d power %d, mode %d\n", ctrl->cell_idx,
+			ctrl->power_on, training_mode);
+
+	if (ctrl->power_on && (training_mode != LINK_TRAINING_MODE_FORCE))
 		goto end;
 
 	if (atomic_read(&ctrl->aborted)) {
@@ -1451,7 +1487,7 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 	rate = ctrl->panel->link_info.rate;
 
 	if (ctrl->link->sink_request & DP_TEST_LINK_PHY_TEST_PATTERN) {
-		DP_DEBUG("using phy test link parameters\n");
+		DP_DEBUG("DP%d using phy test link parameters\n", ctrl->cell_idx);
 	} else {
 		ctrl->link->link_params.bw_code =
 			drm_dp_link_rate_to_bw_code(rate);
@@ -1459,7 +1495,7 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 			ctrl->panel->link_info.num_lanes;
 	}
 
-	DP_DEBUG("bw_code=%d, lane_count=%d\n",
+	DP_DEBUG("DP%d bw_code=%d, lane_count=%d\n", ctrl->cell_idx,
 		ctrl->link->link_params.bw_code,
 		ctrl->link->link_params.lane_count);
 
@@ -1467,7 +1503,7 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 	ctrl->initial_lane_count = ctrl->link->link_params.lane_count;
 	ctrl->initial_bw_code = ctrl->link->link_params.bw_code;
 
-	rc = dp_ctrl_link_setup(ctrl, shallow);
+	rc = dp_ctrl_link_setup(ctrl, training_mode == LINK_TRAINING_MODE_SHALLOW);
 	if (!rc)
 		ctrl->power_on = true;
 end:
@@ -1500,7 +1536,7 @@ static void dp_ctrl_off(struct dp_ctrl *dp_ctrl)
 	ctrl->dsc_mode = false;
 	ctrl->power_on = false;
 	memset(&ctrl->mst_ch_info, 0, sizeof(ctrl->mst_ch_info));
-	DP_DEBUG("DP off done\n");
+	DP_DEBUG("DP%d DP off done\n", ctrl->cell_idx);
 }
 
 static void dp_ctrl_set_mst_channel_info(struct dp_ctrl *dp_ctrl,
@@ -1556,7 +1592,7 @@ void dp_ctrl_set_sim_mode(struct dp_ctrl *dp_ctrl, bool en)
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 	ctrl->sim_mode = en;
-	DP_INFO("sim_mode=%d\n", ctrl->sim_mode);
+	DP_INFO("DP%d sim_mode=%d\n", ctrl->cell_idx, ctrl->sim_mode);
 }
 
 struct dp_ctrl *dp_ctrl_get(struct dp_ctrl_in *in)
@@ -1592,6 +1628,7 @@ struct dp_ctrl *dp_ctrl_get(struct dp_ctrl_in *in)
 	ctrl->dev  = in->dev;
 	ctrl->mst_mode = false;
 	ctrl->fec_mode = false;
+	ctrl->cell_idx = in->parser->cell_idx;
 
 	dp_ctrl = &ctrl->dp_ctrl;
 

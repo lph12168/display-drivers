@@ -12,16 +12,6 @@
 #include "sde_kms.h"
 #include "sde_reg_dma.h"
 
-#define CTL_LAYER(lm)                 \
-	(((lm) == LM_5) ? (0x024) : (((lm) - LM_0) * 0x004))
-#define CTL_LAYER_EXT(lm)             \
-	(0x40 + (((lm) - LM_0) * 0x004))
-#define CTL_LAYER_EXT2(lm)             \
-	(0x70 + (((lm) - LM_0) * 0x004))
-#define CTL_LAYER_EXT3(lm)             \
-	(0xA0 + (((lm) - LM_0) * 0x004))
-#define CTL_LAYER_EXT4(lm)             \
-	(0xB8 + (((lm) - LM_0) * 0x004))
 #define CTL_TOP                       0x014
 #define CTL_FLUSH                     0x018
 #define CTL_START                     0x01C
@@ -34,13 +24,9 @@
 #define CTL_ROT_FLUSH                 0x0C4
 #define CTL_ROT_START                 0x0CC
 
-#define CTL_MERGE_3D_ACTIVE           0x0E4
 #define CTL_DSC_ACTIVE                0x0E8
-#define CTL_WB_ACTIVE                 0x0EC
-#define CTL_CWB_ACTIVE                0x0F0
 #define CTL_INTF_ACTIVE               0x0F4
 #define CTL_CDM_ACTIVE                0x0F8
-#define CTL_FETCH_PIPE_ACTIVE         0x0FC
 
 #define CTL_MERGE_3D_FLUSH           0x100
 #define CTL_DSC_FLUSH                0x104
@@ -67,12 +53,9 @@
 #define CTL_OUTPUT_FENCE_END_TIMESTAMP0 0x270
 #define CTL_OUTPUT_FENCE_END_TIMESTAMP1 0x274
 
-#define CTL_MIXER_BORDER_OUT            BIT(24)
 #define CTL_FLUSH_MASK_ROT              BIT(27)
 #define CTL_FLUSH_MASK_CTL              BIT(17)
 
-#define CTL_NUM_EXT			5
-#define CTL_SSPP_MAX_RECTS		2
 
 #define SDE_REG_RESET_TIMEOUT_US        2000
 #define SDE_REG_WAIT_RESET_TIMEOUT_US        100000
@@ -80,7 +63,6 @@
 #define UPDATE_MASK(m, idx, en)           \
 	((m) = (en) ? ((m) | BIT((idx))) : ((m) & ~BIT((idx))))
 
-#define CTL_INVALID_BIT                0xffff
 
 #define VDC_IDX(i) ((i) +  16)
 
@@ -137,11 +119,6 @@ static const u32 intf_tbl[INTF_MAX] = {SDE_NONE, 31, 30, 29, 28};
  */
 
 /**
- * List of SSPP bits in CTL_FETCH_PIPE_ACTIVE
- */
-static const u32 fetch_tbl[SSPP_MAX] = {CTL_INVALID_BIT, 16, 17, 18, 19, 0, 1, 2, 3, 4, 5};
-
-/**
  * list of WB bits in CTL_WB_FLUSH
  */
 static const u32 wb_flush_tbl[WB_MAX] = {SDE_NONE, SDE_NONE, 1, 2};
@@ -149,7 +126,7 @@ static const u32 wb_flush_tbl[WB_MAX] = {SDE_NONE, SDE_NONE, 1, 2};
 /**
  * list of INTF bits in CTL_INTF_FLUSH
  */
-static const u32 intf_flush_tbl[INTF_MAX] = {SDE_NONE, 0, 1, 2, 3, 4, 5};
+static const u32 intf_flush_tbl[INTF_MAX] = {SDE_NONE, 0, 1, 2, 3, 4, 5, 6, 7, 8};
 
 /**
  * list of DSC bits in CTL_DSC_FLUSH
@@ -202,36 +179,6 @@ static const u32 dspp_sub_blk_flush_tbl[SDE_DSPP_MAX] = {
 	[SDE_DSPP_DEMURA] = 9,
 	[SDE_DSPP_RC] = 10,
 	[SDE_DSPP_SB] = 31,
-};
-
-/**
- * struct ctl_sspp_stage_reg_map: Describes bit layout for a sspp stage cfg
- * @ext: Index to indicate LAYER_x_EXT id for given sspp
- * @start: Start position of blend stage bits for given sspp
- * @bits: Number of bits from @start assigned for given sspp
- * @sec_bit_mask: Bitmask to add to LAYER_x_EXT1 for missing bit of sspp
- */
-struct ctl_sspp_stage_reg_map {
-	u32 ext;
-	u32 start;
-	u32 bits;
-	u32 sec_bit_mask;
-};
-
-/* list of ctl_sspp_stage_reg_map for all the sppp */
-static const struct ctl_sspp_stage_reg_map
-sspp_reg_cfg_tbl[SSPP_MAX][CTL_SSPP_MAX_RECTS] = {
-	/* SSPP_NONE */{ {0, 0, 0, 0}, {0, 0, 0, 0} },
-	/* SSPP_VIG0 */{ {0, 0, 3, BIT(0)}, {3, 0, 4, 0} },
-	/* SSPP_VIG1 */{ {0, 3, 3, BIT(2)}, {3, 4, 4, 0} },
-	/* SSPP_VIG2 */{ {0, 6, 3, BIT(4)}, {3, 8, 4, 0} },
-	/* SSPP_VIG3 */{ {0, 26, 3, BIT(6)}, {3, 12, 4, 0} },
-	/* SSPP_DMA0 */{ {0, 18, 3, BIT(16)}, {2, 8, 4, 0} },
-	/* SSPP_DMA1 */{ {0, 21, 3, BIT(18)}, {2, 12, 4, 0} },
-	/* SSPP_DMA2 */{ {2, 0, 4, 0}, {2, 16, 4, 0} },
-	/* SSPP_DMA3 */{ {2, 4, 4, 0}, {2, 20, 4, 0} },
-	/* SSPP_DMA4 */{ {4, 0, 4, 0}, {4, 8, 4, 0} },
-	/* SSPP_DMA5 */{ {4, 4, 4, 0}, {4, 12, 4, 0} },
 };
 
 /**
@@ -1221,7 +1168,7 @@ static int sde_hw_ctl_update_intf_cfg(struct sde_hw_ctl *ctx,
 	u32 vdc_active = 0;
 	struct sde_hw_blk_reg_map *c;
 
-	if (!ctx)
+	if (!ctx || !cfg)
 		return -EINVAL;
 
 	c = &ctx->hw;

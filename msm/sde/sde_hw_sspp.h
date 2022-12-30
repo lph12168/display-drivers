@@ -711,8 +711,9 @@ struct sde_hw_sspp_ops {
 	 * @cfg: Pointer to line insertion configuration
 	 */
 	void (*setup_line_insertion)(struct sde_hw_pipe *ctx,
-				     enum sde_sspp_multirect_index index,
-				     struct sde_hw_pipe_line_insertion_cfg *cfg);
+		enum sde_sspp_multirect_index index,
+		struct sde_hw_pipe_line_insertion_cfg *cfg);
+
 };
 
 /**

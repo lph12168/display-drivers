@@ -312,6 +312,7 @@ struct sde_encoder_irq {
  *				mode display
  * @recovered:			flag set to true when recovered from pp timeout
  * @autorefresh_disable_trans:   flag set to true during autorefresh disable transition
+ * @shared:			If a encoder is sharing resource of its parent
  */
 struct sde_encoder_phys {
 	struct drm_encoder *parent;
@@ -360,6 +361,7 @@ struct sde_encoder_phys {
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool recovered;
 	bool autorefresh_disable_trans;
+	bool shared;
 };
 
 static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)

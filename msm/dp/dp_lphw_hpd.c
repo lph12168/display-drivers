@@ -100,8 +100,8 @@ static irqreturn_t dp_tlmm_isr(int unused, void *data)
 
 	hpd = gpio_get_value_cansleep(lphw_hpd->gpio_cfg.gpio);
 
-	DP_DEBUG("lphw_hpd state = %d, new hpd state = %d\n",
-			lphw_hpd->hpd, hpd);
+	DP_DEBUG("DP%d lphw_hpd state = %d, new hpd state = %d\n",
+			lphw_hpd->parser->cell_idx, lphw_hpd->hpd, hpd);
 	if (!lphw_hpd->hpd && hpd) {
 		lphw_hpd->hpd = true;
 		queue_work(lphw_hpd->connect_wq, &lphw_hpd->connect);
@@ -167,7 +167,8 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 
 	if (isr & DP_HPD_UNPLUG_INT_STATUS) { /* disconnect interrupt */
 
-		DP_DEBUG("disconnect interrupt, hpd isr state: 0x%x\n", isr);
+		DP_DEBUG("DP%d disconnect interrupt, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
 
 		if (lphw_hpd->base.hpd_high) {
 			lphw_hpd->hpd = false;
@@ -178,30 +179,35 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 			rc = queue_work(lphw_hpd->connect_wq,
 					&lphw_hpd->disconnect);
 			if (!rc)
-				DP_DEBUG("disconnect not queued\n");
+				DP_DEBUG("DP%d disconnect not queued\n",
+						lphw_hpd->parser->cell_idx);
 		} else {
-			DP_ERR("already disconnected\n");
+			DP_ERR("DP%d already disconnected\n", lphw_hpd->parser->cell_idx);
 		}
 
 	} else if (isr & DP_IRQ_HPD_INT_STATUS) { /* attention interrupt */
 
-		DP_DEBUG("hpd_irq interrupt, hpd isr state: 0x%x\n", isr);
+		DP_DEBUG("DP%d hpd_irq interrupt, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
 
 		rc = queue_work(lphw_hpd->connect_wq, &lphw_hpd->attention);
 		if (!rc)
-			DP_DEBUG("attention not queued\n");
+			DP_DEBUG("DP%d attention not queued\n",
+					lphw_hpd->parser->cell_idx);
 	} else if (isr & DP_HPD_PLUG_INT_STATUS) {
 
-		DP_DEBUG("connect interrupt, hpd isr state: 0x%x\n", isr);
+		DP_DEBUG("DP%d connect interrupt, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
 
 		if (!lphw_hpd->hpd) {
 			lphw_hpd->hpd = true;
 			rc = queue_work(lphw_hpd->connect_wq,
 					&lphw_hpd->connect);
 			if (!rc)
-				DP_DEBUG("connect not queued\n");
+				DP_DEBUG("DP%d connect not queued\n",
+						lphw_hpd->parser->cell_idx);
 		} else {
-			DP_ERR("already connected\n");
+			DP_ERR("DP%d already connected\n", lphw_hpd->parser->cell_idx);
 		}
 
 	}
@@ -272,7 +278,8 @@ int dp_lphw_hpd_register(struct dp_hpd *dp_hpd)
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 		"dp-gpio-intp", lphw_hpd);
 	if (rc) {
-		DP_ERR("Failed to request INTP threaded IRQ: %d\n", rc);
+		DP_ERR("DP%d Failed to request INTP threaded IRQ: %d\n",
+				lphw_hpd->parser->cell_idx, rc);
 		return rc;
 	}
 	enable_irq_wake(lphw_hpd->irq);
@@ -296,7 +303,8 @@ static void dp_lphw_hpd_deinit(struct dp_lphw_hpd_private *lphw_hpd)
 			if (msm_dss_enable_vreg(
 				&parser->mp[DP_PHY_PM].vreg_config[i], 1,
 				false))
-				DP_ERR("hpd-pwr vreg not disabled\n");
+				DP_ERR("DP%d hpd-pwr vreg not disabled\n",
+						lphw_hpd->parser->cell_idx);
 
 			break;
 		}
@@ -317,7 +325,8 @@ static void dp_lphw_hpd_init(struct dp_lphw_hpd_private *lphw_hpd)
 			if (msm_dss_enable_vreg(
 				&parser->mp[DP_PHY_PM].vreg_config[i], 1,
 				true))
-				DP_ERR("hpd-pwr vreg not enabled\n");
+				DP_ERR("DP%d hpd-pwr vreg not enabled\n",
+						lphw_hpd->parser->cell_idx);
 
 			break;
 		}
@@ -333,7 +342,8 @@ static void dp_lphw_hpd_init(struct dp_lphw_hpd_private *lphw_hpd)
 			rc = pinctrl_select_state(pinctrl.pin,
 					pinctrl.state_hpd_active);
 			if (rc)
-				DP_ERR("failed to set hpd_active state\n");
+				DP_ERR("DP%d failed to set hpd_active state\n",
+						lphw_hpd->parser->cell_idx);
 		}
 		pinctrl.state_hpd_tlmm = pinctrl.state_hpd_ctrl = NULL;
 	}
@@ -343,7 +353,7 @@ static int dp_lphw_hpd_create_workqueue(struct dp_lphw_hpd_private *lphw_hpd)
 {
 	lphw_hpd->connect_wq = create_singlethread_workqueue("dp_lphw_work");
 	if (IS_ERR_OR_NULL(lphw_hpd->connect_wq)) {
-		DP_ERR("Error creating connect_wq\n");
+		DP_ERR("DP%d Error creating connect_wq\n", lphw_hpd->parser->cell_idx);
 		return -EPERM;
 	}
 
@@ -400,7 +410,7 @@ struct dp_hpd *dp_lphw_hpd_get(struct device *dev, struct dp_parser *parser,
 
 	rc = dp_lphw_hpd_create_workqueue(lphw_hpd);
 	if (rc) {
-		DP_ERR("Failed to create a dp_hpd workqueue\n");
+		DP_ERR("DP%d Failed to create a dp_hpd workqueue\n", parser->cell_idx);
 		goto gpio_error;
 	}
 

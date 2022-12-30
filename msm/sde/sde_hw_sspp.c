@@ -113,13 +113,13 @@
 #define SSPP_UBWC_STATIC_CTRL_REC1         0x1C0
 #define SSPP_UBWC_ERROR_STATUS_REC1        0x1C8
 #define SSPP_META_ERROR_STATUS_REC1        0x1C4
+#define SSPP_LINE_INSERTION_CTRL           0x1E0
+#define SSPP_LINE_INSERTION_OUT_SIZE       0x1E8
 #define SSPP_VIG_OP_MODE                   0x0
 #define SSPP_VIG_CSC_10_OP_MODE            0x0
 #define SSPP_TRAFFIC_SHAPER_BPC_MAX        0xFF
 #define SSPP_CLK_CTRL                      0x330
 #define SSPP_CLK_STATUS                    0x334
-#define SSPP_LINE_INSERTION_CTRL           0x1E0
-#define SSPP_LINE_INSERTION_OUT_SIZE       0x1E8
 
 /* SSPP_QOS_CTRL */
 #define SSPP_QOS_CTRL_VBLANK_EN            BIT(16)
@@ -1447,11 +1447,11 @@ static int sde_hw_sspp_get_clk_ctrl_status(struct sde_hw_blk_reg_map *hw,
 }
 
 static void sde_hw_sspp_setup_line_insertion(struct sde_hw_pipe *ctx,
-					     enum sde_sspp_multirect_index rect_index,
-					     struct sde_hw_pipe_line_insertion_cfg *cfg)
+		enum sde_sspp_multirect_index rect_index,
+		struct sde_hw_pipe_line_insertion_cfg *cfg)
 {
 	struct sde_hw_blk_reg_map *c;
-	u32 ctl_off = 0, size_off = 0, ctl_val = 0;
+	u32 ctl_off, size_off, ctl_val;
 	u32 idx;
 
 	if (_sspp_subblk_offset(ctx, SDE_SSPP_SRC, &idx) || !cfg)
@@ -1472,6 +1472,8 @@ static void sde_hw_sspp_setup_line_insertion(struct sde_hw_pipe *ctx,
 			(cfg->dummy_lines << 16) |
 			(cfg->first_active_lines << 8) |
 			(cfg->active_lines);
+	else
+		ctl_val = 0;
 
 	SDE_REG_WRITE(c, ctl_off, ctl_val);
 	SDE_REG_WRITE(c, size_off, cfg->dst_h << 16);
@@ -1571,8 +1573,10 @@ static void _setup_layer_ops(struct sde_hw_pipe *c,
 		c->ops.set_ubwc_stats_roi = sde_hw_sspp_ubwc_stats_set_roi;
 		c->ops.get_ubwc_stats_data = sde_hw_sspp_ubwc_stats_get_data;
 	}
-	if (test_bit(SDE_SSPP_LINE_INSERTION, &features))
+
+	if (test_bit(SDE_SSPP_LINE_INSERTION, &features)) {
 		c->ops.setup_line_insertion = sde_hw_sspp_setup_line_insertion;
+	}
 }
 
 static struct sde_sspp_cfg *_sspp_offset(enum sde_sspp sspp,

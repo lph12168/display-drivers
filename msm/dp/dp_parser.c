@@ -178,29 +178,14 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (!parser->display_type)
 		parser->display_type = "unknown";
 
-	return 0;
-}
+	parser->no_link_rate_reduction = of_property_read_bool(of_node,
+			"qcom,no-link-rate-reduction");
 
-static int dp_parser_msm_hdcp_dev(struct dp_parser *parser)
-{
-	struct device_node *node;
-	struct platform_device *pdev;
+	parser->no_lane_count_reduction = of_property_read_bool(of_node,
+			"qcom,no-lane-count-reduction");
 
-	node = of_find_compatible_node(NULL, NULL, "qcom,msm-hdcp");
-	if (!node) {
-		// This is a non-fatal error, module initialization can proceed
-		DP_WARN("couldn't find msm-hdcp node\n");
-		return 0;
-	}
-
-	pdev = of_find_device_by_node(node);
-	if (!pdev) {
-		// This is a non-fatal error, module initialization can proceed
-		DP_WARN("couldn't find msm-hdcp pdev\n");
-		return 0;
-	}
-
-	parser->msm_hdcp_dev = &pdev->dev;
+	parser->force_connect_mode = of_property_read_bool(of_node,
+			"qcom,dp-force-connect-mode");
 
 	return 0;
 }
@@ -709,12 +694,33 @@ static int dp_parser_catalog(struct dp_parser *parser)
 {
 	int rc;
 	u32 version;
+	const char *st = NULL;
 	struct device *dev = &parser->pdev->dev;
 
 	rc = of_property_read_u32(dev->of_node, "qcom,phy-version", &version);
 
 	if (!rc)
 		parser->hw_cfg.phy_version = version;
+
+	/* phy-mode */
+	rc = of_property_read_string(dev->of_node, "qcom,phy-mode", &st);
+
+	if (!rc) {
+		if (!strcmp(st, "dp"))
+			parser->hw_cfg.phy_mode = DP_PHY_MODE_DP;
+		else if (!strcmp(st, "minidp"))
+			parser->hw_cfg.phy_mode = DP_PHY_MODE_MINIDP;
+		else if (!strcmp(st, "edp"))
+			parser->hw_cfg.phy_mode = DP_PHY_MODE_EDP;
+		else if (!strcmp(st, "edp-highswing"))
+			parser->hw_cfg.phy_mode = DP_PHY_MODE_EDP_HIGH_SWING;
+		else {
+			parser->hw_cfg.phy_mode = DP_PHY_MODE_UNKNOWN;
+			DP_WARN("unknown phy-mode %s\n", st);
+		}
+	} else {
+		parser->hw_cfg.phy_mode = DP_PHY_MODE_UNKNOWN;
+	}
 
 	return 0;
 }
@@ -805,6 +811,29 @@ static void dp_parser_widebus(struct dp_parser *parser)
 			parser->has_widebus);
 }
 
+static void dp_parser_sink_sync(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+
+	parser->hdcp_wait_sink_sync_enabled =
+		of_property_read_bool(dev->of_node,
+			"qcom,hdcp-wait-sink-sync");
+
+	pr_debug("hdcp-wait-sink-sync parsing successful:%d\n",
+			parser->hdcp_wait_sink_sync_enabled);
+}
+
+static void dp_parser_force_encryption(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+
+	parser->has_force_encryption = of_property_read_bool(dev->of_node,
+			"qcom,hdcp-force-encryption");
+
+	pr_debug("hdcp-force-encryption parsing successful:%d\n",
+			parser->has_force_encryption);
+}
+
 static int dp_parser_parse(struct dp_parser *parser)
 {
 	int rc = 0;
@@ -844,10 +873,7 @@ static int dp_parser_parse(struct dp_parser *parser)
 		goto err;
 
 	rc = dp_parser_pinctrl(parser);
-	if (rc)
-		goto err;
 
-	rc = dp_parser_msm_hdcp_dev(parser);
 	if (rc)
 		goto err;
 
@@ -859,6 +885,8 @@ static int dp_parser_parse(struct dp_parser *parser)
 	dp_parser_fec(parser);
 	dp_parser_widebus(parser);
 	dp_parser_qos(parser);
+	dp_parser_force_encryption(parser);
+	dp_parser_sink_sync(parser);
 err:
 	return rc;
 }
@@ -931,7 +959,7 @@ static void dp_parser_clear_io_buf(struct dp_parser *dp_parser)
 	}
 }
 
-struct dp_parser *dp_parser_get(struct platform_device *pdev)
+struct dp_parser *dp_parser_get(struct platform_device *pdev, u32 cell_idx)
 {
 	struct dp_parser *parser;
 
@@ -944,6 +972,7 @@ struct dp_parser *dp_parser_get(struct platform_device *pdev)
 	parser->get_io_buf = dp_parser_get_io_buf;
 	parser->clear_io_buf = dp_parser_clear_io_buf;
 	parser->pdev = pdev;
+	parser->cell_idx = cell_idx;
 
 	return parser;
 }

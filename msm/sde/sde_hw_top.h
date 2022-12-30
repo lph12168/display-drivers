@@ -167,6 +167,14 @@ struct sde_hw_mdp_ops {
 	void (*reset_ubwc)(struct sde_hw_mdp *mdp, struct sde_mdss_cfg *m);
 
 	/**
+	 * intf_dp_select - select phy for DP controller
+	 * @mdp: mdp top context driver
+	 * @dp_intf_sel: intf for each controller
+	 */
+	void (*intf_dp_select)(struct sde_hw_mdp *mdp,
+			u32 dp_intf_sel[DP_CTRL_MAX]);
+
+	/**
 	 * intf_audio_select - select the external interface for audio
 	 * @mdp: mdp top context driver
 	 */

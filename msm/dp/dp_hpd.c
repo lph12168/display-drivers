@@ -65,7 +65,7 @@ struct dp_hpd *dp_hpd_get(struct device *dev, struct dp_parser *parser,
 	}
 
 	if (parser->no_aux_switch) {
-		dp_hpd = dp_gpio_hpd_get(dev, cb);
+		dp_hpd = dp_gpio_hpd_get(dev, parser, cb);
 		if (!IS_ERR_OR_NULL(dp_hpd)) {
 			dp_hpd->type = DP_HPD_GPIO;
 			goto config;

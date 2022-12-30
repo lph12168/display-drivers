@@ -132,6 +132,7 @@ enum dp_phy_aux_config_type {
  * enum dp_phy_version - version of the dp phy
  * @DP_PHY_VERSION_UNKNOWN: Unknown controller version
  * @DP_PHY_VERSION_4_2_0:   DP phy v4.2.0 controller
+ * @DP_PHY_VERSION_5_0_0:   DP phy v5.0.0 controller
  * @DP_PHY_VERSION_6_0_0:   DP phy v6.0.0 controller
  * @DP_PHY_VERSION_MAX:     max version
  */
@@ -139,8 +140,27 @@ enum dp_phy_version {
 	DP_PHY_VERSION_UNKNOWN,
 	DP_PHY_VERSION_2_0_0 = 0x200,
 	DP_PHY_VERSION_4_2_0 = 0x420,
+	DP_PHY_VERSION_5_0_0 = 0x500,
 	DP_PHY_VERSION_6_0_0 = 0x600,
 	DP_PHY_VERSION_MAX
+};
+
+/**
+ * enum dp_phy_mode - mode of the dp phy
+ * @DP_PHY_MODE_UNKNOWN: Unknown PHY mode
+ * @DP_PHY_MODE_DP:      DP PHY mode
+ * @DP_PHY_MODE_MINIDP:  MiniDP PHY mode
+ * @DP_PHY_MODE_EDP:     eDP PHY mode
+ * @DP_PHY_MODE_EDP_HIGH_SWING:   eDP PHY mode, high swing/pre-empahsis
+ * @DP_PHY_MODE_MAX:     max PHY mode
+ */
+enum dp_phy_mode {
+	DP_PHY_MODE_UNKNOWN = 0,
+	DP_PHY_MODE_DP,
+	DP_PHY_MODE_MINIDP,
+	DP_PHY_MODE_EDP,
+	DP_PHY_MODE_EDP_HIGH_SWING,
+	DP_PHY_MODE_MAX
 };
 
 /**
@@ -150,6 +170,7 @@ enum dp_phy_version {
  */
 struct dp_hw_cfg {
 	enum dp_phy_version phy_version;
+	enum dp_phy_mode phy_mode;
 };
 
 static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
@@ -184,10 +205,10 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * struct dp_parser - DP parser's data exposed to clients
  *
  * @pdev: platform data of the client
- * @msm_hdcp_dev: device pointer for the HDCP driver
  * @mp: gpio, regulator and clock related data
  * @pinctrl: pin-control related data
  * @disp_data: controller's display related data
+ * @cell_idx: index of the display
  * @l_pnswap: P/N swap status on each lane
  * @max_pclk_khz: maximum pixel clock supported for the platform
  * @max_lclk_khz: maximum link clock supported for the platform
@@ -200,6 +221,9 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @fec_feature_enable: FEC feature enable status
  * @dsc_continuous_pps: PPS sent every frame by HW
  * @has_widebus: widebus (2PPC) feature eanble status
+ * @no_link_rate_reduction: skip link rate reduction during link training
+ * @no_lane_count_reduction: skip lane count reduction during link training
+ * @force_connect_mode: force dp in connect mode
  * @mst_fixed_port: mst port_num reserved for fixed topology
  * @mst_fixed_display_type: mst display_type reserved for fixed topology
  * @display_type: display type as defined in device tree.
@@ -212,11 +236,11 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  */
 struct dp_parser {
 	struct platform_device *pdev;
-	struct device *msm_hdcp_dev;
 	struct dss_module_power mp[DP_MAX_PM];
 	struct dp_pinctrl pinctrl;
 	struct dp_io io;
 	struct dp_display_data disp_data;
+	u32 cell_idx;
 
 	u8 l_map[4];
 	u8 l_pnswap;
@@ -231,8 +255,13 @@ struct dp_parser {
 	bool fec_feature_enable;
 	bool dsc_continuous_pps;
 	bool has_widebus;
+	bool has_force_encryption;
+	bool hdcp_wait_sink_sync_enabled;
 	bool gpio_aux_switch;
 	bool lphw_hpd;
+	bool no_link_rate_reduction;
+	bool no_lane_count_reduction;
+	bool force_connect_mode;
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
 	u32 pixel_base_off[MAX_DP_MST_STREAMS];
 	u32 qos_cpu_mask;
@@ -265,6 +294,7 @@ enum dp_mainlink_lane_num {
  * dp_parser_get() - get the DP's device tree parser module
  *
  * @pdev: platform data of the client
+ * @cell_idx: index of the DP display
  * return: pointer to dp_parser structure.
  *
  * This function provides client capability to parse the
@@ -272,7 +302,7 @@ enum dp_mainlink_lane_num {
  * related to clock, regulators, pin-control and other
  * can be parsed using this module.
  */
-struct dp_parser *dp_parser_get(struct platform_device *pdev);
+struct dp_parser *dp_parser_get(struct platform_device *pdev, u32 cell_idx);
 
 /**
  * dp_parser_put() - cleans the dp_parser module

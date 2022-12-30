@@ -314,6 +314,8 @@ enum sde_intf {
 	INTF_4,
 	INTF_5,
 	INTF_6,
+	INTF_7,
+	INTF_8,
 	INTF_MAX
 };
 
@@ -409,6 +411,12 @@ enum sde_merge_3d {
 enum sde_qdss {
 	QDSS_0,
 	QDSS_MAX
+};
+
+enum sde_dp_ctrl {
+	DP_CTRL_0,
+	DP_CTRL_1,
+	DP_CTRL_MAX,
 };
 
 /**

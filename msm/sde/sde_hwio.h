@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -51,6 +52,7 @@
 #define MDP_OUT_CTL_0                   0x410
 #define MDP_VSYNC_SEL                   0x414
 #define DCE_SEL                         0x450
+#define DP_PHY_INTF_SEL                 0x460
 
 #define DP_DHDR_MEM_POOL_0_DATA         0x46c
 #define DP_DHDR_MEM_POOL_1_DATA         0x470

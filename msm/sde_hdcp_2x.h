@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_HDCP_2X_H__
@@ -60,6 +61,7 @@ enum sde_hdcp_2x_wakeup_cmd {
  * @HDCP_TRANSPORT_CMD_LINK_POLL:      poll the HDCP link
  * @HDCP_TRANSPORT_CMD_LINK_CHECK:     check link status in response to cp_irq
  * @HDCP_TRANSPORT_CMD_AUTHENTICATE:   start authentication
+ * @HDCP_TRANSPORT_CMD_RX_INFO:        RX Info from repeater
  */
 enum hdcp_transport_wakeup_cmd {
 	HDCP_TRANSPORT_CMD_INVALID,
@@ -70,12 +72,29 @@ enum hdcp_transport_wakeup_cmd {
 	HDCP_TRANSPORT_CMD_LINK_POLL,
 	HDCP_TRANSPORT_CMD_LINK_CHECK,
 	HDCP_TRANSPORT_CMD_AUTHENTICATE,
+	HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION,
+	HDCP_TRANSPORT_CMD_RX_INFO
 };
 
 enum sde_hdcp_2x_device_type {
-	HDCP_TXMTR_HDMI = 0x8001,
-	HDCP_TXMTR_DP = 0x8002,
-	HDCP_TXMTR_DP_MST = 0x8003
+	HDCP_TXMTR_HDMI    = 0x8001,
+	HDCP_TXMTR_DP      = 0x8002,
+	HDCP_TXMTR_DP_MST  = 0x8003,
+	HDCP_TXMTR_DP1     = 0x8004,
+	HDCP_TXMTR_DP1_MST = 0x8005,
+	HDCP_TXMTR_DP2     = 0x8006,
+	HDCP_TXMTR_DP2_MST = 0x8007,
+	HDCP_TXMTR_DP3     = 0x8008,
+	HDCP_TXMTR_DP3_MST = 0x8009,
+	HDCP_TXMTR_DP4     = 0x800A,
+	HDCP_TXMTR_DP4_MST = 0x800B,
+	HDCP_TXMTR_DP5     = 0x800C,
+	HDCP_TXMTR_DP5_MST = 0x800D,
+	HDCP_TXMTR_DP6     = 0x800E,
+	HDCP_TXMTR_DP6_MST = 0x800F,
+	HDCP_TXMTR_DP7     = 0x8010,
+	HDCP_TXMTR_DP7_MST = 0x8011,
+	HDCP_TXMTR_MAX     = 0x8012
 };
 
 /**
@@ -146,7 +165,7 @@ struct hdcp_transport_wakeup_data {
 	u32 transaction_delay;
 	u32 transaction_timeout;
 	u8 abort_mask;
-	const struct sde_hdcp_2x_msg_data *message_data;
+	struct sde_hdcp_2x_msg_data *message_data;
 };
 
 static inline const char *sde_hdcp_2x_cmd_to_str(
@@ -196,6 +215,10 @@ static inline const char *hdcp_transport_cmd_to_str(
 		return TO_STR(HDCP_TRANSPORT_CMD_LINK_POLL);
 	case HDCP_TRANSPORT_CMD_AUTHENTICATE:
 		return TO_STR(HDCP_TRANSPORT_CMD_AUTHENTICATE);
+	case HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION:
+		return TO_STR(HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION);
+	case HDCP_TRANSPORT_CMD_RX_INFO:
+		return TO_STR(HDCP_TRANSPORT_CMD_RX_INFO);
 	default:
 		return "UNKNOWN";
 	}
