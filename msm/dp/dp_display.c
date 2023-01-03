@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2473,15 +2473,13 @@ static int dp_display_post_init(struct dp_display *dp_display)
 
 	if (!dp_display) {
 		DP_ERR("invalid input\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	if (IS_ERR_OR_NULL(dp)) {
 		DP_ERR("invalid params\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	rc = dp_init_sub_modules(dp);
