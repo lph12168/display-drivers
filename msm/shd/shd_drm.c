@@ -248,11 +248,16 @@ static int shd_display_init_base_crtc(struct drm_device *dev, struct shd_display
 		if (connector == base->connector)
 			continue;
 
-		for (i = 0; i < connector->possible_encoders; i++) {
-			encoder = connector->encoder;
-			if (encoder)
-				encoder->possible_crtcs &= ~(1 << crtc_idx);
+		drm_connector_for_each_possible_encoder(connector, encoder)
+			break;
+
+		if (!encoder) {
+			SDE_ERROR("Failed to find an encoder\n");
+			return -ENOENT;
 		}
+
+		encoder->possible_crtcs &= ~(1 << crtc_idx);
+
 	}
 	drm_connector_list_iter_end(&conn_iter);
 
