@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MSM_DRV_HYP_H__
@@ -211,6 +211,10 @@ struct msm_hyp_kms_funcs {
 			struct drm_crtc *crtc);
 	void (*disable_vblank)(struct msm_hyp_kms *kms,
 			struct drm_crtc *crtc);
+
+	void (*free_connector_port_modes)
+			(struct msm_hyp_connector *c_conn);
+
 };
 
 struct msm_hyp_kms {

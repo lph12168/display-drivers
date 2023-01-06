@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright © 2006 Keith Packard
@@ -57,6 +58,7 @@ struct wfd_connector_info_priv {
 	uint32_t mode_count;
 	struct drm_display_mode *modes;
 	char panel_name[PANEL_NAME_LEN];
+	WFDPortMode * port_modes;
 };
 
 struct wfd_plane_info_priv {
