@@ -35,10 +35,8 @@ endif
 ifeq (y, $(findstring y, $(CONFIG_ARCH_SA8155) $(CONFIG_ARCH_SA6155) $(CONFIG_ARCH_SA8195)))
 	include $(DISPLAY_ROOT)/config/augen3disp.conf
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/augen3dispconf.h
-ifneq ( ,$(findstring msmnile_au,$(TARGET_PRODUCT)))
 	include $(DISPLAY_ROOT)/config/hdcp_qseecom.conf
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/hdcp_qseecomconf.h
-endif
 endif
 
 ifeq (y, $(findstring y, $(CONFIG_ARCH_LEMANS)))
