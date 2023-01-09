@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-shd] %s: " fmt, __func__
@@ -1095,6 +1095,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 	dev = display->drm_dev;
 	priv = dev->dev_private;
 
+	priv->shared = true;
 	base = display->base;
 
 	list_for_each_entry(base, &g_base_list, head) {
