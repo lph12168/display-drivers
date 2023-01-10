@@ -178,17 +178,22 @@ static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 
 	timeout = wait_for_completion_timeout(&aux->comp, aux_timeout_ms);
 	if (!timeout) {
-		pr_err("aux %s timeout\n", (aux->read ? "read" : "write"));
+		pr_err("aux %s timeout @ %X %X\n", (aux->read ? "read" : "write"),
+				msg->address, msg->size);
 		return -ETIMEDOUT;
 	}
 
 	if (aux->aux_error_num == DP_AUX_ERR_NONE) {
 		ret = len;
 	} else {
-		pr_err_ratelimited("aux err: %s\n",
-			dp_aux_get_error(aux->aux_error_num));
+		pr_err_ratelimited("aux err: %s %s @ %X %X\n",
+			dp_aux_get_error(aux->aux_error_num),
+			(aux->read ? "read" : "write"), msg->address, msg->size);
 
-		ret = -EINVAL;
+		if (aux->aux_error_num == DP_AUX_ERR_TOUT)
+			ret = -ETIMEDOUT;
+		else
+			ret = -EINVAL;
 	}
 
 	return ret;
