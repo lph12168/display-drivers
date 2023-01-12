@@ -3,7 +3,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  *
  * Copyright (c) 2017-2018,2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1628,9 +1628,11 @@ static void _msm_hyp_prepare_fence(
 		msm_hyp_fence_prepare(c->output_fence);
 
 		/* create output fence */
-		if (cstate->output_fence_ptr)
+		if (cstate->output_fence_ptr) {
 			msm_hyp_fence_create(c->output_fence,
 					cstate->output_fence_ptr, 1);
+			cstate->output_fence_ptr = NULL;
+		}
 
 		drm_connector_list_iter_begin(dev, &conn_iter);
 		drm_for_each_connector_iter(connector, &conn_iter)
@@ -1643,11 +1645,13 @@ static void _msm_hyp_prepare_fence(
 				msm_hyp_fence_prepare(conn->retire_fence);
 
 				/* create retire fence */
-				if (conn_state->retire_fence_ptr)
+				if (conn_state->retire_fence_ptr) {
 					msm_hyp_fence_create(
 						conn->retire_fence,
 						conn_state->retire_fence_ptr,
 						0);
+					conn_state->retire_fence_ptr = NULL;
+				}
 			}
 		drm_connector_list_iter_end(&conn_iter);
 	}
