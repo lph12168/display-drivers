@@ -61,6 +61,7 @@ enum sde_hdcp_2x_wakeup_cmd {
  * @HDCP_TRANSPORT_CMD_LINK_POLL:      poll the HDCP link
  * @HDCP_TRANSPORT_CMD_LINK_CHECK:     check link status in response to cp_irq
  * @HDCP_TRANSPORT_CMD_AUTHENTICATE:   start authentication
+ * @HDCP_TRANSPORT_CMD_RX_INFO:        RX Info from repeater
  */
 enum hdcp_transport_wakeup_cmd {
 	HDCP_TRANSPORT_CMD_INVALID,
@@ -71,6 +72,8 @@ enum hdcp_transport_wakeup_cmd {
 	HDCP_TRANSPORT_CMD_LINK_POLL,
 	HDCP_TRANSPORT_CMD_LINK_CHECK,
 	HDCP_TRANSPORT_CMD_AUTHENTICATE,
+	HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION,
+	HDCP_TRANSPORT_CMD_RX_INFO
 };
 
 enum sde_hdcp_2x_device_type {
@@ -162,7 +165,7 @@ struct hdcp_transport_wakeup_data {
 	u32 transaction_delay;
 	u32 transaction_timeout;
 	u8 abort_mask;
-	const struct sde_hdcp_2x_msg_data *message_data;
+	struct sde_hdcp_2x_msg_data *message_data;
 };
 
 static inline const char *sde_hdcp_2x_cmd_to_str(
@@ -212,6 +215,10 @@ static inline const char *hdcp_transport_cmd_to_str(
 		return TO_STR(HDCP_TRANSPORT_CMD_LINK_POLL);
 	case HDCP_TRANSPORT_CMD_AUTHENTICATE:
 		return TO_STR(HDCP_TRANSPORT_CMD_AUTHENTICATE);
+	case HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION:
+		return TO_STR(HDCP_TRANSPORT_CMD_FORCED_ENCRYPTION);
+	case HDCP_TRANSPORT_CMD_RX_INFO:
+		return TO_STR(HDCP_TRANSPORT_CMD_RX_INFO);
 	default:
 		return "UNKNOWN";
 	}

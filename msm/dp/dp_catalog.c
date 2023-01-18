@@ -2748,6 +2748,7 @@ static void dp_catalog_get_io_buf(struct dp_catalog_private *catalog)
 	dp_catalog_fill_io_buf(dp_phy);
 	dp_catalog_fill_io_buf(dp_ln_tx0);
 	dp_catalog_fill_io_buf(dp_ln_tx1);
+	dp_catalog_fill_io_buf(ahb2phy);
 	dp_catalog_fill_io_buf(dp_pll);
 	dp_catalog_fill_io_buf(usb3_dp_com);
 	dp_catalog_fill_io_buf(dp_mmss_cc);
@@ -2767,6 +2768,7 @@ static void dp_catalog_get_io(struct dp_catalog_private *catalog)
 	dp_catalog_fill_io(dp_phy);
 	dp_catalog_fill_io(dp_ln_tx0);
 	dp_catalog_fill_io(dp_ln_tx1);
+	dp_catalog_fill_io(ahb2phy);
 	dp_catalog_fill_io(dp_pll);
 	dp_catalog_fill_io(usb3_dp_com);
 	dp_catalog_fill_io(dp_mmss_cc);
@@ -2817,7 +2819,9 @@ static int dp_catalog_init(struct device *dev, struct dp_catalog *dp_catalog,
 	struct dp_catalog_private *catalog = container_of(dp_catalog,
 				struct dp_catalog_private, dp_catalog);
 
-	if (parser->hw_cfg.phy_version >= DP_PHY_VERSION_4_2_0)
+	if (parser->hw_cfg.phy_version == DP_PHY_VERSION_5_0_0)
+		dp_catalog->sub = dp_catalog_get_v500(dev, dp_catalog, &catalog->io);
+	else if (parser->hw_cfg.phy_version >= DP_PHY_VERSION_4_2_0)
 		dp_catalog->sub = dp_catalog_get_v420(dev, dp_catalog, &catalog->io);
 	else if (parser->hw_cfg.phy_version == DP_PHY_VERSION_2_0_0)
 		dp_catalog->sub = dp_catalog_get_v200(dev, dp_catalog, &catalog->io);
