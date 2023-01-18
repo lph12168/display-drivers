@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -86,6 +86,30 @@ static const struct drm_prop_enum_list e_panel_mode[] = {
 	{MSM_DISPLAY_MODE_MAX, "none"},
 };
 
+struct dsi_display *_sde_connector_get_display(struct drm_device *dev, struct sde_connector *c_conn)
+{
+	struct dsi_display *display = NULL;
+	struct shd_display *shd_display;
+	struct msm_drm_private *priv;
+
+	if (!dev || !c_conn)
+		return 0;
+
+	priv = dev->dev_private;
+	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI && c_conn->connector_type !=
+		DRM_MODE_CONNECTOR_DisplayPort)
+		return NULL;
+
+	if (c_conn->shared && priv->shared) {
+		shd_display = c_conn->display;
+		display = shd_display->dsi_base;
+	} else {
+		display = (struct dsi_display *)c_conn->display;
+	}
+
+	return display;
+}
+
 static void sde_dimming_bl_notify(struct sde_connector *conn, struct dsi_backlight_config *config)
 {
 	struct drm_event event;
@@ -140,7 +164,10 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 			(bd->props.state & BL_CORE_SUSPENDED))
 		brightness = 0;
 
-	display = (struct dsi_display *) c_conn->display;
+	display = _sde_connector_get_display(sde_kms->dev, c_conn);
+	if (!display)
+		return 0;
+
 	if (brightness > display->panel->bl_config.brightness_max_level)
 		brightness = display->panel->bl_config.brightness_max_level;
 	if (brightness > c_conn->thermal_max_brightness)
@@ -220,7 +247,6 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	struct sde_kms *sde_kms;
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
-	struct shd_display *shd_display;
 
 	sde_kms = sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
@@ -230,13 +256,9 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 		return 0;
 	}
 
-	if (c_conn->shared) {
-		shd_display = c_conn->display;
-		display = shd_display->dsi_base;
-	} else {
-		display = (struct dsi_display *) c_conn->display;
-	}
-
+	display = _sde_connector_get_display(dev, c_conn);
+	if (!display)
+		return 0;
 	bl_config = &display->panel->bl_config;
 
 	if (bl_config->type != DSI_BACKLIGHT_DCS &&
@@ -348,7 +370,9 @@ int sde_connector_register_event(struct drm_connector *connector,
 	/* optionally notify display of event registration */
 	if (c_conn->ops.enable_event && c_conn->display)
 		c_conn->ops.enable_event(connector, event_idx,
-				cb_func != NULL, c_conn->display);
+				cb_func != NULL,
+				_sde_connector_get_display(connector->dev,
+				c_conn));
 	return 0;
 }
 
@@ -709,7 +733,7 @@ static int _sde_connector_update_dimming_bl_lut(struct sde_connector *c_conn,
 		return -EINVAL;
 	}
 
-	dsi_display = c_conn->display;
+	dsi_display = _sde_connector_get_display(c_conn->base.dev, c_conn);
 	if (!dsi_display || !dsi_display->panel) {
 		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
 			dsi_display,
@@ -727,7 +751,7 @@ static int _sde_connector_update_dimming_bl_lut(struct sde_connector *c_conn,
 	bl_config->dimming_bl_lut = msm_property_get_blob(&c_conn->property_info,
 			&c_state->property_state, &sz, CONNECTOR_PROP_DIMMING_BL_LUT);
 	rc = c_conn->ops.set_backlight(&c_conn->base,
-			dsi_display, bl_config->bl_level);
+			c_conn->display, bl_config->bl_level);
 	if (!rc)
 		c_conn->unset_bl_level = 0;
 
@@ -815,7 +839,7 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		return -EINVAL;
 	}
 
-	dsi_display = c_conn->display;
+	dsi_display = _sde_connector_get_display(c_conn->base.dev, c_conn);
 	if (!dsi_display || !dsi_display->panel) {
 		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
 			dsi_display,
@@ -841,7 +865,7 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		bl_config->bl_scale, bl_config->bl_scale_sv,
 		bl_config->bl_level);
 	rc = c_conn->ops.set_backlight(&c_conn->base,
-			dsi_display, bl_config->bl_level);
+			c_conn->display, bl_config->bl_level);
 	if (!rc)
 		sde_dimming_bl_notify(c_conn, bl_config);
 	c_conn->unset_bl_level = 0;
@@ -1025,8 +1049,9 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 		return -EINVAL;
 	}
 
-	display = (struct dsi_display *)c_conn->display;
-
+	display = _sde_connector_get_display(connector->dev, c_conn);
+	if (!display)
+		return 0;
 	/*
 	 * During pre kickoff DCS commands have to have an
 	 * asynchronous wait to avoid an unnecessary stall
@@ -1111,7 +1136,9 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 
 	c_conn = to_sde_connector(connector);
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		display = (struct dsi_display *) c_conn->display;
+		display = _sde_connector_get_display(connector->dev, c_conn);
+		if (!display)
+			return;
 		poms_pending = display->poms_pending;
 	}
 
@@ -1156,8 +1183,11 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	}
 
 	c_conn = to_sde_connector(connector);
-	display = (struct dsi_display *) c_conn->display;
 
+	display = _sde_connector_get_display(connector->dev, c_conn);
+
+	if (!display)
+		return;
 	/*
 	 * Special handling for some panels which need atleast
 	 * one frame to be transferred to GRAM before enabling backlight.
@@ -1190,7 +1220,11 @@ int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
 	}
 
 	c_conn = to_sde_connector(connector);
-	display = (struct dsi_display *) c_conn->display;
+
+	display = _sde_connector_get_display(connector->dev, c_conn);
+
+	if (!display)
+		return 0;
 
 	if (display && c_conn->ops.clk_ctrl)
 		rc = c_conn->ops.clk_ctrl(display->mdp_clk_handle,
@@ -2864,10 +2898,14 @@ int sde_connector_esd_status(struct drm_connector *conn)
 		return ret;
 
 	sde_conn = to_sde_connector(conn);
+
 	if (!sde_conn || !sde_conn->ops.check_status)
 		return ret;
 
-	display = sde_conn->display;
+	display = _sde_connector_get_display(conn->dev, sde_conn);
+
+	if (!display)
+		return 0;
 
 	/* protect this call with ESD status check call */
 	mutex_lock(&sde_conn->lock);
@@ -3152,7 +3190,11 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			DRM_MODE_PROP_IMMUTABLE, CONNECTOR_PROP_MODE_INFO);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = (struct dsi_display *)(display);
+		dsi_display = _sde_connector_get_display(c_conn->base.dev, c_conn);
+
+		if (!dsi_display)
+			return 0;
+
 		if (dsi_display && dsi_display->panel) {
 			msm_property_install_blob(&c_conn->property_info,
 				"dimming_bl_lut", DRM_MODE_PROP_BLOB,
@@ -3356,6 +3398,9 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		goto error_free_conn;
 
 	spin_lock_init(&c_conn->event_lock);
+
+	if (priv->shared)
+		c_conn->shared = priv->shared;
 
 	c_conn->panel = panel;
 	c_conn->connector_type = connector_type;
