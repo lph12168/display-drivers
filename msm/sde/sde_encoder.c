@@ -45,6 +45,7 @@
 #include "sde_encoder_dce.h"
 #include "sde_vm.h"
 #include "sde_fence.h"
+#include "sde_roi_misr_helper.h"
 
 #define SDE_DEBUG_ENC(e, fmt, ...) SDE_DEBUG("enc%d " fmt,\
 		(e) ? (e)->base.base.id : -1, ##__VA_ARGS__)
@@ -1070,6 +1071,15 @@ static int _sde_encoder_atomic_check_reserve(struct drm_encoder *drm_enc,
 		 */
 		if (hweight32(sde_crtc_state->base.encoder_mask) == 1 ||
 				drm_enc->encoder_type != DRM_MODE_ENCODER_VIRTUAL) {
+			ret = sde_roi_misr_get_mode_info(
+					&sde_conn->base,
+					adj_mode,
+					&sde_conn_state->mode_info,
+					&sde_crtc_state->misr_mode_info,
+					sde_conn->display);
+			if (ret)
+				return ret;
+
 			memcpy(&sde_crtc_state->mode_info,
 					&sde_conn_state->mode_info,
 					sizeof(sde_conn_state->mode_info));
@@ -3547,6 +3557,26 @@ static void sde_encoder_vblank_callback(struct drm_encoder *drm_enc,
 	SDE_ATRACE_END("encoder_vblank_callback");
 }
 
+static void sde_encoder_roi_misr_callback(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc = NULL;
+	unsigned long lock_flags;
+
+	if (!drm_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("encoder_roi_misr_callback");
+	sde_enc = to_sde_encoder_virt(drm_enc);
+
+	spin_lock_irqsave(&sde_enc->enc_spinlock, lock_flags);
+	if (sde_enc->misr_data.crtc_roi_misr_cb)
+		sde_enc->misr_data.crtc_roi_misr_cb(
+			sde_enc->misr_data.crtc_roi_misr_cb_data);
+	spin_unlock_irqrestore(&sde_enc->enc_spinlock, lock_flags);
+
+	SDE_ATRACE_END("encoder_roi_misr_callback");
+}
+
 static void sde_encoder_underrun_callback(struct drm_encoder *drm_enc,
 		struct sde_encoder_phys *phy_enc)
 {
@@ -3605,6 +3635,28 @@ void sde_encoder_register_vblank_callback(struct drm_encoder *drm_enc,
 			phys->ops.control_vblank_irq(phys, enable);
 	}
 	sde_enc->vblank_enabled = enable;
+}
+
+void sde_encoder_register_roi_misr_callback(struct drm_encoder *drm_enc,
+		void (*roi_misr_cb)(void *), void *roi_misr_data)
+{
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
+	unsigned long lock_flags;
+	bool enable;
+
+	enable = roi_misr_cb ? true : false;
+
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return;
+	}
+	SDE_DEBUG_ENC(sde_enc, "\n");
+	SDE_EVT32(DRMID(drm_enc), enable);
+
+	spin_lock_irqsave(&sde_enc->enc_spinlock, lock_flags);
+	sde_enc->misr_data.crtc_roi_misr_cb = roi_misr_cb;
+	sde_enc->misr_data.crtc_roi_misr_cb_data = roi_misr_data;
+	spin_unlock_irqrestore(&sde_enc->enc_spinlock, lock_flags);
 }
 
 void sde_encoder_register_frame_event_callback(struct drm_encoder *drm_enc,
@@ -5288,6 +5340,7 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	struct sde_encoder_virt_ops parent_ops = {
 		sde_encoder_vblank_callback,
 		sde_encoder_underrun_callback,
+		sde_encoder_roi_misr_callback,
 		sde_encoder_frame_done_callback,
 		_sde_encoder_get_qsync_fps_callback,
 	};

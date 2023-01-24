@@ -29,6 +29,7 @@
 #include "sde_kms.h"
 #include "sde_connector.h"
 #include "sde_power_handle.h"
+#include "sde_roi_misr.h"
 
 /*
  * Two to anticipate panels that can do cmd/vid dynamic switching
@@ -155,6 +156,7 @@ enum sde_enc_rc_states {
  * @crtc_vblank_cb:	Callback into the upper layer / CRTC for
  *			notification of the VBLANK
  * @crtc_vblank_cb_data:	Data from upper layer for VBLANK notification
+ * @misr_data:		Misr data from the upper layer
  * @crtc_kickoff_cb:		Callback into CRTC that will flush & start
  *				all CTL paths
  * @crtc_kickoff_cb_data:	Opaque user data given to crtc_kickoff_cb
@@ -235,6 +237,8 @@ struct sde_encoder_virt {
 
 	void (*crtc_vblank_cb)(void *data, ktime_t ts);
 	void *crtc_vblank_cb_data;
+
+	struct sde_misr_enc_data misr_data;
 
 	struct dentry *debugfs_root;
 	struct mutex enc_lock;
@@ -317,6 +321,16 @@ void sde_encoder_register_vblank_callback(struct drm_encoder *encoder,
  */
 void sde_encoder_register_frame_event_callback(struct drm_encoder *encoder,
 		void (*cb)(void *, u32, ktime_t), struct drm_crtc *crtc);
+
+/**
+ * sde_encoder_register_roi_misr_callback - provide callback to encoder that
+ *	will be called on the roi misr interrupt be triggered.
+ * @encoder: encoder pointer
+ * @roi_misr_cb: callback pointer, provide NULL to deregister and disable IRQs
+ * @roi_misr_data: user data provided to callback
+ */
+void sde_encoder_register_roi_misr_callback(struct drm_encoder *drm_enc,
+		void (*roi_misr_cb)(void *), void *roi_misr_data);
 
 /**
  * sde_encoder_get_rsc_client - gets the rsc client state for primary

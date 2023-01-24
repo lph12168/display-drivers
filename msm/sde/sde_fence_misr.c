@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -69,7 +70,7 @@ static uint32_t sde_misr_fence_read(struct dma_fence *fence,
 	return copy_len;
 }
 
-const struct sde_fence_file_ops misr_file_ops = {
+static const struct sde_fence_file_ops misr_file_ops = {
 	.read = sde_misr_fence_read,
 };
 
@@ -233,8 +234,10 @@ static inline void sde_misr_fence_cleanup(struct sde_crtc *sde_crtc)
 
 		if (hw_handle && hw_ctl) {
 			hw_handle->ops.reset_roi_misr(hw_handle);
-			hw_ctl->ops.update_bitmask_dsc(hw_ctl,
-					(enum sde_dsc)hw_handle->idx, true);
+			hw_ctl->ops.update_bitmask(hw_ctl,
+					SDE_HW_FLUSH_DSC,
+					hw_handle->idx,
+					true);
 		}
 	}
 	spin_unlock_irqrestore(&sde_crtc->roi_misr_data.misr_lock, flags);

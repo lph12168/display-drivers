@@ -31,6 +31,7 @@
 #include "sde_hw_ds.h"
 #include "sde_color_processing.h"
 #include "sde_encoder.h"
+#include "sde_roi_misr.h"
 
 #define SDE_CRTC_NAME_SIZE	12
 
@@ -105,6 +106,7 @@ struct sde_crtc_retire_event {
  * @hw_ctl:	CTL Path HW driver context
  * @hw_dspp:	DSPP HW driver context
  * @hw_ds:	DS HW driver context
+ * @hw_roi_misr:	ROI_MISR HW driver context
  * @encoder:	Encoder attached to this lm & ctl
  * @mixer_op_mode: mixer blending operation mode
  */
@@ -113,6 +115,7 @@ struct sde_crtc_mixer {
 	struct sde_hw_ctl *hw_ctl;
 	struct sde_hw_dspp *hw_dspp;
 	struct sde_hw_ds *hw_ds;
+	struct sde_hw_roi_misr *hw_roi_misr;
 	struct drm_encoder *encoder;
 	u32 mixer_op_mode;
 };
@@ -349,6 +352,8 @@ enum sde_crtc_hw_fence_flags {
  *                          sde_crtc_hw_fence_flags for available fields.
  * @hwfence_out_fences_skip: number of frames to skip before create a new hw-fence, this can be
  *                   used to slow-down creation of output hw-fences for debugging purposes.
+ * @post_commit_fence_ctx: post-commit fence context of this crtc
+ * @roi_misr_data: roi misr related fence, event and hw config data
  */
 struct sde_crtc {
 	struct drm_crtc base;
@@ -463,6 +468,8 @@ struct sde_crtc {
 	u32 hwfence_out_fences_skip;
 
 	int base_reset;
+	struct sde_post_commit_fence_context post_commit_fence_ctx;
+	struct sde_misr_crtc_data roi_misr_data;
 };
 
 enum sde_crtc_dirty_flags {
@@ -482,6 +489,7 @@ enum sde_crtc_dirty_flags {
  * @rsc_client    : sde rsc client when mode is valid
  * @topology_name : Current topology name
  * @mode_info     : Local copy of msm_mode_info struct
+ * @misr_mode_info: Local copy of sde_roi_misr_mode_info struct
  * @num_mixers    : Number of mixers in current topology
  * @is_ppsplit    : Whether current topology requires PPSplit special handling
  * @bw_control    : true if bw/clk controlled by core bw/clk properties
@@ -516,6 +524,8 @@ enum sde_crtc_dirty_flags {
  * @padding_height: panel height after line padding
  * @padding_active: active lines in panel stacking pattern
  * @padding_dummy: dummy lines in panel stacking pattern
+ * @misr_state: misr config data and current topology state
+ * @post_commit_fence_mask: post-commit fence mask for sub-fence creation
  */
 struct sde_crtc_state {
 	struct drm_crtc_state base;
@@ -529,6 +539,7 @@ struct sde_crtc_state {
 
 	enum sde_rm_topology_name topology_name;
 	struct msm_mode_info mode_info;
+	struct sde_roi_misr_mode_info misr_mode_info;
 	u32 num_mixers;
 	bool is_ppsplit;
 	struct sde_rect crtc_roi;
@@ -563,6 +574,8 @@ struct sde_crtc_state {
 	u32 padding_height;
 	u32 padding_active;
 	u32 padding_dummy;
+	struct sde_misr_state misr_state;
+	uint32_t post_commit_fence_mask;
 };
 
 enum sde_crtc_irq_state {
