@@ -1069,7 +1069,11 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	} else {
 		h_period = dsi_h_total_dce(timing);
 		v_period = DSI_V_TOTAL(timing);
-		bit_rate = h_period * v_period * timing->refresh_rate * bpp;
+
+		if (timing->pixel_clk_hz_override)
+			bit_rate = timing->pixel_clk_hz_override * bpp;
+		else
+			bit_rate = h_period * v_period * timing->refresh_rate * bpp;
 	}
 
 

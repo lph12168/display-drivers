@@ -357,8 +357,8 @@ static void dp_catalog_aux_enable(struct dp_catalog_aux *aux, bool enable)
 		dp_write(DP_AUX_CTRL, aux_ctrl);
 		wmb(); /* make sure AUX module is enabled */
 
-		dp_write(DP_TIMEOUT_COUNT, 0xffff);
-		dp_write(DP_AUX_LIMITS, 0xffff);
+		dp_write(DP_TIMEOUT_COUNT, catalog->parser->aux_timeout);
+		dp_write(DP_AUX_LIMITS, 0xfff0 | catalog->parser->aux_retry_count);
 	} else {
 		aux_ctrl &= ~BIT(0);
 		dp_write(DP_AUX_CTRL, aux_ctrl);

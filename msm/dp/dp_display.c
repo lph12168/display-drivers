@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2473,15 +2473,13 @@ static int dp_display_post_init(struct dp_display *dp_display)
 
 	if (!dp_display) {
 		DP_ERR("invalid input\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	if (IS_ERR_OR_NULL(dp)) {
 		DP_ERR("invalid params\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	rc = dp_init_sub_modules(dp);
@@ -3131,7 +3129,7 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough lm %d %d\n",
 				dp->cell_idx, mode->name, fps,
 				num_lm, num_lm, avail_res->num_lm);
-		return -EPERM;
+		//return -EPERM;
 	} else if (!num_dsc && (num_lm == dual && !num_3dmux)) {
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough 3dmux %d %d\n",
 				dp->cell_idx, mode->name, fps,

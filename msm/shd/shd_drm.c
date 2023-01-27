@@ -248,11 +248,16 @@ static int shd_display_init_base_crtc(struct drm_device *dev, struct shd_display
 		if (connector == base->connector)
 			continue;
 
-		for (i = 0; i < connector->possible_encoders; i++) {
-			encoder = connector->encoder;
-			if (encoder)
-				encoder->possible_crtcs &= ~(1 << crtc_idx);
+		drm_connector_for_each_possible_encoder(connector, encoder)
+			break;
+
+		if (!encoder) {
+			SDE_ERROR("Failed to find an encoder\n");
+			return -ENOENT;
 		}
+
+		encoder->possible_crtcs &= ~(1 << crtc_idx);
+
 	}
 	drm_connector_list_iter_end(&conn_iter);
 
@@ -1378,6 +1383,7 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 	struct device_node *of_node = base->of_node;
 	struct device_node *node = NULL;
 	struct drm_display_mode *mode = &base->mode;
+	u32 hdisplay, vdisplay;
 	u32 h_front_porch, h_pulse_width, h_back_porch;
 	u32 v_front_porch, v_pulse_width, v_back_porch;
 	bool h_active_high, v_active_high;
@@ -1422,7 +1428,7 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 		return 0;
 	}
 
-	rc = of_property_read_u16(node, "qcom,mode-h-active", &mode->hdisplay);
+	rc = of_property_read_u32(node, "qcom,mode-h-active", &hdisplay);
 	if (rc) {
 		SDE_ERROR("failed to read h-active, rc=%d\n", rc);
 		goto fail;
@@ -1448,7 +1454,7 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 
 	h_active_high = of_property_read_bool(node, "qcom,mode-h-active-high");
 
-	rc = of_property_read_u16(node, "qcom,mode-v-active", &mode->vdisplay);
+	rc = of_property_read_u32(node, "qcom,mode-v-active", &vdisplay);
 	if (rc) {
 		SDE_ERROR("failed to read v-active, rc=%d\n", rc);
 		goto fail;
@@ -1485,6 +1491,9 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 	of_property_read_u32(node, "qcom,mode-width-mm", &base->info.width_mm);
 
 	of_property_read_u32(node, "qcom,mode-height-mm", &base->info.height_mm);
+
+	mode->hdisplay = hdisplay;
+	mode->vdisplay = vdisplay;
 
 	mode->hsync_start = mode->hdisplay + h_front_porch;
 	mode->hsync_end = mode->hsync_start + h_pulse_width;
