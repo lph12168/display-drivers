@@ -2,6 +2,11 @@
 
 KDIR := $(TOP)/kernel_platform/msm-kernel
 
+ifeq ($(CONFIG_ARCH_KONA), y)
+	include $(DISPLAY_ROOT)/config/konadisp.conf
+	LINUX_INC +=    -include $(DISPLAY_ROOT)/config/konadispconf.h
+endif
+
 obj-$(CONFIG_DRM_LT9611UXC) += lt9611uxc.o
 
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
