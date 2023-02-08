@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -3423,6 +3423,11 @@ static int _sde_crtc_check_dest_scaler_validate_ds(struct drm_crtc *crtc,
 	struct sde_kms *kms;
 
 	kms = _sde_crtc_get_kms(crtc);
+
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("invalid kms handle\n");
+		return -EINVAL;
+	}
 
 	for (i = 0; i < cstate->num_ds; i++) {
 		cfg = &cstate->ds_cfg[i];

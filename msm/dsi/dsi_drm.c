@@ -73,6 +73,8 @@ static void msm_parse_mode_priv_info(const struct msm_display_mode *msm_mode,
 		dsi_mode->timing.vdc = &dsi_mode->priv_info->vdc;
 		dsi_mode->timing.pclk_scale = dsi_mode->priv_info->pclk_scale;
 		dsi_mode->timing.clk_rate_hz = dsi_mode->priv_info->clk_rate_hz;
+		dsi_mode->timing.pixel_clk_hz_override =
+				dsi_mode->priv_info->pixel_clk_hz_override;
 	}
 
 	if (msm_is_mode_seamless(msm_mode))
