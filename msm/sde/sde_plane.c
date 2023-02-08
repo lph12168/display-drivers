@@ -4503,7 +4503,7 @@ sde_plane_duplicate_state(struct drm_plane *plane)
 	if (pstate->layout_offset) {
 		if (pstate->layout_offset > 0)
 			pstate->base.crtc_x += pstate->layout_offset;
-		pstate->layout = SDE_LAYOUT_NONE;
+		pstate->layout = 0;
 		pstate->layout_offset = 0;
 	}
 

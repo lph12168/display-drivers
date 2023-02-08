@@ -715,7 +715,7 @@ static inline enum sde_3d_blend_mode sde_encoder_helper_get_3d_blend_mode(
 		return BLEND_3D_H_ROW_INT;
 
 	if ((split_role == ENC_ROLE_MASTER || split_role == ENC_ROLE_SLAVE)
-			&& num_lm == 4 && mode_3d)
+			&& (num_lm == 4 || num_lm == 6) && mode_3d)
 		return BLEND_3D_H_ROW_INT;
 
 	return BLEND_3D_NONE;

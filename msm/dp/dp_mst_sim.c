@@ -704,7 +704,7 @@ static int dp_sim_parse_edid_from_node(struct dp_sim_device *sim_dev,
 		0x00, 0x00, 0x00,
 	};
 
-	pr_err("Parsing EDID\n");
+	DP_ERR("Parsing EDID\n");
 
 	rc = of_property_read_u32(node, "qcom,mode-h-active",
 					&hdisplay);

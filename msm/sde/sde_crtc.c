@@ -1563,7 +1563,7 @@ static int pstate_cmp(const void *a, const void *b)
 	struct plane_state *pb = (struct plane_state *)b;
 	int rc = 0;
 	int pa_zpos, pb_zpos;
-	enum sde_layout pa_layout, pb_layout;
+	u32 pa_layout, pb_layout;
 
 	if ((!pa || !pa->sde_pstate) || (!pb || !pb->sde_pstate))
 		return rc;
@@ -1594,7 +1594,7 @@ static int _sde_crtc_validate_src_split_order(struct drm_crtc *crtc,
 		struct plane_state *pstates, int cnt)
 {
 	struct plane_state *prv_pstate, *cur_pstate;
-	enum sde_layout prev_layout, cur_layout;
+	u32 prev_layout, cur_layout;
 	struct sde_rect left_rect, right_rect;
 	struct sde_kms *sde_kms;
 	int32_t left_pid, right_pid;
@@ -1673,7 +1673,7 @@ static void _sde_crtc_set_src_split_order(struct drm_crtc *crtc,
 		struct plane_state *pstates, int cnt)
 {
 	struct plane_state *prv_pstate, *cur_pstate, *nxt_pstate;
-	enum sde_layout prev_layout, cur_layout;
+	u32 prev_layout, cur_layout;
 	struct sde_kms *sde_kms;
 	struct sde_rect left_rect, right_rect;
 	int32_t left_pid, right_pid;
@@ -1693,8 +1693,7 @@ static void _sde_crtc_set_src_split_order(struct drm_crtc *crtc,
 		prv_pstate = (i > 0) ? &pstates[i - 1] : NULL;
 		cur_pstate = &pstates[i];
 		nxt_pstate = ((i + 1) < cnt) ? &pstates[i + 1] : NULL;
-		prev_layout = prv_pstate ? prv_pstate->sde_pstate->layout :
-							SDE_LAYOUT_NONE;
+		prev_layout = prv_pstate ? prv_pstate->sde_pstate->layout : 0;
 		cur_layout = cur_pstate->sde_pstate->layout;
 
 		if ((!prv_pstate) || (prv_pstate->stage != cur_pstate->stage)
@@ -1872,14 +1871,12 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 					pstate->rotation, mode);
 
 			/*
-			 * none or left layout will program to layer mixer
-			 * group 0, right layout will program to layer mixer
-			 * group 1.
+			 * first layout will program to layer mixer group 0,
+			 * second layout will program to layer mixer group 1,
+			 * third layout will program to layer mixer group 2,
+			 * and so on.
 			 */
-			if (pstate->layout <= SDE_LAYOUT_LEFT)
-				layout_idx = 0;
-			else
-				layout_idx = 1;
+			layout_idx = pstate->layout;
 
 			stage_cfg = &sde_crtc->stage_cfg[layout_idx];
 			stage_idx = zpos_cnt[layout_idx][pstate->stage]++;
@@ -5532,7 +5529,6 @@ sec_err:
 static int _sde_crtc_check_secure_conn(struct drm_crtc *crtc,
 		struct drm_crtc_state *state, uint32_t fb_sec)
 {
-
 	bool conn_secure = false, is_wb = false;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
@@ -5770,7 +5766,7 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 	u32 zpos_cnt = 0;
 	struct drm_crtc *crtc;
 	struct sde_kms *kms;
-	enum sde_layout layout;
+	u32 layout;
 
 	crtc = &sde_crtc->base;
 	kms = _sde_crtc_get_kms(crtc);
@@ -5799,7 +5795,7 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 	}
 
 	z_pos = -1;
-	layout = SDE_LAYOUT_NONE;
+	layout = -1;
 	for (i = 0; i < cnt; i++) {
 		/* reset counts at every new blend stage */
 		if (pstates[i].stage != z_pos ||
@@ -5903,8 +5899,16 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	if (!sde_rm_topology_is_group(&kms->rm, crtc_state,
+	if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE))
+		layout_split = crtc_state->mode.hdisplay * 2 / 3;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
 			SDE_RM_TOPOLOGY_GROUP_QUADPIPE))
+		layout_split = crtc_state->mode.hdisplay >> 1;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_SIXPIPE))
+		layout_split = crtc_state->mode.hdisplay / 3;
+	else
 		return 0;
 
 	mode = &crtc->state->adjusted_mode;
@@ -5917,19 +5921,19 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 			continue;
 
 		pstate = to_sde_plane_state(plane_state);
-		layout_split = crtc_width >> 1;
 
-		if (plane_state->crtc_x >= layout_split) {
-			plane_state->crtc_x -= layout_split;
-			pstate->layout_offset = layout_split;
-			pstate->layout = SDE_LAYOUT_RIGHT;
-		} else {
-			pstate->layout_offset = -1;
-			pstate->layout = SDE_LAYOUT_LEFT;
-		}
+		/* update layout based on global coordinate */
+		pstate->layout = plane_state->crtc_x / layout_split;
+		pstate->layout_offset = pstate->layout * layout_split;
+		plane_state->crtc_x -= pstate->layout_offset;
 		SDE_DEBUG("plane%d updated: crtc_x=%d layout=%d\n",
 				DRMID(plane), plane_state->crtc_x,
 				pstate->layout);
+
+		if (pstate->layout >= MAX_LAYOUTS_PER_CRTC) {
+			SDE_ERROR("invalid layout >= %d\n", MAX_LAYOUTS_PER_CRTC);
+			return -E2BIG;
+		}
 
 		/* check layout boundary */
 		if (CHECK_LAYER_BOUNDS(plane_state->crtc_x,

@@ -463,6 +463,17 @@ struct sde_connector_ops {
 	 * @connector: Pointer to drm connector structure
 	 */
 	void (*early_unregister)(struct drm_connector *connector);
+
+	/**
+	 * get_tile_map - get tile mapping information
+	 * @connector: Pointer to drm connector structure
+	 * @display: Pointer to private display structure
+	 * @num_tile: Number of tiles
+	 * @tile_map: Tile indices map
+	 * Returns: Zero on success
+	 */
+	int (*get_tile_map)(struct drm_connector *connector,
+			void *display, int num_tile, int *tile_map);
 };
 
 /**
@@ -1329,5 +1340,15 @@ int sde_connector_esd_status(struct drm_connector *connector);
 
 const char *sde_conn_get_topology_name(struct drm_connector *conn,
 		struct msm_display_topology topology);
+
+/**
+ * get_tile_map - get tile mapping information
+ * @connector: Pointer to drm connector structure
+ * @num_tile: Number of tiles
+ * @tile_map: Pointer to tile indices map
+ * Returns: Zero on success
+ */
+int sde_connector_get_tile_map(struct drm_connector *connector,
+		int num_tile, int *tile_map);
 
 #endif /* _SDE_CONNECTOR_H_ */

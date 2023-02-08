@@ -20,6 +20,7 @@ struct dp_power_private {
 	struct platform_device *pdev;
 	struct clk *pixel_clk_rcg;
 	struct clk *pixel_parent;
+	struct clk *bond_pixel_parent;
 	struct clk *pixel1_clk_rcg;
 	struct clk *link_clk_rcg;
 	struct clk *link_parent;
@@ -282,12 +283,22 @@ static int dp_power_clk_init(struct dp_power_private *power, bool enable)
 			power->link_parent = NULL;
 			goto err_link_parent;
 		}
+
+		power->bond_pixel_parent = devm_clk_get(dev,
+						"bond_pixel_parent");
+		if (IS_ERR(power->bond_pixel_parent)) {
+			DP_DEBUG("Unable to get DP bond pixel RCG parent\n");
+			power->bond_pixel_parent = NULL;
+		}
 	} else {
 		if (power->pixel1_clk_rcg)
 			clk_put(power->pixel1_clk_rcg);
 
 		if (power->pixel_parent)
 			clk_put(power->pixel_parent);
+
+		if (power->bond_pixel_parent)
+			devm_clk_put(dev, power->bond_pixel_parent);
 
 		if (power->xo_clk)
 			clk_put(power->xo_clk);
@@ -480,7 +491,8 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 	} else {
 		if (pm_type == DP_STREAM0_PM || pm_type == DP_STREAM1_PM) {
 			stream_id = pm_type - DP_STREAM0_PM + DP_STREAM_0;
-			dp_power->set_pixel_clk_parent(dp_power, stream_id);
+			dp_power->set_pixel_clk_parent(dp_power, stream_id,
+					DP_PHY_BOND_MODE_NONE);
 		} else if (pm_type == DP_LINK_PM && power->link_clk_rcg
 			&& power->xo_clk) {
 			rc = clk_set_parent(power->link_clk_rcg, power->xo_clk);
@@ -765,7 +777,8 @@ error:
 	return rc;
 }
 
-static int dp_power_set_pixel_clk_parent(struct dp_power *dp_power, u32 strm_id)
+static int dp_power_set_pixel_clk_parent(struct dp_power *dp_power, u32 strm_id,
+			enum dp_phy_bond_mode bond_mode)
 {
 	int rc = 0;
 	struct dp_power_private *power;
@@ -779,7 +792,10 @@ static int dp_power_set_pixel_clk_parent(struct dp_power *dp_power, u32 strm_id)
 	power = container_of(dp_power, struct dp_power_private, dp_power);
 
 	if (strm_id == DP_STREAM_0) {
-		if (power->strm0_clks_on && power->pixel_clk_rcg && power->xo_clk)
+		if (IS_PCLK_BOND_MODE(bond_mode) && power->pixel_clk_rcg
+			&& power->bond_pixel_parent)
+			rc = clk_set_parent(power->pixel_clk_rcg, power->bond_pixel_parent);
+		else if (power->strm0_clks_on && power->pixel_clk_rcg && power->xo_clk)
 			rc = clk_set_parent(power->pixel_clk_rcg, power->xo_clk);
 		else if (power->pixel_clk_rcg && power->pixel_parent)
 			rc = clk_set_parent(power->pixel_clk_rcg, power->pixel_parent);
