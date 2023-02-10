@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -46,6 +46,7 @@ struct dp_display {
 	bool is_sst_connected;
 	bool is_mst_supported;
 	bool dsc_cont_pps;
+	bool is_connected;
 	u32 max_pclk_khz;
 	void *dp_mst_prv_info;
 	u32 max_mixer_count;
@@ -105,6 +106,9 @@ struct dp_display {
 	int (*get_available_dp_resources)(struct dp_display *dp_display,
 			const struct msm_resource_caps_info *avail_res,
 			struct msm_resource_caps_info *max_dp_avail_res);
+	void (*clear_reservation)(struct dp_display *dp, struct dp_panel *panel);
+	int (*get_display_type)(struct dp_display *dp_display,
+			const char **display_type);
 };
 
 void *get_ipc_log_context(void);

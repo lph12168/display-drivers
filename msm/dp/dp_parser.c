@@ -167,6 +167,11 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (rc)
 		parser->max_lclk_khz = DP_MAX_LINK_CLK_KHZ;
 
+	parser->display_type = of_get_property(of_node,
+			"qcom,display-type", NULL);
+	if (!parser->display_type)
+		parser->display_type = "secondary";
+
 	return 0;
 }
 
