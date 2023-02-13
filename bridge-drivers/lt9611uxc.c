@@ -1445,12 +1445,8 @@ static irqreturn_t lt9611_irq_thread_handler(int irq, void *dev_id)
 		if (pdata->cec_hw_support) {
 			/* Unconfigure existing cec physical address */
 			cec_notifier_phys_addr_invalidate(pdata->cec_notifier);
-			cec_queue_pin_hpd_event(pdata->cec_adapter, false, 0);
 		}
 	}
-	if (pdata->cec_hw_support && pdata->hpd_status
-			&& (irq_type & BIT(1)))
-		cec_queue_pin_hpd_event(pdata->cec_adapter, true, 0);
 
 	/*
 	 * If edid interrupted and edid ready,
