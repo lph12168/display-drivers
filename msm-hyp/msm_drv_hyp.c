@@ -1902,6 +1902,26 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	HYP_ATRACE_END(__func__);
 }
 
+static int msm_hyp_atomic_helper_check(struct drm_device *dev,
+		struct drm_atomic_state *state)
+{
+	int i = 0, ret = 0;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+
+	ret = drm_atomic_helper_check(dev, state);
+	if (ret)
+	{
+		DRM_ERROR("drm_atomic_helper_check - failed\n");
+		return ret;
+	}
+
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i)
+		new_crtc_state->no_vblank = true;
+
+	return ret;
+}
+
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 		struct drm_atomic_state *state,
 		bool nonblock)
@@ -1952,7 +1972,7 @@ error:
 
 static const struct drm_mode_config_funcs msm_hyp_mode_config_funcs = {
 	.fb_create = msm_hyp_framebuffer_create,
-	.atomic_check = drm_atomic_helper_check,
+	.atomic_check = msm_hyp_atomic_helper_check,
 	.atomic_commit = msm_hyp_atomic_helper_commit,
 };
 
