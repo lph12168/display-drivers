@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_ROI_MISR_H
 #define _SDE_ROI_MISR_H
 
 #include <drm/sde_drm.h>
-#include "sde_encoder.h"
-#include "sde_hw_roi_misr.h"
-#include "sde_hw_dspp.h"
 #include "sde_fence_post_commit.h"
 
 #define SDE_ROI_MISR_GET_HW_IDX(id) ((id) / ROI_MISR_MAX_ROIS_PER_MISR)
@@ -27,17 +25,23 @@ struct sde_crtc_misr_event {
 };
 
 /**
- * sde_misr_state - sde misr state of current topology
- * @num_misrs: Number of roi misrs in current topology
- * @mixer_width: width of every mixer in current topology
- * @roi_misr_cfg: roi misr configuration from user space
- * @roi_range: misr roi range table
+ * struct sde_roi_misr_mode_info - defines misr related mode info
+ * @num_misrs:		the number of misrs
+ * @mixer_width:	the layer mixer width
+ * @roi_range:		the maximum roi range for misrs
  */
-struct sde_misr_state {
+struct sde_roi_misr_mode_info {
 	u32 num_misrs;
 	u32 mixer_width;
-	struct sde_roi_misr_usr_cfg roi_misr_cfg;
 	struct drm_clip_rect roi_range[ROI_MISR_MAX_ROIS_PER_CRTC];
+};
+
+/**
+ * sde_misr_state - sde misr state of current topology
+ * @roi_misr_cfg: roi misr configuration from user space
+ */
+struct sde_misr_state {
+	struct sde_roi_misr_usr_cfg roi_misr_cfg;
 };
 
 /**

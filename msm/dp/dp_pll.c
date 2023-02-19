@@ -234,6 +234,7 @@ static int dp_pll_driver_probe(struct platform_device *pdev)
 						"qcom,ssc-feature-enable");
 	pll->bonding_en = of_property_read_bool(pdev->dev.of_node,
 						"qcom,bonding-feature-enable");
+	pll->bond_mode = DP_PHY_BOND_MODE_MAX;
 
 	rc = dp_pll_clock_register(pll);
 	if (rc)

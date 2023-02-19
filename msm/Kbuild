@@ -260,5 +260,11 @@ msm_drm-$(CONFIG_DRM_SDE_SHD) += shd/shd_drm.o \
 				 shd/shd_hw.o \
 				 shd/sde_encoder_phys_shd.o
 
+msm_drm-$(CONFIG_DRM_SDE_ROI_MISR) += sde/sde_fence_file.o \
+				sde/sde_fence_helper.o \
+				sde/sde_fence_post_commit.o \
+				sde/sde_fence_misr.o \
+				sde/sde_hw_roi_misr.o \
+				sde/sde_roi_misr.o
 CDEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
 

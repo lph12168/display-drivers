@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -72,6 +72,11 @@ void msm_hdcp_notify_status(struct device *dev,
 {
 	char *envp[2];
 	struct msm_hdcp *hdcp = NULL;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return;
+	}
 
 	hdcp = dev_get_drvdata(dev);
 	if (!hdcp) {

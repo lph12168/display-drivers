@@ -179,6 +179,7 @@ static const u32 dspp_sub_blk_flush_tbl[SDE_DSPP_MAX] = {
 	[SDE_DSPP_DEMURA] = 9,
 	[SDE_DSPP_RC] = 10,
 	[SDE_DSPP_SB] = 31,
+	[SDE_DSPP_ROI_MISR_BYPASS] = 6,
 };
 
 /**

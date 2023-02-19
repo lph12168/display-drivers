@@ -1262,6 +1262,57 @@ int dsi_conn_prepare_commit(void *display,
 	return dsi_display_pre_commit(display, params);
 }
 
+int dsi_conn_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map)
+{
+	struct drm_display_mode *mode;
+	struct dsi_display_mode_priv_info *priv_info = NULL;
+	struct dsi_display *dsi_display = display;
+	struct dsi_display_mode *modes;
+	u32 count;
+	int rc, i;
+
+	if (!connector->encoder || !connector->encoder->crtc || num_tile != 2)
+		return -EINVAL;
+
+	mode = &connector->encoder->crtc->state->adjusted_mode;
+
+	rc = dsi_display_get_mode_count(display, &count);
+	if (rc) {
+		DSI_ERR("failed to get num of modes, rc=%d\n", rc);
+		return -EINVAL;
+	}
+
+	rc = dsi_display_get_modes(dsi_display, &modes);
+	if (rc) {
+		DSI_ERR("failed to get modes, rc=%d\n", rc);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (modes[i].timing.h_active == mode->hdisplay &&
+			modes[i].timing.h_active == mode->vdisplay &&
+			modes[i].timing.refresh_rate == drm_mode_vrefresh(mode) &&
+			(modes[i].timing.clk_rate_hz / 1000) == mode->clock) {
+			priv_info = modes[i].priv_info;
+			break;
+		}
+	}
+
+	if (!priv_info)
+		return -EINVAL;
+
+	/* if no swap is needed */
+	if (!priv_info->swap_intf)
+		return -EINVAL;
+
+	/* dsi only support 2-tile mode */
+	tile_map[0] = 1;
+	tile_map[1] = 0;
+
+	return 0;
+}
+
 void dsi_conn_enable_event(struct drm_connector *connector,
 		uint32_t event_idx, bool enable, void *display)
 {

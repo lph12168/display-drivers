@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DSI_DRM_H_
@@ -179,4 +180,16 @@ void dsi_conn_set_submode_blob_info(struct drm_connector *conn,
  * Return: Qsync min fps rate or -ve error code.
  */
 int dsi_conn_get_qsync_min_fps(struct drm_connector_state *conn_state);
+
+/**
+ * dsi_conn_get_tile_map - callback to get tile map
+ * @connector: Pointer to drm connector structure
+ * @display: Pointer to private display handle
+ * @num_tile: Number of tiles
+ * @tile_map: Pointer to tile indices
+ * Returns: Zero on success
+ */
+int dsi_conn_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map);
+
 #endif /* _DSI_DRM_H_ */

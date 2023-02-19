@@ -75,6 +75,7 @@ struct dp_ctrl_private {
 	bool fec_mode;
 	bool dsc_mode;
 	bool sim_mode;
+	enum dp_phy_bond_mode phy_bond_mode;
 
 	atomic_t aborted;
 
@@ -734,7 +735,7 @@ static int dp_ctrl_enable_link_clock(struct dp_ctrl_private *ctrl)
 	dp_ctrl_set_clock_rate(ctrl, "link_clk_src", type, rate);
 
 	if (ctrl->pll->pll_cfg) {
-		ret = ctrl->pll->pll_cfg(ctrl->pll, rate);
+		ret = ctrl->pll->pll_cfg(ctrl->pll, rate, ctrl->phy_bond_mode);
 		if (ret < 0) {
 			DP_ERR("DP%d DP pll cfg failed\n", ctrl->cell_idx);
 			return ret;
@@ -889,7 +890,7 @@ static int dp_ctrl_enable_stream_clocks(struct dp_ctrl_private *ctrl,
 	char clk_name[32] = "";
 
 	ret = ctrl->power->set_pixel_clk_parent(ctrl->power,
-			dp_panel->stream_id);
+			dp_panel->stream_id, ctrl->phy_bond_mode);
 
 	if (ret)
 		return ret;
@@ -1357,7 +1358,8 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 		return rc;
 	}
 
-	rc = panel->hw_cfg(panel, true);
+	rc = panel->hw_cfg(panel, true,
+			!IS_PCLK_BOND_MODE(ctrl->phy_bond_mode));
 	if (rc)
 		return rc;
 
@@ -1447,7 +1449,8 @@ static void dp_ctrl_stream_off(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 	if (!ctrl->power_on)
 		return;
 
-	panel->hw_cfg(panel, false);
+	panel->hw_cfg(panel, false,
+			!IS_PCLK_BOND_MODE(ctrl->phy_bond_mode));
 
 	dp_ctrl_disable_stream_clocks(ctrl, panel);
 	ctrl->stream_count--;
@@ -1556,6 +1559,21 @@ static void dp_ctrl_set_mst_channel_info(struct dp_ctrl *dp_ctrl,
 	ctrl->mst_ch_info.slot_info[strm].tot_slots = tot_slots;
 }
 
+static void dp_ctrl_set_phy_bond_mode(struct dp_ctrl *dp_ctrl,
+		enum dp_phy_bond_mode mode)
+{
+	struct dp_ctrl_private *ctrl;
+
+	if (!dp_ctrl) {
+		DP_ERR("invalid input\n");
+		return;
+	}
+
+	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
+
+	ctrl->phy_bond_mode = mode;
+}
+
 static void dp_ctrl_isr(struct dp_ctrl *dp_ctrl)
 {
 	struct dp_ctrl_private *ctrl;
@@ -1646,6 +1664,7 @@ struct dp_ctrl *dp_ctrl_get(struct dp_ctrl_in *in)
 	dp_ctrl->stream_pre_off = dp_ctrl_stream_pre_off;
 	dp_ctrl->set_mst_channel_info = dp_ctrl_set_mst_channel_info;
 	dp_ctrl->set_sim_mode = dp_ctrl_set_sim_mode;
+	dp_ctrl->set_phy_bond_mode = dp_ctrl_set_phy_bond_mode;
 
 	return dp_ctrl;
 error:
