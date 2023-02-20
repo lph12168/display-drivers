@@ -2949,7 +2949,7 @@ static int _sde_kms_validate_vm_request(struct drm_atomic_state *state, struct s
 		enum sde_crtc_vm_req vm_req, bool vm_owns_hw)
 {
 	struct drm_crtc *crtc, *active_crtc = NULL, *global_active_crtc = NULL;
-	struct drm_crtc_state *new_cstate, *old_cstate, *active_cstate;
+	struct drm_crtc_state *new_cstate = NULL, *old_cstate = NULL, *active_cstate = NULL;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
 	struct drm_connector_state *new_connstate;
@@ -2959,8 +2959,13 @@ static int _sde_kms_validate_vm_request(struct drm_atomic_state *state, struct s
 	struct dsi_display *dsi_display;
 	uint32_t i, commit_crtc_cnt = 0, global_crtc_cnt = 0;
 	uint32_t crtc_encoder_cnt = 0;
-	enum sde_crtc_idle_pc_state idle_pc_state;
+	enum sde_crtc_idle_pc_state idle_pc_state = IDLE_PC_NONE;
 	int rc = 0;
+
+	if (!vm_ops) {
+		SDE_ERROR("vm_ops is null\n");
+		return -EINVAL;
+	}
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_cstate, new_cstate, i) {
 		struct sde_crtc_state *new_state = NULL;
@@ -4583,7 +4588,14 @@ static void _sde_kms_remove_pm_qos_irq_request(struct sde_kms *sde_kms)
 
 void sde_kms_cpu_vote_for_irq(struct sde_kms *sde_kms, bool enable)
 {
-	struct msm_drm_private *priv = sde_kms->dev->dev_private;
+	struct msm_drm_private *priv;
+
+	if (!sde_kms) {
+		SDE_ERROR("sde_kms is NULL\n");
+		return;
+	}
+
+	priv = sde_kms->dev->dev_private;
 
 	mutex_lock(&priv->phandle.phandle_lock);
 
