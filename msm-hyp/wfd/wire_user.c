@@ -904,6 +904,7 @@ wfdDeviceCommitExt_User(
 	struct wire_device *wire_dev = device;
 	struct wire_port *wire_port = hdl;
 	void *handle = wire_dev->ctx->init_info.context;
+	int retry_times = 0;
 
 	/* Request/Response */
 	WIRE_HEAP struct wire_packet req, resp;
@@ -955,6 +956,7 @@ wfdDeviceCommitExt_User(
 	}
 	HYP_ATRACE_END(marker_buff);
 
+retry:
 	/* reset batch commit */
 	if (wire_port->commit.size) {
 		prep_batch_hdr(&wire_port->commit);
@@ -972,7 +974,13 @@ wfdDeviceCommitExt_User(
 		if (user_os_utils_send_recv(handle, (struct wire_packet *)wire_port->commit.packet,
 				&resp, 0x00)) {
 			WIRE_LOG_ERROR("RPC call failed");
-			goto end;
+
+			retry_times++;
+			if (retry_times >= 3) {
+				panic("wfdDeviceCommit");
+			} else {
+				goto retry;
+			}
 		}
 #endif
 		wire_port->commit.size = 0;
