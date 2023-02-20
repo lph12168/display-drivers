@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/habmm.h>
@@ -415,6 +415,7 @@ user_os_utils_send_recv(
 	u32 num_of_wfd_cmds = 0;
 	enum openwfd_cmd_type wfd_cmd_type = OPENWFD_CMD_MAX;
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
+	unsigned long delay = jiffies + (HZ / 2);
 
 	if (!req || !resp) {
 		UTILS_LOG_ERROR("NULL req(0x%p) or resp(0x%p)",
@@ -506,7 +507,7 @@ user_os_utils_send_recv(
 					"habmm_socket_recv - interrupted system call - retry");
 			}
 		}
-	} while ((-EAGAIN == rc) && (resp_size == 0));
+	} while ((time_before(jiffies, delay)) && (-EAGAIN == rc) && (resp_size == 0));
 
 	HYP_ATRACE_END(marker_buff);
 
@@ -562,6 +563,15 @@ end:
 	if (handle) {
 		if (rel_hab_handle(ctx, chl_id, 0x00))
 			UTILS_LOG_ERROR("rel_hab_handle failed");
+	}
+
+	if ((rc == -1) && (req != NULL))
+	{
+		UTILS_LOG_ERROR("packet receive error\n");
+		print_hex_dump(KERN_INFO, "hdr: ", DUMP_PREFIX_NONE, 16, 1,
+				&req->hdr, sizeof(req->hdr), false);
+		print_hex_dump(KERN_INFO, "req: ", DUMP_PREFIX_NONE, 16, 1,
+				&req->payload, req->hdr.payload_size, false);
 	}
 
 	return rc;
