@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -5299,6 +5299,7 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	phys_params.parent_ops = parent_ops;
 	phys_params.enc_spinlock = &sde_enc->enc_spinlock;
 	phys_params.vblank_ctl_lock = &sde_enc->vblank_ctl_lock;
+	phys_params.vblank_shd_lock = &sde_enc->vblank_shd_lock;
 
 	SDE_DEBUG("\n");
 
@@ -5475,6 +5476,7 @@ struct drm_encoder *sde_encoder_init_with_ops(struct drm_device *dev,
 		sde_enc->ops = *ops;
 
 	mutex_init(&sde_enc->enc_lock);
+	mutex_init(&sde_enc->vblank_shd_lock);
 	ret = sde_encoder_setup_display(sde_enc, sde_kms, disp_info,
 			&drm_enc_mode);
 	if (ret)
