@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -361,7 +361,12 @@ static int edp_config_vco_rate_5nm(struct dp_pll *pll,
 		QSERDES_COM_LOCK_CMP1_MODE0, params->lock_cmp1_mode0);
 	dp_pll_write(dp_pll,
 		QSERDES_COM_LOCK_CMP2_MODE0, params->lock_cmp2_mode0);
-	dp_pll_write(dp_phy, DP_PHY_VCO_DIV, params->phy_vco_div);
+	if (pll->revision == EDP_PLL_5NM)
+		dp_pll_write(dp_phy, DP_PHY_VCO_DIV_5NM_7NM, params->phy_vco_div);
+	else if (pll->revision == EDP_PLL_7NM)
+		dp_pll_write(dp_phy, DP_PHY_VCO_DIV, params->phy_vco_div);
+	else
+		DP_ERR("unsupported pll revision\n");
 	/* Make sure the PLL register writes are done */
 	wmb();
 
@@ -567,6 +572,7 @@ static bool edp_5nm_pll_get_status(struct dp_pll *pll,
 static int edp_pll_enable_5nm(struct dp_pll *pll)
 {
 	int rc = 0;
+	u32 bias_en0, drvr_en0, bias_en1, drvr_en1, phy_cfg_1;
 
 	pll->aux->state &= ~DP_STATE_PLL_LOCKED;
 
@@ -591,6 +597,68 @@ static int edp_pll_enable_5nm(struct dp_pll *pll)
 		rc = -EINVAL;
 		goto lock_err;
 	}
+
+	dp_pll_write(dp_phy, DP_PHY_CFG, 0x19);
+	/* Make sure the PHY register writes are done */
+	wmb();
+
+	if (pll->pll_db.lane_cnt == 1) {
+		bias_en0 = 0x01;
+		bias_en1 = 0x00;
+		drvr_en0 = 0x06;
+		drvr_en1 = 0x07;
+		phy_cfg_1 = 0x01;
+	} else if (pll->pll_db.lane_cnt == 2) {
+		bias_en0 = 0x03;
+		bias_en1 = 0x00;
+		drvr_en0 = 0x04;
+		drvr_en1 = 0x07;
+		phy_cfg_1 = 0x03;
+	} else {
+		bias_en0 = 0x03;
+		bias_en1 = 0x03;
+		drvr_en0 = 0x04;
+		drvr_en1 = 0x04;
+		phy_cfg_1 = 0x0f;
+	}
+
+	dp_pll_write(dp_ln_tx0, TXn_HIGHZ_DRVR_EN, drvr_en0);
+	dp_pll_write(dp_ln_tx0, TXn_TX_POL_INV, 0x00);
+	dp_pll_write(dp_ln_tx1, TXn_HIGHZ_DRVR_EN, drvr_en1);
+	dp_pll_write(dp_ln_tx1, TXn_TX_POL_INV, 0x00);
+	dp_pll_write(dp_ln_tx0, TXn_TX_DRV_LVL_OFFSET, 0x10);
+	dp_pll_write(dp_ln_tx1, TXn_TX_DRV_LVL_OFFSET, 0x10);
+	dp_pll_write(dp_ln_tx0,
+		TXn_RES_CODE_LANE_OFFSET_TX0, 0x11);
+	dp_pll_write(dp_ln_tx0,
+		TXn_RES_CODE_LANE_OFFSET_TX1, 0x11);
+	dp_pll_write(dp_ln_tx1,
+		TXn_RES_CODE_LANE_OFFSET_TX0, 0x11);
+	dp_pll_write(dp_ln_tx1,
+		TXn_RES_CODE_LANE_OFFSET_TX1, 0x11);
+
+	dp_pll_write(dp_ln_tx0, TXn_TX_EMP_POST1_LVL, 0x10);
+	dp_pll_write(dp_ln_tx1, TXn_TX_EMP_POST1_LVL, 0x10);
+	dp_pll_write(dp_ln_tx0, TXn_TX_DRV_LVL, 0x1f);
+	dp_pll_write(dp_ln_tx1, TXn_TX_DRV_LVL, 0x1f);
+
+	/* Make sure the PHY register writes are done */
+	wmb();
+
+	dp_pll_write(dp_ln_tx0, TXn_TRANSCEIVER_BIAS_EN,
+		bias_en0);
+	dp_pll_write(dp_ln_tx1, TXn_TRANSCEIVER_BIAS_EN,
+		bias_en1);
+	dp_pll_write(dp_phy, DP_PHY_CFG_1, phy_cfg_1);
+	dp_pll_write(dp_phy, DP_PHY_TSYNC_OVRD, 0x10);
+
+	if (!edp_5nm_pll_get_status(pll, PHY_READY)) {
+		rc = -EINVAL;
+		goto lock_err;
+	}
+
+	dp_pll_write(dp_phy, DP_PHY_CFG, 0x18);
+	udelay(100);
 
 	dp_pll_write(dp_phy, DP_PHY_CFG, 0x19);
 	/* Make sure the PHY register writes are done */
@@ -762,7 +830,8 @@ static int edp_vco_set_rate_5nm(struct dp_pll *pll, unsigned long rate)
 	return rc;
 }
 
-static int edp_pll_configure(struct dp_pll *pll, unsigned long rate)
+static int edp_pll_configure(struct dp_pll *pll, unsigned long rate,
+		enum dp_phy_bond_mode bond_mode)
 {
 	int rc = 0;
 

@@ -406,6 +406,7 @@ struct dsi_panel_cmd_set {
  * @v_sync_polarity:  Polarity of VSYNC (false is active low).
  * @refresh_rate:     Refresh rate in Hz.
  * @clk_rate_hz:      DSI bit clock rate per lane in Hz.
+ * @pixel_clk_hz_override: Override pixel clock rate in device tree
  * @min_dsi_clk_hz:   Min DSI bit clock to transfer in vsync time.
  * @mdp_transfer_time_us:   Specifies the mdp transfer time for command mode
  *                    panels in microseconds.
@@ -434,6 +435,7 @@ struct dsi_mode_info {
 
 	u32 refresh_rate;
 	u64 clk_rate_hz;
+	u64 pixel_clk_hz_override;
 	u64 min_dsi_clk_hz;
 	u32 mdp_transfer_time_us;
 	u32 dsi_transfer_time_us;
@@ -650,6 +652,7 @@ struct dsi_host_config {
  * @dsi_transfer_time_us: Specifies the dsi transfer time for cmd panels.
  * @qsync_min_fps:        Qsync min fps value for the mode
  * @clk_rate_hz:          DSI bit clock per lane in hz.
+ * @pixel_clk_hz_override: Override pixel clock rate in device tree
  * @min_dsi_clk_hz:       Min dsi clk per lane to transfer frame in vsync time.
  * @bit_clk_list:         List of dynamic bit clock rates supported.
  * @topology:             Topology selected for the panel
@@ -663,6 +666,7 @@ struct dsi_host_config {
  * @widebus_support       48 bit wide data bus is supported by hw
  * @allowed_mode_switch: BIT mask to mark allowed mode switches
  * @disable_rsc_solver: Dynamically disable RSC solver for the timing mode.
+ * @swap_intf:		Swap left/right intfs
  */
 struct dsi_display_mode_priv_info {
 	struct dsi_panel_cmd_set cmd_sets[DSI_CMD_SET_MAX];
@@ -679,6 +683,7 @@ struct dsi_display_mode_priv_info {
 	u32 dsi_transfer_time_us;
 	u32 qsync_min_fps;
 	u64 clk_rate_hz;
+	u64 pixel_clk_hz_override;
 	u64 min_dsi_clk_hz;
 	struct msm_dyn_clk_list bit_clk_list;
 
@@ -693,6 +698,7 @@ struct dsi_display_mode_priv_info {
 	bool widebus_support;
 	u32 allowed_mode_switch;
 	bool disable_rsc_solver;
+	bool swap_intf;
 };
 
 /**

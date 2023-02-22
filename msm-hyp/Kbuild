@@ -3,8 +3,8 @@
 KDIR := $(TOP)/kernel_platform/msm-kernel
 
 ifeq (y, $(findstring y, $(CONFIG_QTI_QUIN_GVM)))
-include $(DISPLAY_ROOT)/config/gvmgen3disp.conf
-LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmgen3dispconf.h
+include $(DISPLAY_ROOT)/config/gvmdisp.conf
+LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmdispconf.h
 endif
 
 LINUX_INC +=    -Iinclude/linux \

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_RM_H__
@@ -27,11 +28,19 @@
 		x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC ||\
 		x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC)
 
+#define TOPOLOGY_TRIPLEPIPE_MODE(x) \
+	(x == SDE_RM_TOPOLOGY_TRIPLEPIPE ||\
+		x == SDE_RM_TOPOLOGY_TRIPLEPIPE_DSC)
+
 #define TOPOLOGY_QUADPIPE_MODE(x) \
 	(x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE)
+
+#define TOPOLOGY_SIXPIPE_MODE(x) \
+	(x == SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE ||\
+		x == SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE)
 
 #define TOPOLOGY_DSC_MODE(x) \
 	(x == SDE_RM_TOPOLOGY_SINGLEPIPE_DSC ||\
@@ -41,6 +50,17 @@
 		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE ||\
 		x == SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE)
+
+#define TOPOLOGY_3DMUX_MODE(x) \
+	(x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE ||\
+		x == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC ||\
+		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE ||\
+		x == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC)
+
+#define TOPOLOGY_DSCMERGE_MODE(x) \
+	(x == SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE ||\
+		x == SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE)
+
 /**
  * enum sde_rm_topology_name - HW resource use case in use by connector
  * @SDE_RM_TOPOLOGY_NONE:                 No topology in use currently
@@ -54,10 +74,14 @@
  * @SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC: 2 LM, 2 PP, 3DMux, 1 VDC, 1 INTF/WB
  * @SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE:    2 LM, 2 PP, 2 DSC Merge, 1 INTF/WB
  * @SDE_RM_TOPOLOGY_PPSPLIT:              1 LM, 2 PPs, 2 INTF/WB
+ * @SDE_RM_TOPOLOGY_TRIPLEPIPE:           3 LM, 3 PP, 3 INTF
+ * @SDE_RM_TOPOLOGY_TRIPLEPIPE_DSC:       3 LM, 3 DSC, 3 PP, 3 INTF
  * @SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE      4 LM, 4 PP, 3DMux, 2 INTF
  * @SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC  4 LM, 4 PP, 3DMux, 3 DSC, 2 INTF
  * @SDE_RM_TOPOLOGY_QUADPIPE_DSCMERE      4 LM, 4 PP, 4 DSC Merge, 2 INTF
  * @SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE  4 LM, 4 PP, 4 DSC Merge, 1 INTF
+ * @SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE       6 LM, 6 PP, 3DMux, 3 INTF
+ * @SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE      6 LM, 6 PP, 6 DSC Merge, 3 INTF
  */
 enum sde_rm_topology_name {
 	SDE_RM_TOPOLOGY_NONE = 0,
@@ -71,10 +95,14 @@ enum sde_rm_topology_name {
 	SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC,
 	SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE,
 	SDE_RM_TOPOLOGY_PPSPLIT,
+	SDE_RM_TOPOLOGY_TRIPLEPIPE,
+	SDE_RM_TOPOLOGY_TRIPLEPIPE_DSC,
 	SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE,
 	SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC,
 	SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE,
 	SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE,
+	SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE,
+	SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE,
 	SDE_RM_TOPOLOGY_MAX,
 };
 
@@ -83,7 +111,9 @@ enum sde_rm_topology_name {
  * @SDE_RM_TOPOLOGY_GROUP_NONE:        No topology group in use currently
  * @SDE_RM_TOPOLOGY_GROUP_SINGLEPIPE:  Any topology that uses 1 LM
  * @SDE_RM_TOPOLOGY_GROUP_DUALPIPE:    Any topology that uses 2 LM
+ * @SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE:  Any topology that uses 3 LM
  * @SDE_RM_TOPOLOGY_GROUP_QUADPIPE:    Any topology that uses 4 LM
+ * @SDE_RM_TOPOLOGY_GROUP_SIXPIPE:     Any topology that uses 6 LM
  * @SDE_RM_TOPOLOGY_GROUP_3DMERGE:     Any topology that uses 3D merge only
  * @SDE_RM_TOPOLOGY_GROUP_3DMERGE_DSC: Any topology that uses 3D merge + DSC
  * @SDE_RM_TOPOLOGY_GROUP_DSCMERGE:    Any topology that uses DSC merge
@@ -92,7 +122,9 @@ enum sde_rm_topology_group {
 	SDE_RM_TOPOLOGY_GROUP_NONE = 0,
 	SDE_RM_TOPOLOGY_GROUP_SINGLEPIPE,
 	SDE_RM_TOPOLOGY_GROUP_DUALPIPE,
+	SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE,
 	SDE_RM_TOPOLOGY_GROUP_QUADPIPE,
+	SDE_RM_TOPOLOGY_GROUP_SIXPIPE,
 	SDE_RM_TOPOLOGY_GROUP_3DMERGE,
 	SDE_RM_TOPOLOGY_GROUP_3DMERGE_DSC,
 	SDE_RM_TOPOLOGY_GROUP_DSCMERGE,
@@ -224,6 +256,16 @@ struct sde_rm_hw_request {
  */
 enum sde_rm_topology_name sde_rm_get_topology_name(struct sde_rm *rm,
 		struct msm_display_topology topology);
+
+/**
+ * sde_rm_get_roi_misr_num - get the number of roi misr with
+ *                           the given drm_connector
+ * @rm: SDE Resource Manager handle
+ * @topology: topology name
+ * @Return: the number of roi misrs
+ */
+int sde_rm_get_roi_misr_num(struct sde_rm *rm,
+		enum sde_rm_topology_name topology);
 
 /**
  * sde_rm_debugfs_init - setup debugfs node for rm module

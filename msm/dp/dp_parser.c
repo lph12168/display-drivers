@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -99,6 +99,7 @@ static int dp_parser_aux(struct dp_parser *parser)
 	int len = 0, i = 0, j = 0, config_count = 0;
 	const char *data;
 	int const minimum_config_count = 1;
+	int rc = 0;
 
 	for (i = 0; i < PHY_AUX_CFG_MAX; i++) {
 		const char *property = dp_get_phy_aux_config_property(i);
@@ -131,7 +132,24 @@ static int dp_parser_aux(struct dp_parser *parser)
 					parser->aux_cfg[i].lut[j - 1]);
 		}
 	}
-		return 0;
+
+	rc = of_property_read_u32(of_node,
+			"qcom,dp-aux-timeout-us", &parser->aux_timeout);
+	if (rc)
+		parser->aux_timeout = 500;	// DP 1.4 spec = 400us
+	// Convert to 19.2MHz AUX clk ticks, cap to 20bits
+	parser->aux_timeout = parser->aux_timeout * 192 / 10;
+	if (parser->aux_timeout > 0xfffff)
+		parser->aux_timeout = 0xfffff;
+
+	rc = of_property_read_u32(of_node,
+			"qcom,dp-aux-retry", &parser->aux_retry_count);
+	if (rc)
+		parser->aux_retry_count = 15;
+	if (parser->aux_retry_count >= 15)
+		parser->aux_retry_count = 15;
+
+	return 0;
 
 error:
 	dp_parser_phy_aux_cfg_reset(parser);
@@ -183,6 +201,9 @@ static int dp_parser_misc(struct dp_parser *parser)
 
 	parser->no_lane_count_reduction = of_property_read_bool(of_node,
 			"qcom,no-lane-count-reduction");
+
+	parser->force_bond_mode = of_property_read_bool(of_node,
+			"qcom,dp-force-bond-mode");
 
 	parser->force_connect_mode = of_property_read_bool(of_node,
 			"qcom,dp-force-connect-mode");
@@ -834,6 +855,54 @@ static void dp_parser_force_encryption(struct dp_parser *parser)
 			parser->has_force_encryption);
 }
 
+static int dp_parser_bond(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+	int count, i, j;
+	int rc = -EINVAL;
+	struct {
+		const char *name;
+		enum dp_bond_type type;
+	} static const bond_types[] =
+	{
+		{ "qcom,bond-dual-ctrl-phy", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-dual-ctrl-pclk", DP_BOND_DUAL_PCLK },
+		{ "qcom,bond-tri-ctrl-phy", DP_BOND_TRIPLE_PHY },
+		{ "qcom,bond-tri-ctrl-pclk", DP_BOND_TRIPLE_PCLK },
+		/* for backward compatiblity */
+		{ "qcom,bond-dual-ctrl", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-tri-ctrl", DP_BOND_TRIPLE_PCLK },
+	};
+
+	for (j = 0; j < ARRAY_SIZE(bond_types); j++) {
+		count = of_property_count_u32_elems(dev->of_node,
+				bond_types[j].name);
+		if (count > 0) {
+			if (count != num_bond_dp[bond_types[j].type]) {
+				DP_WARN("%s bond ctrl num doesn't match %d:%d\n",
+						bond_types[j].name, count,
+						num_bond_dp[bond_types[j].type]);
+				continue;
+			}
+			for (i = 0; i < num_bond_dp[bond_types[j].type]; i++) {
+				rc = of_property_read_u32_index(dev->of_node,
+					bond_types[j].name, i,
+					&parser->bond_cfg[bond_types[j].type].ctrl[i]);
+				if (rc) {
+					DP_WARN("failed to read bond index %d\n", i);
+					break;
+				}
+			}
+			if (!rc) {
+				parser->bond_cfg[bond_types[j].type].enable = true;
+				DP_DEBUG("bond type %d enabled\n", bond_types[j].type);
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int dp_parser_parse(struct dp_parser *parser)
 {
 	int rc = 0;
@@ -878,6 +947,10 @@ static int dp_parser_parse(struct dp_parser *parser)
 		goto err;
 
 	rc = dp_parser_mst(parser);
+	if (rc)
+		goto err;
+
+	rc = dp_parser_bond(parser);
 	if (rc)
 		goto err;
 

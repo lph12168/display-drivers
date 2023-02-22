@@ -3,7 +3,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  *
  * Copyright (c) 2017-2018,2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -877,15 +877,40 @@ static int msm_hyp_crtc_get_property(
 	return ret;
 }
 
+static int msm_hyp_enable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->enable_vblank)
+		kms->funcs->enable_vblank(kms, crtc);
+
+	return 0;
+}
+
+static void msm_hyp_disable_vblank(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->disable_vblank)
+		kms->funcs->disable_vblank(kms, crtc);
+}
+
 static const struct drm_crtc_funcs msm_hyp_crtc_funcs = {
-	.set_config = drm_atomic_helper_set_config,
-	.destroy = msm_hyp_crtc_destroy,
-	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_set_property = msm_hyp_crtc_set_property,
-	.atomic_get_property = msm_hyp_crtc_get_property,
-	.reset = msm_hyp_crtc_reset,
+	.set_config             = drm_atomic_helper_set_config,
+	.destroy                = msm_hyp_crtc_destroy,
+	.page_flip              = drm_atomic_helper_page_flip,
+	.atomic_set_property    = msm_hyp_crtc_set_property,
+	.atomic_get_property    = msm_hyp_crtc_get_property,
+	.reset                  = msm_hyp_crtc_reset,
 	.atomic_duplicate_state = msm_hyp_crtc_duplicate_state,
-	.atomic_destroy_state = msm_hyp_crtc_destroy_state,
+	.atomic_destroy_state   = msm_hyp_crtc_destroy_state,
+	.enable_vblank          = msm_hyp_enable_vblank,
+	.disable_vblank         = msm_hyp_disable_vblank,
+
 };
 
 static int _msm_hyp_crtc_init_caps(struct msm_hyp_crtc *crtc)
@@ -1470,6 +1495,23 @@ static const struct drm_framebuffer_funcs msm_hyp_framebuffer_funcs = {
 	.destroy = msm_hyp_framebuffer_destroy,
 };
 
+static int msm_hyp_shmem_sync_sg_for_device(struct drm_gem_object *obj)
+{
+	struct sg_table *sgt;
+
+	if (obj->import_attach)
+		return 0;
+
+	sgt = drm_gem_shmem_get_pages_sgt(obj);
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	dma_sync_sg_for_device(obj->dev->dev, sgt->sgl,
+			sgt->nents, DMA_BIDIRECTIONAL);
+
+	return 0;
+}
+
 static struct drm_framebuffer *msm_hyp_framebuffer_create(
 		struct drm_device *dev, struct drm_file *file,
 		const struct drm_mode_fb_cmd2 *mode_cmd)
@@ -1488,6 +1530,12 @@ static struct drm_framebuffer *msm_hyp_framebuffer_create(
 	if (IS_ERR_OR_NULL(bo)) {
 		DRM_ERROR("failed to find gem bo %d\n", mode_cmd->handles[0]);
 		return ERR_PTR(-EINVAL);
+	}
+
+	ret = msm_hyp_shmem_sync_sg_for_device(bo);
+	if (ret) {
+		DRM_ERROR("failed to do dumb buffer sync\n");
+		return ERR_PTR(ret);
 	}
 
 	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
@@ -1580,9 +1628,11 @@ static void _msm_hyp_prepare_fence(
 		msm_hyp_fence_prepare(c->output_fence);
 
 		/* create output fence */
-		if (cstate->output_fence_ptr)
+		if (cstate->output_fence_ptr) {
 			msm_hyp_fence_create(c->output_fence,
 					cstate->output_fence_ptr, 1);
+			cstate->output_fence_ptr = NULL;
+		}
 
 		drm_connector_list_iter_begin(dev, &conn_iter);
 		drm_for_each_connector_iter(connector, &conn_iter)
@@ -1595,11 +1645,13 @@ static void _msm_hyp_prepare_fence(
 				msm_hyp_fence_prepare(conn->retire_fence);
 
 				/* create retire fence */
-				if (conn_state->retire_fence_ptr)
+				if (conn_state->retire_fence_ptr) {
 					msm_hyp_fence_create(
 						conn->retire_fence,
 						conn_state->retire_fence_ptr,
 						0);
+					conn_state->retire_fence_ptr = NULL;
+				}
 			}
 		drm_connector_list_iter_end(&conn_iter);
 	}
@@ -1850,6 +1902,26 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	HYP_ATRACE_END(__func__);
 }
 
+static int msm_hyp_atomic_helper_check(struct drm_device *dev,
+		struct drm_atomic_state *state)
+{
+	int i = 0, ret = 0;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+
+	ret = drm_atomic_helper_check(dev, state);
+	if (ret)
+	{
+		DRM_ERROR("drm_atomic_helper_check - failed\n");
+		return ret;
+	}
+
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i)
+		new_crtc_state->no_vblank = true;
+
+	return ret;
+}
+
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 		struct drm_atomic_state *state,
 		bool nonblock)
@@ -1900,7 +1972,7 @@ error:
 
 static const struct drm_mode_config_funcs msm_hyp_mode_config_funcs = {
 	.fb_create = msm_hyp_framebuffer_create,
-	.atomic_check = drm_atomic_helper_check,
+	.atomic_check = msm_hyp_atomic_helper_check,
 	.atomic_commit = msm_hyp_atomic_helper_commit,
 };
 
@@ -2063,22 +2135,7 @@ static const struct drm_ioctl_desc msm_hyp_ioctls[] = {
 			DRM_RENDER_ALLOW),
 };
 
-static int msm_hyp_gem_shmem_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-	int ret;
-
-	ret = drm_gem_mmap(filp, vma);
-	if (ret)
-	{
-		pr_err("drm_gem_mmap failed! ret = %d", ret);
-		return ret;
-	}
-
-    ret = drm_gem_shmem_mmap(vma->vm_private_data, vma);
-	return ret;
-}
-
-DEFINE_DRM_GEM_SHMEM_FOPS(fops);
+DEFINE_DRM_GEM_FOPS(fops);
 
 static struct drm_driver msm_hyp_driver = {
 	.driver_features    = DRIVER_GEM |

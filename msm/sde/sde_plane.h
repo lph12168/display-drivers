@@ -100,21 +100,6 @@ struct sde_plane {
 #define to_sde_plane(x) container_of(x, struct sde_plane, base)
 
 /**
- * enum sde_layout
- * Describes SSPP to LM staging layout when using more than 1 pair of LMs
- * @SDE_LAYOUT_NONE    : SSPPs to LMs staging layout not enabled
- * @SDE_LAYOUT_LEFT    : SSPPs will be staged on left two LMs
- * @SDE_LAYOUT_RIGHT   : SSPPs will be staged on right two LMs
- * @SDE_LAYOUT_MAX     :
- */
-enum sde_layout {
-	SDE_LAYOUT_NONE = 0,
-	SDE_LAYOUT_LEFT,
-	SDE_LAYOUT_RIGHT,
-	SDE_LAYOUT_MAX,
-};
-
-/**
  * enum sde_plane_sclcheck_state - User scaler data status
  *
  * @SDE_PLANE_SCLCHECK_NONE: No user data provided
@@ -180,7 +165,7 @@ struct sde_plane_state {
 	bool defer_prepare_fb;
 	uint32_t pipe_order_flags;
 	int layout_offset;
-	enum sde_layout layout;
+	u32 layout;
 
 	/* scaler configuration */
 	struct sde_hw_scaler3_cfg scaler3_cfg;
