@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2808,7 +2808,7 @@ end:
 }
 
 static void _sde_rm_commit_rsvp(struct sde_rm *rm, struct sde_rm_rsvp *rsvp,
-		struct drm_connector_state *conn_state)
+		struct drm_connector_state *conn_state, bool next)
 {
 	struct sde_rm_hw_blk *blk;
 	enum sde_hw_blk_type type;
@@ -2826,7 +2826,8 @@ static void _sde_rm_commit_rsvp(struct sde_rm *rm, struct sde_rm_rsvp *rsvp,
 		}
 	}
 
-	rsvp->pending = false;
+	if (!next)
+		rsvp->pending = false;
 	SDE_DEBUG("rsrv enc %d topology %d\n", rsvp->enc_id, rsvp->topology);
 	SDE_EVT32(rsvp->enc_id, rsvp->topology);
 }
@@ -2993,7 +2994,7 @@ int sde_rm_reserve(
 		 */
 		SDE_DEBUG("test_only: rsvp[s%de%d]\n",
 				rsvp_nxt->seq, rsvp_nxt->enc_id);
-		_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
+		_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state, true);
 		goto end;
 	} else {
 		if (test_only && RM_RQ_LOCK(&reqs))
@@ -3003,7 +3004,7 @@ int sde_rm_reserve(
 
 commit_rsvp:
 	_sde_rm_release_rsvp(rm, rsvp_cur, conn_state->connector);
-	_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state);
+	_sde_rm_commit_rsvp(rm, rsvp_nxt, conn_state, false);
 
 end:
 	kfree(comp_info);
