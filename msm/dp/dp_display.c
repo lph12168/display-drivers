@@ -3170,11 +3170,11 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough 3dmux %d %d\n",
 				dp->cell_idx, mode->name, fps,
 				num_3dmux, avail_res->num_3dmux);
-		//return -EPERM;
+		return -EPERM;
 	} else if (num_lm == quad && num_dsc != quad)  {
 		DP_DEBUG("DP%d mode %sx%d is invalid, unsupported DP topology lm:%d dsc:%d\n",
 				dp->cell_idx, mode->name, fps, num_lm, num_dsc);
-		//return -EPERM;
+		return -EPERM;
 	}
 
 	DP_DEBUG("DP%d mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
