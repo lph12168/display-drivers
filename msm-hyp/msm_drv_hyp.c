@@ -397,6 +397,12 @@ static const struct drm_connector_helper_funcs msm_hyp_connector_helper = {
 static void msm_hyp_connector_destroy(struct drm_connector *connector)
 {
 	struct msm_hyp_connector *c_conn = to_msm_hyp_connector(connector);
+	struct drm_device *dev = connector->dev;
+	struct msm_hyp_drm_private *priv = dev->dev_private;
+	struct msm_hyp_kms *kms = priv->kms;
+
+	if (kms->funcs && kms->funcs->free_connector_port_modes)
+		kms->funcs->free_connector_port_modes(c_conn);
 
 	if (c_conn->blob_caps)
 		drm_property_blob_put(c_conn->blob_caps);
