@@ -182,6 +182,7 @@ enum msm_mdp_crtc_property {
 	CRTC_PROP_SECURITY_LEVEL,
 	CRTC_PROP_DEST_SCALER,
 	CRTC_PROP_CAPTURE_OUTPUT,
+	CRTC_PROP_ROI_MISR,
 
 	CRTC_PROP_IDLE_PC_STATE,
 	CRTC_PROP_CACHE_STATE,
@@ -246,7 +247,7 @@ enum msm_mdp_conn_property {
 };
 
 #define MSM_GPU_MAX_RINGS 4
-#define MAX_H_TILES_PER_DISPLAY 2
+#define MAX_H_TILES_PER_DISPLAY 3
 
 /**
  * enum msm_display_compression_type - compression method used for pixel stream

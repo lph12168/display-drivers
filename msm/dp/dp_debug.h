@@ -81,6 +81,7 @@ struct dp_debug {
 	int mst_sim_remove_con_id;
 	unsigned long connect_notification_delay_ms;
 	u32 disconnect_delay_ms;
+	bool force_bond_mode;
 
 	void (*abort)(struct dp_debug *dp_debug);
 	void (*set_mst_con)(struct dp_debug *dp_debug, int con_id);

@@ -144,6 +144,28 @@ int dp_connnector_set_info_blob(struct drm_connector *connector,
 		void *info, void *display, struct msm_mode_info *mode_info);
 
 /**
+ * dp_connector_atomic_best_encoder - callback to select best encoder
+ * @connector: Pointer to drm connector structure
+ * @display: Pointer to private display handle
+ * @state: Pointer to connector state
+ * Returns: Pointer of encoder, NULL if failed
+ */
+struct drm_encoder *dp_connector_atomic_best_encoder(
+		struct drm_connector *connector, void *display,
+		struct drm_connector_state *state);
+
+/**
+ * dp_connector_get_tile_map - callback to get tile map
+ * @connector: Pointer to drm connector structure
+ * @display: Pointer to private display handle
+ * @num_tile: Number of tiles
+ * @tile_map: Pointer to tile indices
+ * Returns: Zero on success
+ */
+int dp_connector_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map);
+
+/**
  * dp_drm_bridge_init- drm dp bridge initialize
  * @display: Pointer to private display structure
  * @encoder: encoder for this dp bridge
@@ -154,6 +176,11 @@ int dp_drm_bridge_init(void *display, struct drm_encoder *encoder,
 	u32 max_mixer_count, u32 max_dsc_count);
 
 void dp_drm_bridge_deinit(void *display);
+
+int dp_drm_bond_bridge_init(void *display,
+	struct drm_encoder *encoder,
+	enum dp_bond_type type,
+	struct dp_display_bond_displays *bond_displays);
 
 /**
  * convert_to_drm_mode - convert dp mode to drm mode
@@ -250,6 +277,12 @@ static inline void dp_connector_post_open(struct drm_connector *connector,
 
 static inline int dp_connnector_set_info_blob(struct drm_connector *connector,
 		void *info, void *display, struct msm_mode_info *mode_info)
+{
+	return 0;
+}
+
+int dp_connector_get_tile_map(struct drm_connector *connector,
+		void *display, int num_tile, int *tile_map)
 {
 	return 0;
 }

@@ -26,6 +26,11 @@ struct dp_display_info {
 	u32 stream_cnt;
 };
 
+struct dp_display_bond_displays {
+	void *dp_display[MAX_DP_BOND_NUM];
+	u32 dp_display_num;
+};
+
 struct dp_mst_drm_cbs {
 	void (*hpd)(void *display, bool hpd_status);
 	void (*hpd_irq)(void *display);
@@ -58,6 +63,8 @@ struct dp_display {
 	void *dp_mst_prv_info;
 	u32 max_mixer_count;
 	u32 max_dsc_count;
+	void *dp_bond_prv_info;
+	bool force_bond_mode;
 
 	int (*enable)(struct dp_display *dp_display, void *panel);
 	int (*post_enable)(struct dp_display *dp_display, void *panel);
@@ -117,13 +124,19 @@ struct dp_display {
 	int (*mst_get_fixed_topology_display_type)(
 			struct dp_display *dp_display, u32 strm_id,
 			const char **display_type);
+	int (*set_phy_bond_mode)(struct dp_display *dp_display,
+			enum dp_phy_bond_mode mode,
+			struct drm_connector *primary_connector);
 };
 
 #if IS_ENABLED(CONFIG_DRM_MSM_DP)
 int dp_display_get_num_of_displays(struct drm_device *dev);
 int dp_display_get_displays(struct drm_device *dev, void **displays, int count);
 int dp_display_get_num_of_streams(struct drm_device *dev);
+int dp_display_get_num_of_bonds(void *dp_display);
 int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info);
+int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
+		struct dp_display_bond_displays *dp_bond_info);
 int dp_display_mmrm_callback(struct mmrm_client_notifier_data *notifier_data);
 #else
 static inline int dp_display_get_num_of_displays(struct drm_device *dev)
@@ -144,6 +157,15 @@ static inline int dp_connector_update_pps(struct drm_connector *connector,
 	return 0;
 }
 static inline int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info)
+{
+	return 0;
+}
+static int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info)
+{
+	return 0;
+}
+static int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
+		struct dp_display_bond_displays *dp_bond_info)
 {
 	return 0;
 }

@@ -569,7 +569,8 @@ static int dp_regulator_enable_4nm(struct dp_parser *parser,
 	return rc;
 }
 
-static int dp_pll_configure(struct dp_pll *pll, unsigned long rate)
+static int dp_pll_configure(struct dp_pll *pll, unsigned long rate,
+		enum dp_phy_bond_mode bond_mode)
 {
 	int rc = 0;
 
@@ -590,6 +591,8 @@ static int dp_pll_configure(struct dp_pll *pll, unsigned long rate)
 		rate = DP_VCO_HSCLK_RATE_8100MHZDIV1000;
 
 	pll->vco_rate = rate;
+	pll->bond_mode = bond_mode;
+
 	rc = dp_vco_set_rate_4nm(pll, rate);
 	if (rc < 0) {
 		DP_ERR("pll rate %s set failed\n", rate);

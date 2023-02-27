@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -705,7 +705,7 @@ static int shp_parse(struct shp_device *shp)
 				parent->plane->possible_crtcs, 0);
 
 		if (!plane) {
-			SDE_ERROR("failed to init plane %d\n", plane->index);
+			SDE_ERROR("failed to init plane\n");
 			rc = -EINVAL;
 			goto out;
 		}
@@ -746,7 +746,7 @@ static int shp_parse(struct shp_device *shp)
 				parent->plane->possible_crtcs, plane->base.id);
 
 		if (!plane) {
-			SDE_ERROR("failed to init plane %d\n", plane->index);
+			SDE_ERROR("failed to init plane\n");
 			rc = -EINVAL;
 			goto out;
 		}
@@ -861,7 +861,7 @@ static int sde_shp_bind(struct device *dev, struct device *master,
 {
 	int rc = 0;
 	struct shp_device *shp_dev;
-	struct drm_device *drm;
+	struct drm_device *drm = NULL;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_drm_private *priv;
 
@@ -873,8 +873,10 @@ static int sde_shp_bind(struct device *dev, struct device *master,
 	}
 
 	drm = dev_get_drvdata(master);
+	if (drm)
+		priv = drm->dev_private;
+
 	shp_dev = platform_get_drvdata(pdev);
-	priv = drm->dev_private;
 	if (!drm || !shp_dev || !priv) {
 		pr_err("invalid param(s), drm %pK, shp_dev %pK, priv %pK\n",
 				drm, shp_dev, priv);
@@ -918,7 +920,7 @@ end:
 static void sde_shp_unbind(struct device *dev, struct device *master,
 		void *data)
 {
-	struct drm_device *drm;
+	struct drm_device *drm = NULL;
 	struct shp_device *shp_dev;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_drm_private *priv;
@@ -929,7 +931,9 @@ static void sde_shp_unbind(struct device *dev, struct device *master,
 	}
 
 	drm = dev_get_drvdata(master);
-	priv = drm->dev_private;
+	if (drm)
+		priv = drm->dev_private;
+
 	shp_dev = platform_get_drvdata(pdev);
 	if (!drm || !priv || !shp_dev) {
 		pr_err("invalid param");

@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <drm/drm_encoder.h>
+#include "sde_encoder.h"
+#include "sde_hw_roi_misr.h"
+#include "sde_hw_dspp.h"
 #include "sde_trace.h"
 #include "sde_core_irq.h"
 #include "sde_roi_misr.h"
 #include "sde_roi_misr_helper.h"
 #include "sde_fence_misr.h"
+#include "msm_drv.h"
 
 static void sde_roi_misr_work(struct kthread_work *work);
 
@@ -129,17 +134,174 @@ int sde_roi_misr_cfg_set(struct drm_crtc_state *state,
 	return 0;
 }
 
-static int sde_roi_misr_cfg_check(struct sde_crtc_state *cstate)
+int sde_roi_misr_get_mode_info(struct drm_connector *connector,
+		const struct drm_display_mode *drm_mode,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display)
 {
+	struct sde_connector *sde_conn = NULL;
+	struct msm_drm_private *priv;
+	struct sde_kms *sde_kms;
+	struct drm_clip_rect *roi_range;
+	enum sde_rm_topology_name topology_name;
+	int all_roi_num;
+	int num_misrs, misr_width;
+	int roi_factor, roi_id;
+	int i;
+	int ret = 0;
+
+	if (!connector || !drm_mode || !mode_info
+			|| !misr_mode_info || !display) {
+		pr_err("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	sde_conn = to_sde_connector(connector);
+	priv = connector->dev->dev_private;
+	sde_kms = to_sde_kms(priv->kms);
+
+	/**
+	 * Call sde_connector's operation to get misr mode
+	 * info if callback function is registered, otherwise
+	 * do default calculation.
+	 */
+	if (sde_conn->ops.get_roi_misr_mode_info) {
+		ret = sde_conn->ops.get_roi_misr_mode_info(connector,
+				mode_info, misr_mode_info, display);
+		if (ret)
+			pr_err("failed to get roi misr mode info\n");
+
+		return ret;
+	}
+
+	topology_name = sde_rm_get_topology_name(&sde_kms->rm,
+			mode_info->topology);
+	num_misrs = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_name);
+	misr_width = drm_mode->hdisplay / num_misrs;
+	all_roi_num = num_misrs * ROI_MISR_MAX_ROIS_PER_MISR;
+	roi_factor = TOPOLOGY_3DMUX_MODE(topology_name)
+			? 2 * ROI_MISR_MAX_ROIS_PER_MISR
+			: ROI_MISR_MAX_ROIS_PER_MISR;
+
+	misr_mode_info->mixer_width = drm_mode->hdisplay
+			/ mode_info->topology.num_lm;
+	misr_mode_info->num_misrs = num_misrs;
+	misr_mode_info->misr_width = misr_width;
+
+	for (i = 0; i < all_roi_num; i++) {
+		roi_id = roi_factor * SDE_ROI_MISR_GET_HW_IDX(i)
+				+ SDE_ROI_MISR_GET_ROI_IDX(i);
+
+		roi_range = &misr_mode_info->roi_range[roi_id];
+		roi_range->x1 = misr_width * SDE_ROI_MISR_GET_HW_IDX(i);
+		roi_range->y1 = 0;
+		roi_range->x2 = roi_range->x1 + misr_width - 1;
+		roi_range->y2 = drm_mode->vdisplay - 1;
+	}
+
+	return 0;
+}
+
+void sde_roi_misr_populate_roi_range(
+		struct sde_connector *c_conn,
+		struct sde_kms_info *info,
+		struct drm_display_mode *mode,
+		struct msm_mode_info *mode_info)
+{
+	struct msm_drm_private *priv;
+	struct sde_kms *sde_kms;
+	char misr_prop_name[20] = {0};
+	char misr_prop_value[30] = {0};
+	struct drm_clip_rect *roi_range;
+	struct sde_rect roi_rect;
+	struct sde_roi_misr_mode_info misr_mode_info = {0};
+	int topology_idx;
+	int range_data_idx;
+	int roi_misr_num;
+	int roi_factor, roi_id;
+	int i;
+
+	priv = c_conn->base.dev->dev_private;
+	sde_kms = to_sde_kms(priv->kms);
+	topology_idx = (int)sde_rm_get_topology_name(&sde_kms->rm,
+				mode_info->topology);
+	if (topology_idx >= SDE_RM_TOPOLOGY_MAX) {
+		pr_err("%s: invalid topology\n", __func__);
+		return;
+	}
+
+	if (sde_roi_misr_get_mode_info(&c_conn->base, mode,
+			mode_info, &misr_mode_info, c_conn->display))
+		return;
+
+	roi_misr_num = misr_mode_info.num_misrs;
+	roi_factor = TOPOLOGY_3DMUX_MODE(topology_idx)
+			? 2 * ROI_MISR_MAX_ROIS_PER_MISR
+			: ROI_MISR_MAX_ROIS_PER_MISR;
+
+	for (i = 0; i < roi_misr_num * ROI_MISR_MAX_ROIS_PER_MISR; i++) {
+		range_data_idx = SDE_ROI_MISR_GET_HW_IDX(i);
+		roi_id = roi_factor * range_data_idx
+				+ SDE_ROI_MISR_GET_ROI_IDX(i);
+		roi_range = &misr_mode_info.roi_range[roi_id];
+
+		roi_rect.x = roi_range->x1;
+		roi_rect.y = roi_range->y1;
+		roi_rect.w = roi_range->x2 - roi_range->x1 + 1;
+		roi_rect.h = roi_range->y2 - roi_range->y1 + 1;
+
+		/* Skip invalid range info due to the range table is not continuous */
+		if (!roi_rect.w || !roi_rect.h)
+			continue;
+
+		snprintf(misr_prop_name, sizeof(misr_prop_name),
+				"misr_roi_%d", roi_id);
+		snprintf(misr_prop_value, sizeof(misr_prop_value),
+				"(%d,%d,%d,%d)",
+				roi_rect.x, roi_rect.y,
+				roi_rect.w, roi_rect.h);
+
+		sde_kms_info_add_keystr(info, misr_prop_name,
+				misr_prop_value);
+	}
+}
+
+int sde_roi_misr_check_rois(struct drm_crtc_state *state)
+{
+	struct sde_crtc_state *crtc_state;
 	struct sde_roi_misr_usr_cfg *roi_misr_cfg;
+	struct sde_roi_misr_mode_info *misr_mode_info;
 	struct drm_clip_rect *roi_range;
 	int roi_id;
 	int i;
 
-	roi_misr_cfg = &cstate->misr_state.roi_misr_cfg;
+	if (!state)
+		return -EINVAL;
 
-	if (roi_misr_cfg->roi_rect_num
-	    > cstate->misr_state.num_misrs * ROI_MISR_MAX_ROIS_PER_MISR) {
+	crtc_state = to_sde_crtc_state(state);
+	roi_misr_cfg = &crtc_state->misr_state.roi_misr_cfg;
+	misr_mode_info = &crtc_state->misr_mode_info;
+
+	/**
+	 * if user_fence_fd_addr is NULL, that means
+	 * user has not set the ROI_MISR property
+	 */
+	if (!roi_misr_cfg->user_fence_fd_addr)
+		return 0;
+
+	/**
+	 * user can't get roi range through mode_properties
+	 * if no available roi misr in current topology,
+	 * so user shouldn't set ROI_MISR info
+	 */
+	if (!misr_mode_info->num_misrs) {
+		SDE_ERROR("roi misr is not supported on this topology\n");
+		return -EINVAL;
+	}
+
+	if (roi_misr_cfg->roi_rect_num >
+		misr_mode_info->num_misrs * ROI_MISR_MAX_ROIS_PER_MISR) {
 		SDE_ERROR("roi_rect_num(%d) is invalid\n",
 				roi_misr_cfg->roi_rect_num);
 		return -EINVAL;
@@ -147,7 +309,7 @@ static int sde_roi_misr_cfg_check(struct sde_crtc_state *cstate)
 
 	for (i = 0; i < roi_misr_cfg->roi_rect_num; ++i) {
 		roi_id = roi_misr_cfg->roi_ids[i];
-		roi_range = &cstate->misr_state.roi_range[roi_id];
+		roi_range = &misr_mode_info->roi_range[roi_id];
 
 		if (roi_misr_cfg->roi_rects[i].x1 < roi_range->x1
 			|| roi_misr_cfg->roi_rects[i].y1 < roi_range->y1
@@ -165,98 +327,6 @@ static int sde_roi_misr_cfg_check(struct sde_crtc_state *cstate)
 	}
 
 	return 0;
-}
-
-static void sde_roi_misr_calc_roi_range(struct drm_crtc_state *state)
-{
-	struct sde_crtc_state *cstate;
-	struct sde_kms *sde_kms;
-	struct drm_clip_rect *roi_range;
-	struct drm_display_mode drm_mode;
-	int all_roi_num;
-	int misr_width;
-	int roi_factor, roi_id;
-	int i;
-
-	cstate = to_sde_crtc_state(state);
-	sde_kms = _sde_misr_get_kms(cstate->base.crtc);
-
-	memset(cstate->misr_state.roi_range, 0,
-			sizeof(cstate->misr_state.roi_range));
-
-	if (cstate->num_ds_enabled) {
-		SDE_INFO("can't support roi misr with scaler enabled\n");
-		cstate->misr_state.num_misrs = 0;
-
-		return;
-	}
-
-	cstate->misr_state.num_misrs =
-			sde_rm_get_roi_misr_num(&sde_kms->rm,
-			cstate->topology_name);
-	if (cstate->misr_state.num_misrs == 0)
-		return;
-
-	drm_mode = state->adjusted_mode;
-	misr_width = drm_mode.hdisplay / cstate->misr_state.num_misrs;
-	cstate->misr_state.mixer_width =
-			drm_mode.hdisplay / cstate->num_mixers;
-
-	all_roi_num = cstate->misr_state.num_misrs
-			* ROI_MISR_MAX_ROIS_PER_MISR;
-
-	roi_factor = sde_rm_is_3dmux_case(cstate->topology_name)
-			? 2 * ROI_MISR_MAX_ROIS_PER_MISR
-			: ROI_MISR_MAX_ROIS_PER_MISR;
-
-	for (i = 0; i < all_roi_num; i++) {
-		roi_id = roi_factor * SDE_ROI_MISR_GET_HW_IDX(i)
-				+ SDE_ROI_MISR_GET_ROI_IDX(i);
-
-		roi_range = &cstate->misr_state.roi_range[roi_id];
-		roi_range->x1 = misr_width * SDE_ROI_MISR_GET_HW_IDX(i);
-		roi_range->y1 = 0;
-		roi_range->x2 = roi_range->x1 + misr_width - 1;
-		roi_range->y2 = drm_mode.vdisplay - 1;
-	}
-}
-
-int sde_roi_misr_check_rois(struct drm_crtc_state *state)
-{
-	struct sde_crtc_state *crtc_state;
-	struct sde_roi_misr_usr_cfg *roi_misr_cfg;
-	int ret;
-
-	if (!state)
-		return -EINVAL;
-
-	crtc_state = to_sde_crtc_state(state);
-	roi_misr_cfg = &crtc_state->misr_state.roi_misr_cfg;
-
-	/* rebuild roi range table based on current mode */
-	if (drm_atomic_crtc_needs_modeset(&crtc_state->base))
-		sde_roi_misr_calc_roi_range(state);
-
-	/**
-	 * if user_fence_fd_addr is NULL, that means
-	 * user has not set the ROI_MISR property
-	 */
-	if (!roi_misr_cfg->user_fence_fd_addr)
-		return 0;
-
-	/**
-	 * user can't get roi range through mode_properties
-	 * if no available roi misr in current topology,
-	 * so user shouldn't set ROI_MISR info
-	 */
-	if (!crtc_state->misr_state.num_misrs) {
-		SDE_ERROR("roi misr is not supported on this topology\n");
-		return -EINVAL;
-	}
-
-	ret = sde_roi_misr_cfg_check(crtc_state);
-
-	return ret;
 }
 
 static void sde_roi_misr_event_cb(void *data)
@@ -320,14 +390,15 @@ static void sde_roi_misr_work(struct kthread_work *work)
 static void sde_roi_misr_roi_calc(struct sde_crtc *sde_crtc,
 		struct sde_crtc_state *cstate)
 {
+	struct sde_roi_misr_mode_info *misr_mode_info;
 	struct sde_roi_misr_usr_cfg *roi_misr_cfg;
 	struct sde_roi_misr_hw_cfg *roi_misr_hw_cfg;
-	struct drm_clip_rect *roi_range;
 	int roi_id;
 	int misr_idx;
 	int misr_roi_idx;
 	int i;
 
+	misr_mode_info = &cstate->misr_mode_info;
 	roi_misr_cfg = &cstate->misr_state.roi_misr_cfg;
 
 	memset(sde_crtc->roi_misr_data.roi_misr_hw_cfg, 0,
@@ -335,14 +406,18 @@ static void sde_roi_misr_roi_calc(struct sde_crtc *sde_crtc,
 
 	for (i = 0; i < roi_misr_cfg->roi_rect_num; ++i) {
 		roi_id = roi_misr_cfg->roi_ids[i];
-		roi_range = &cstate->misr_state.roi_range[roi_id];
 		misr_idx = SDE_ROI_MISR_GET_HW_IDX(roi_id);
 		roi_misr_hw_cfg =
 			&sde_crtc->roi_misr_data.roi_misr_hw_cfg[misr_idx];
 		misr_roi_idx = SDE_ROI_MISR_GET_ROI_IDX(roi_id);
 
+		/**
+		 * convert global roi coordinate to the relative
+		 * coordinate of MISR module.
+		 */
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].x =
-			roi_misr_cfg->roi_rects[i].x1 - roi_range->x1;
+			roi_misr_cfg->roi_rects[i].x1
+			% misr_mode_info->misr_width;
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].y =
 			roi_misr_cfg->roi_rects[i].y1;
 		roi_misr_hw_cfg->misr_roi_rect[misr_roi_idx].w =
@@ -369,15 +444,19 @@ static void sde_roi_misr_dspp_roi_calc(struct sde_crtc *sde_crtc,
 	struct sde_rect roi_info;
 	struct sde_rect *left_rect, *right_rect;
 	struct sde_roi_misr_hw_cfg *l_dspp_hw_cfg, *r_dspp_hw_cfg;
+	struct sde_roi_misr_mode_info *misr_mode_info;
 	int mixer_width;
+	int num_misrs;
 	int lms_per_misr;
 	int l_idx, r_idx;
 	int i, j;
 
-	lms_per_misr = cstate->num_mixers / cstate->misr_state.num_misrs;
-	mixer_width = cstate->misr_state.mixer_width;
+	misr_mode_info = &cstate->misr_mode_info;
+	mixer_width = misr_mode_info->mixer_width;
+	num_misrs = misr_mode_info->num_misrs;
+	lms_per_misr = cstate->num_mixers / num_misrs;
 
-	for (i = 0; i < cstate->misr_state.num_misrs; ++i) {
+	for (i = 0; i < num_misrs; ++i) {
 		/**
 		 * Convert MISR rect info to DSPP bypass rect
 		 * this rect coordinate has been converted to
@@ -455,13 +534,11 @@ void sde_roi_misr_setup(struct drm_crtc *crtc)
 	struct sde_hw_roi_misr *hw_misr;
 	struct sde_hw_dspp *hw_dspp;
 	struct sde_roi_misr_hw_cfg *misr_hw_cfg;
-	struct sde_ctl_dsc_cfg dsc_cfg;
+	struct sde_hw_intf_cfg_v1 dsc_cfg = {0};
 	int i;
 
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
-
-	memset(&dsc_cfg, 0, sizeof(dsc_cfg));
 
 	sde_roi_misr_roi_calc(sde_crtc, cstate);
 
@@ -480,7 +557,14 @@ void sde_roi_misr_setup(struct drm_crtc *crtc)
 		misr_hw_cfg =
 			&sde_crtc->roi_misr_data.roi_misr_hw_cfg[i];
 
-		if (hw_dspp) {
+		if (!hw_misr)
+			continue;
+
+		hw_misr->ops.setup_roi_misr(hw_misr, misr_hw_cfg);
+		hw_ctl->ops.update_bitmask(hw_ctl, SDE_HW_FLUSH_DSC,
+				hw_misr->idx, true);
+
+		if (hw_dspp && hw_dspp->ops.setup_roi_misr) {
 			hw_dspp->ops.setup_roi_misr(hw_dspp,
 					misr_hw_cfg->dspp_roi_mask,
 					misr_hw_cfg->dspp_roi_rect);
@@ -488,13 +572,6 @@ void sde_roi_misr_setup(struct drm_crtc *crtc)
 			hw_ctl->ops.update_bitmask_dspp(hw_ctl,
 					hw_dspp->idx, true);
 		}
-
-		if (!hw_misr)
-			continue;
-
-		hw_misr->ops.setup_roi_misr(hw_misr, misr_hw_cfg);
-		hw_ctl->ops.update_bitmask_dsc(hw_ctl,
-				(enum sde_dsc)hw_misr->idx, true);
 
 		dsc_cfg.dsc[dsc_cfg.dsc_count++] = (enum sde_dsc)hw_misr->idx;
 
@@ -506,7 +583,8 @@ void sde_roi_misr_setup(struct drm_crtc *crtc)
 				hw_misr->idx);
 	}
 
-	hw_ctl->ops.setup_dsc_cfg(hw_ctl, &dsc_cfg);
+	if (hw_ctl->ops.update_intf_cfg && dsc_cfg.dsc_count)
+		hw_ctl->ops.update_intf_cfg(hw_ctl, &dsc_cfg, true);
 }
 
 void sde_roi_misr_hw_reset(struct sde_encoder_phys *phys_enc)
@@ -520,10 +598,9 @@ void sde_roi_misr_hw_reset(struct sde_encoder_phys *phys_enc)
 			continue;
 
 		hw_roi_misr->ops.reset_roi_misr(hw_roi_misr);
-		phys_enc->hw_ctl->ops.update_bitmask_dsc(
-				phys_enc->hw_ctl,
-				(enum sde_dsc)hw_roi_misr->idx,
-				true);
+		phys_enc->hw_ctl->ops.update_bitmask(
+				phys_enc->hw_ctl, SDE_HW_FLUSH_DSC,
+				hw_roi_misr->idx, true);
 	}
 }
 

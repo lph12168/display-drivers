@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -15,6 +15,7 @@
 #include "msm_prop.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
+#include "sde_roi_misr.h"
 
 #define SDE_CONNECTOR_NAME_SIZE	16
 #define SDE_CONNECTOR_DHDR_MEMPOOL_MAX_SIZE	SZ_32
@@ -165,6 +166,19 @@ struct sde_connector_ops {
 			struct msm_mode_info *mode_info,
 			void *display,
 			const struct msm_resource_caps_info *avail_res);
+
+	/**
+	 * get_roi_misr_mode_info - retrieve roi misr mode information
+	 * @connector: Pointer to drm connector structure
+	 * @mode_info: Information of the display mode
+	 * @misr_mode_info: Out parameter, information of the roi misr mode
+	 * @display: Pointer to private display structure
+	 * Returns: Zero on success
+	 */
+	int (*get_roi_misr_mode_info)(struct drm_connector *connector,
+			struct msm_mode_info *mode_info,
+			struct sde_roi_misr_mode_info *misr_mode_info,
+			void *display);
 
 	/**
 	 * enable_event - notify display of event registration/unregistration
@@ -449,6 +463,17 @@ struct sde_connector_ops {
 	 * @connector: Pointer to drm connector structure
 	 */
 	void (*early_unregister)(struct drm_connector *connector);
+
+	/**
+	 * get_tile_map - get tile mapping information
+	 * @connector: Pointer to drm connector structure
+	 * @display: Pointer to private display structure
+	 * @num_tile: Number of tiles
+	 * @tile_map: Tile indices map
+	 * Returns: Zero on success
+	 */
+	int (*get_tile_map)(struct drm_connector *connector,
+			void *display, int num_tile, int *tile_map);
 };
 
 /**
@@ -937,6 +962,7 @@ int sde_connector_set_property_for_commit(struct drm_connector *connector,
  * @ops: Pointer to callback operations function table
  * @connector_poll: Set to appropriate DRM_CONNECTOR_POLL_ setting
  * @connector_type: Set to appropriate DRM_MODE_CONNECTOR_ type
+ * @shared: Set to true if it is SHD connector
  * Returns: Pointer to newly created drm connector struct
  */
 struct drm_connector *sde_connector_init(struct drm_device *dev,
@@ -945,7 +971,8 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		void *display,
 		const struct sde_connector_ops *ops,
 		int connector_poll,
-		int connector_type);
+		int connector_type,
+		bool shared);
 
 /**
  * sde_connector_prepare_fence - prepare fence support for current commit
@@ -1313,5 +1340,15 @@ int sde_connector_esd_status(struct drm_connector *connector);
 
 const char *sde_conn_get_topology_name(struct drm_connector *conn,
 		struct msm_display_topology topology);
+
+/**
+ * get_tile_map - get tile mapping information
+ * @connector: Pointer to drm connector structure
+ * @num_tile: Number of tiles
+ * @tile_map: Pointer to tile indices map
+ * Returns: Zero on success
+ */
+int sde_connector_get_tile_map(struct drm_connector *connector,
+		int num_tile, int *tile_map);
 
 #endif /* _SDE_CONNECTOR_H_ */

@@ -71,6 +71,8 @@ struct sde_encoder_phys;
  *			Note: This is called from IRQ handler context.
  * @handle_underrun_virt: Notify virtual encoder of underrun IRQ reception
  *			Note: This is called from IRQ handler context.
+ * @handle_roi_misr_virt: Notify virtual encoder of ROI MISR IRQ reception
+ *			Note: This is called from IRQ handler context.
  * @handle_frame_done:	Notify virtual encoder that this phys encoder
  *			completes last request frame.
  * @get_qsync_fps:	Returns the min fps for the qsync feature.
@@ -80,6 +82,7 @@ struct sde_encoder_virt_ops {
 			struct sde_encoder_phys *phys);
 	void (*handle_underrun_virt)(struct drm_encoder *parent,
 			struct sde_encoder_phys *phys);
+	void (*handle_roi_misr_virt)(struct drm_encoder *parent);
 	void (*handle_frame_done)(struct drm_encoder *parent,
 			struct sde_encoder_phys *phys, u32 event);
 	void (*get_qsync_fps)(struct drm_encoder *parent,
@@ -212,6 +215,30 @@ struct sde_encoder_phys_ops {
  *                              autorefresh has triggered a double buffer flip
  * @INTR_IDX_WRPTR:    Writepointer start interrupt for cmd mode panel
  * @INTR_IDX_WB_LINEPTR:  Programmable lineptr interrupt for WB
+ * @INTR_IDX_MISR_ROI0_MISMATCH: mismatch interrupt for MISR ROI 0
+ * @INTR_IDX_MISR_ROI1_MISMATCH: mismatch interrupt for MISR ROI 1
+ * @INTR_IDX_MISR_ROI2_MISMATCH: mismatch interrupt for MISR ROI 2
+ * @INTR_IDX_MISR_ROI3_MISMATCH: mismatch interrupt for MISR ROI 3
+ * @INTR_IDX_MISR_ROI4_MISMATCH: mismatch interrupt for MISR ROI 4
+ * @INTR_IDX_MISR_ROI5_MISMATCH: mismatch interrupt for MISR ROI 5
+ * @INTR_IDX_MISR_ROI6_MISMATCH: mismatch interrupt for MISR ROI 6
+ * @INTR_IDX_MISR_ROI7_MISMATCH: mismatch interrupt for MISR ROI 7
+ * @INTR_IDX_MISR_ROI8_MISMATCH: mismatch interrupt for MISR ROI 8
+ * @INTR_IDX_MISR_ROI9_MISMATCH: mismatch interrupt for MISR ROI 9
+ * @INTR_IDX_MISR_ROI10_MISMATCH: mismatch interrupt for MISR ROI 10
+ * @INTR_IDX_MISR_ROI11_MISMATCH: mismatch interrupt for MISR ROI 11
+ * @INTR_IDX_MISR_ROI12_MISMATCH: mismatch interrupt for MISR ROI 12
+ * @INTR_IDX_MISR_ROI13_MISMATCH: mismatch interrupt for MISR ROI 13
+ * @INTR_IDX_MISR_ROI14_MISMATCH: mismatch interrupt for MISR ROI 14
+ * @INTR_IDX_MISR_ROI15_MISMATCH: mismatch interrupt for MISR ROI 15
+ * @INTR_IDX_MISR_ROI16_MISMATCH: mismatch interrupt for MISR ROI 16
+ * @INTR_IDX_MISR_ROI17_MISMATCH: mismatch interrupt for MISR ROI 17
+ * @INTR_IDX_MISR_ROI18_MISMATCH: mismatch interrupt for MISR ROI 18
+ * @INTR_IDX_MISR_ROI19_MISMATCH: mismatch interrupt for MISR ROI 19
+ * @INTR_IDX_MISR_ROI20_MISMATCH: mismatch interrupt for MISR ROI 20
+ * @INTR_IDX_MISR_ROI21_MISMATCH: mismatch interrupt for MISR ROI 21
+ * @INTR_IDX_MISR_ROI22_MISMATCH: mismatch interrupt for MISR ROI 22
+ * @INTR_IDX_MISR_ROI23_MISMATCH: mismatch interrupt for MISR ROI 23
  */
 enum sde_intr_idx {
 	INTR_IDX_VSYNC,
@@ -230,8 +257,38 @@ enum sde_intr_idx {
 	INTR_IDX_PP_CWB_OVFL,
 	INTR_IDX_WRPTR,
 	INTR_IDX_WB_LINEPTR,
+	INTR_IDX_MISR_ROI0_MISMATCH,
+	INTR_IDX_MISR_ROI1_MISMATCH,
+	INTR_IDX_MISR_ROI2_MISMATCH,
+	INTR_IDX_MISR_ROI3_MISMATCH,
+	INTR_IDX_MISR_ROI4_MISMATCH,
+	INTR_IDX_MISR_ROI5_MISMATCH,
+	INTR_IDX_MISR_ROI6_MISMATCH,
+	INTR_IDX_MISR_ROI7_MISMATCH,
+	INTR_IDX_MISR_ROI8_MISMATCH,
+	INTR_IDX_MISR_ROI9_MISMATCH,
+	INTR_IDX_MISR_ROI10_MISMATCH,
+	INTR_IDX_MISR_ROI11_MISMATCH,
+	INTR_IDX_MISR_ROI12_MISMATCH,
+	INTR_IDX_MISR_ROI13_MISMATCH,
+	INTR_IDX_MISR_ROI14_MISMATCH,
+	INTR_IDX_MISR_ROI15_MISMATCH,
+	INTR_IDX_MISR_ROI16_MISMATCH,
+	INTR_IDX_MISR_ROI17_MISMATCH,
+	INTR_IDX_MISR_ROI18_MISMATCH,
+	INTR_IDX_MISR_ROI19_MISMATCH,
+	INTR_IDX_MISR_ROI20_MISMATCH,
+	INTR_IDX_MISR_ROI21_MISMATCH,
+	INTR_IDX_MISR_ROI22_MISMATCH,
+	INTR_IDX_MISR_ROI23_MISMATCH,
 	INTR_IDX_MAX,
 };
+
+/**
+ * define base index for getting the real misr roi mismatch
+ * index in multiple roi misrs case
+ */
+#define MISR_ROI_MISMATCH_BASE_IDX INTR_IDX_MISR_ROI0_MISMATCH
 
 /**
  * sde_encoder_irq - tracking structure for interrupts
@@ -268,6 +325,8 @@ struct sde_encoder_irq {
  * @cdm_cfg:		Chroma-down hardware configuration
  * @hw_pp:		Hardware interface to the ping pong registers
  * @hw_dnsc_blur:	Hardware interface to the downscale blur registers
+ * @hw_roi_misr:	Hardware interface to the roi misr registers
+ * @roi_misr_num:	The number of roi misr in this phys_enc
  * @sde_kms:		Pointer to the sde_kms top level
  * @cached_mode:	DRM mode cached at mode_set time, acted on in enable
  * @enabled:		Whether the encoder has enabled and running a mode
@@ -289,6 +348,7 @@ struct sde_encoder_irq {
  * @wbirq_refcount:	Reference count of wb irq request
  * @vsync_cnt:		Vsync count for the physical encoder
  * @last_vsync_timestamp:	store last vsync timestamp
+ * @roi_misr_cnt:	Roi misr count for the physical encoder
  * @underrun_cnt:	Underrun count for the physical encoder
  * @pending_kickoff_cnt:	Atomic counter tracking the number of kickoffs
  *				vs. the number of done/vblank irqs. Should hover
@@ -327,6 +387,8 @@ struct sde_encoder_phys {
 	struct sde_hw_cdm_cfg cdm_cfg;
 	struct sde_hw_pingpong *hw_pp;
 	struct sde_hw_dnsc_blur *hw_dnsc_blur;
+	struct sde_hw_roi_misr *hw_roi_misr[MAX_CHANNELS_PER_ENC];
+	u32 roi_misr_num;
 	struct sde_kms *sde_kms;
 	struct drm_display_mode cached_mode;
 	enum sde_enc_split_role split_role;
@@ -347,6 +409,7 @@ struct sde_encoder_phys {
 	atomic_t wbirq_refcount;
 	atomic_t vsync_cnt;
 	ktime_t last_vsync_timestamp;
+	atomic_t roi_misr_cnt;
 	atomic_t underrun_cnt;
 	atomic_t pending_kickoff_cnt;
 	atomic_t pending_retire_fence_cnt;
@@ -652,7 +715,7 @@ static inline enum sde_3d_blend_mode sde_encoder_helper_get_3d_blend_mode(
 		return BLEND_3D_H_ROW_INT;
 
 	if ((split_role == ENC_ROLE_MASTER || split_role == ENC_ROLE_SLAVE)
-			&& num_lm == 4 && mode_3d)
+			&& (num_lm == 4 || num_lm == 6) && mode_3d)
 		return BLEND_3D_H_ROW_INT;
 
 	return BLEND_3D_NONE;
