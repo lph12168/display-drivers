@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -57,7 +57,8 @@ struct shd_display {
 	struct sde_rect src;
 	struct sde_rect roi;
 	struct shd_stage_range stage_range;
-
+	uint32_t misr_roi_mask;
+	struct sde_rect misr_range[ROI_MISR_MAX_ROIS_PER_CRTC];
 	bool full_screen;
 
 	struct platform_device *pdev;
@@ -67,15 +68,16 @@ struct shd_display {
 };
 
 void *sde_encoder_phys_shd_init(enum sde_intf_type type, u32 controller_id,
-				void *phys_init_params);
+		void *phys_init_params);
 
 void sde_shd_hw_flush(struct sde_hw_ctl *ctl_ctx,
-		      struct sde_hw_mixer *lm_ctx[MAX_MIXERS_PER_CRTC], int lm_num);
+		struct sde_hw_mixer *lm_ctx[MAX_MIXERS_PER_CRTC], int lm_num,
+		struct sde_hw_roi_misr *misr_ctx[MAX_MIXERS_PER_CRTC], int misr_num);
 
 /* helper for seamless plane handoff */
 
 u32 shd_get_shared_crtc_mask(struct drm_crtc *crtc);
 void shd_skip_shared_plane_update(struct drm_plane *plane, struct drm_crtc *crtc);
 void sde_connector_get_avail_res_info_shd(struct drm_connector *conn,
-					  struct msm_resource_caps_info *avail_res);
+		struct msm_resource_caps_info *avail_res);
 #endif /* _SHD_DRM_H_ */
