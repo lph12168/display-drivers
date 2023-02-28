@@ -567,6 +567,10 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	u32 crtc_mask, active_mask;
 	bool active;
 	int i, rc;
+	int hw_dev_id;
+
+	priv = state->dev->dev_private;
+	hw_dev_id = priv->instance_id;
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		if (new_crtc_state->mode_changed && new_crtc_state->active)
@@ -596,6 +600,9 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	 */
 	if (change_mask) {
 		list_for_each_entry(base, &g_base_list, head) {
+			if (base->hw_dev_id != hw_dev_id)
+				continue;
+
 			if (!(drm_crtc_mask(base->crtc) & change_mask))
 				continue;
 
@@ -622,6 +629,9 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	 * enabled/disabled before shared crtcs.
 	 */
 	list_for_each_entry(base, &g_base_list, head) {
+		if (base->hw_dev_id != hw_dev_id)
+			continue;
+
 		if (!(drm_crtc_mask(base->crtc) & base_mask))
 			continue;
 
@@ -1254,8 +1264,9 @@ static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *b
 		return rc;
 	}
 
+	priv = ddev->dev_private;
+
 	if (!g_shd_kms) {
-		priv = ddev->dev_private;
 		g_shd_kms = kzalloc(sizeof(*g_shd_kms), GFP_KERNEL);
 		if (!g_shd_kms)
 			return -ENOMEM;
@@ -1263,8 +1274,10 @@ static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *b
 		g_shd_kms->orig_funcs = priv->kms->funcs;
 		g_shd_kms->funcs.atomic_check = shd_display_atomic_check;
 		g_shd_kms->funcs.postinit = shd_drm_postinit;
-		priv->kms->funcs = &g_shd_kms->funcs;
 	}
+
+	priv->kms->funcs = &g_shd_kms->funcs;
+
 	return rc;
 }
 
@@ -1390,9 +1403,13 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 	bool tile_mode;
 	struct drm_connector *connector;
 	struct drm_connector_list_iter conn_iter;
+	struct msm_drm_private *priv;
 	const char *name;
 	u32 flags = 0;
 	int rc;
+
+	priv = drm_dev->dev_private;
+	base->hw_dev_id = priv->instance_id;
 
 	rc = of_property_read_u32(of_node, "qcom,shared-display-base-intf", &base->intf_idx);
 	if (!rc) {
