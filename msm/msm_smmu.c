@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -636,3 +636,6 @@ void __exit msm_smmu_driver_cleanup(void)
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM SMMU driver");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+MODULE_IMPORT_NS(DMA_BUF);
+#endif

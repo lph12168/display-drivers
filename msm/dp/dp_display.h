@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -127,6 +127,7 @@ struct dp_display {
 	int (*set_phy_bond_mode)(struct dp_display *dp_display,
 			enum dp_phy_bond_mode mode,
 			struct drm_connector *primary_connector);
+	int (*get_mst_pbn_div)(struct dp_display *dp);
 };
 
 #if IS_ENABLED(CONFIG_DRM_MSM_DP)

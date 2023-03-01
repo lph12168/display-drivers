@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -20,6 +21,7 @@
 #include "msm_gem.h"
 #include "msm_mmu.h"
 #include "msm_kms.h"
+#include <linux/module.h>
 
 #include <drm/drm_drv.h>
 
@@ -42,7 +44,13 @@ struct sg_table *msm_gem_prime_get_sg_table(struct drm_gem_object *obj)
 	return drm_prime_pages_to_sg(obj->dev, msm_obj->pages, npages);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+int msm_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
+{
+	map->vaddr = msm_gem_get_vaddr(obj);
+	return IS_ERR_OR_NULL(map->vaddr);
+}
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 int msm_gem_prime_vmap(struct drm_gem_object *obj, struct dma_buf_map *map)
 {
 	map->vaddr = msm_gem_get_vaddr(obj);
@@ -55,7 +63,9 @@ void *msm_gem_prime_vmap(struct drm_gem_object *obj)
 }
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+void msm_gem_prime_vunmap(struct drm_gem_object *obj, struct iosys_map *map)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 void msm_gem_prime_vunmap(struct drm_gem_object *obj, struct dma_buf_map *map)
 #else
 void msm_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
@@ -210,3 +220,7 @@ fail_put:
 
 	return ERR_PTR(ret);
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+MODULE_IMPORT_NS(DMA_BUF);
+#endif

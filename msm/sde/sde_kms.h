@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -22,6 +22,7 @@
 
 #include <linux/pm_domain.h>
 #include <linux/pm_qos.h>
+#include <drm/drm_framebuffer.h>
 
 #include "msm_drv.h"
 #include "msm_kms.h"

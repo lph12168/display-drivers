@@ -28,6 +28,7 @@
 #include "sde_kms.h"
 #include <drm/drm_crtc.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_edid.h>
 #include "sde_hwio.h"
 #include "sde_hw_catalog.h"
 #include "sde_hw_intf.h"
@@ -6185,7 +6186,7 @@ void sde_encoder_misr_sign_event_notify(struct drm_encoder *drm_enc)
 		phys = sde_enc->phys_encs[i];
 
 		if (!phys || !phys->ops.collect_misr) {
-			SDE_DEBUG("invalid misr ops\n", i);
+			SDE_DEBUG("invalid misr ops idx:%d\n", i);
 			continue;
 		}
 
