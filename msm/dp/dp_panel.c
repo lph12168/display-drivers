@@ -2619,7 +2619,7 @@ static int dp_panel_set_colorspace(struct dp_panel *dp_panel,
 	struct dp_panel_private *panel;
 
 	if (!dp_panel) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		rc = -EINVAL;
 		goto end;
 	}
@@ -2747,7 +2747,7 @@ end:
 	return rc;
 }
 
-static void dp_panel_config_ctrl(struct dp_panel *dp_panel)
+static void dp_panel_config_ctrl(struct dp_panel *dp_panel, bool sync)
 {
 	u32 config = 0, tbd;
 	u8 *dpcd = dp_panel->dpcd;
@@ -2776,12 +2776,13 @@ static void dp_panel_config_ctrl(struct dp_panel *dp_panel)
 
 	config |= 0x04; /* progressive video */
 
-	config |= 0x03;	/* sycn clock & static Mvid */
+	if (sync)
+		config |= 0x03;	/* sycn clock & static Mvid */
 
 	catalog->config_ctrl(catalog, config);
 }
 
-static void dp_panel_config_misc(struct dp_panel *dp_panel)
+static void dp_panel_config_misc(struct dp_panel *dp_panel, bool sync)
 {
 	struct dp_panel_private *panel;
 	struct dp_catalog_panel *catalog;
@@ -2802,7 +2803,8 @@ static void dp_panel_config_misc(struct dp_panel *dp_panel)
 
 	misc_val = cc;
 	misc_val |= (tb << 5);
-	misc_val |= BIT(0); /* Configure clock to synchronous mode */
+	if (sync)
+		misc_val |= BIT(0); /* Configure clock to synchronous mode */
 
 	/* if VSC is supported then set bit 6 of MISC1 */
 	if (panel->vsc_supported)
@@ -2862,7 +2864,7 @@ static void dp_panel_config_sdp(struct dp_panel *dp_panel,
 	panel->catalog->config_sdp(panel->catalog, en);
 }
 
-static int dp_panel_hw_cfg(struct dp_panel *dp_panel, bool enable)
+static int dp_panel_hw_cfg(struct dp_panel *dp_panel, bool enable, bool sync)
 {
 	struct dp_panel_private *panel;
 	struct drm_connector *connector;
@@ -2882,8 +2884,8 @@ static int dp_panel_hw_cfg(struct dp_panel *dp_panel, bool enable)
 	connector = dp_panel->connector;
 
 	if (enable) {
-		dp_panel_config_ctrl(dp_panel);
-		dp_panel_config_misc(dp_panel);
+		dp_panel_config_ctrl(dp_panel, sync);
+		dp_panel_config_misc(dp_panel, sync);
 		dp_panel_config_msa(dp_panel);
 		if (panel->vsc_supported) {
 			dp_panel_setup_colorimetry_sdp(dp_panel,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -22,6 +22,7 @@
 #include <drm/drm_probe_helper.h>
 #include <linux/version.h>
 #include <shd_drm.h>
+#include "sde_roi_misr_helper.h"
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -47,10 +48,14 @@ static const struct drm_prop_enum_list e_topology_name[] = {
 	{SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC,	"sde_dualpipemerge_vdc"},
 	{SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE,	"sde_dualpipe_dscmerge"},
 	{SDE_RM_TOPOLOGY_PPSPLIT,	"sde_ppsplit"},
+	{SDE_RM_TOPOLOGY_TRIPLEPIPE,	"sde_triplepipe"},
+	{SDE_RM_TOPOLOGY_TRIPLEPIPE_DSC,	"sde_triplepipe_dsc"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE,	"sde_quadpipemerge"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC,	"sde_quadpipe_3dmerge_dsc"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_DSCMERGE,	"sde_quadpipe_dscmerge"},
 	{SDE_RM_TOPOLOGY_QUADPIPE_DSC4HSMERGE,	"sde_quadpipe_dsc4hsmerge"},
+	{SDE_RM_TOPOLOGY_SIXPIPE_3DMERGE,	"sde_sixpipemerge"},
+	{SDE_RM_TOPOLOGY_SIXPIPE_DSCMERGE,	"sde_sixpipe_dscmerge"},
 };
 static const struct drm_prop_enum_list e_topology_control[] = {
 	{SDE_RM_TOPCTL_RESERVE_LOCK,	"reserve_lock"},
@@ -85,6 +90,24 @@ static const struct drm_prop_enum_list e_panel_mode[] = {
 	{MSM_DISPLAY_CMD_MODE, "command_mode"},
 	{MSM_DISPLAY_MODE_MAX, "none"},
 };
+
+struct dsi_display *_sde_connector_get_display(struct sde_connector *c_conn)
+{
+	struct dsi_display *display = NULL;
+	struct shd_display *shd_display;
+
+	if (!c_conn)
+		return NULL;
+
+	if (c_conn->shared) {
+		shd_display = c_conn->display;
+		display = shd_display->dsi_base;
+	} else {
+		display = (struct dsi_display *)c_conn->display;
+	}
+
+	return display;
+}
 
 static void sde_dimming_bl_notify(struct sde_connector *conn, struct dsi_backlight_config *config)
 {
@@ -140,7 +163,10 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 			(bd->props.state & BL_CORE_SUSPENDED))
 		brightness = 0;
 
-	display = (struct dsi_display *) c_conn->display;
+	display = _sde_connector_get_display(c_conn);
+	if (!display)
+		return -EINVAL;
+
 	if (brightness > display->panel->bl_config.brightness_max_level)
 		brightness = display->panel->bl_config.brightness_max_level;
 	if (brightness > c_conn->thermal_max_brightness)
@@ -175,7 +201,7 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 				c_conn->base.dev, &event, (u8 *)&brightness);
 		}
 		rc = c_conn->ops.set_backlight(&c_conn->base,
-				c_conn->display, bl_lvl);
+				display, bl_lvl);
 		if (!rc)
 			sde_dimming_bl_notify(c_conn, &display->panel->bl_config);
 		c_conn->unset_bl_level = 0;
@@ -220,7 +246,6 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	struct sde_kms *sde_kms;
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
-	struct shd_display *shd_display;
 
 	sde_kms = sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
@@ -230,12 +255,9 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 		return 0;
 	}
 
-	if (c_conn->shared) {
-		shd_display = c_conn->display;
-		display = shd_display->dsi_base;
-	} else {
-		display = (struct dsi_display *) c_conn->display;
-	}
+	display = _sde_connector_get_display(c_conn);
+	if (!display)
+		return -EINVAL;
 
 	bl_config = &display->panel->bl_config;
 
@@ -329,7 +351,7 @@ int sde_connector_register_event(struct drm_connector *connector,
 {
 	struct sde_connector *c_conn;
 	unsigned long irq_flags;
-
+	struct dsi_display *display;
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
 		return -EINVAL;
@@ -345,10 +367,14 @@ int sde_connector_register_event(struct drm_connector *connector,
 	c_conn->event_table[event_idx].usr = usr;
 	spin_unlock_irqrestore(&c_conn->event_lock, irq_flags);
 
+	display = _sde_connector_get_display(c_conn);
+	if (!display)
+		return -EINVAL;
+
 	/* optionally notify display of event registration */
-	if (c_conn->ops.enable_event && c_conn->display)
-		c_conn->ops.enable_event(connector, event_idx,
-				cb_func != NULL, c_conn->display);
+	if (c_conn->ops.enable_event && display)
+		c_conn->ops.enable_event(connector, event_idx, cb_func != NULL,
+					display);
 	return 0;
 }
 
@@ -709,7 +735,8 @@ static int _sde_connector_update_dimming_bl_lut(struct sde_connector *c_conn,
 		return -EINVAL;
 	}
 
-	dsi_display = c_conn->display;
+	dsi_display = _sde_connector_get_display(c_conn);
+
 	if (!dsi_display || !dsi_display->panel) {
 		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
 			dsi_display,
@@ -815,7 +842,8 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		return -EINVAL;
 	}
 
-	dsi_display = c_conn->display;
+	dsi_display = _sde_connector_get_display(c_conn);
+
 	if (!dsi_display || !dsi_display->panel) {
 		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
 			dsi_display,
@@ -1025,8 +1053,10 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 		return -EINVAL;
 	}
 
-	display = (struct dsi_display *)c_conn->display;
+	display = _sde_connector_get_display(c_conn);
 
+	if (!display)
+		return -EINVAL;
 	/*
 	 * During pre kickoff DCS commands have to have an
 	 * asynchronous wait to avoid an unnecessary stall
@@ -1111,7 +1141,10 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 
 	c_conn = to_sde_connector(connector);
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		display = (struct dsi_display *) c_conn->display;
+		display = _sde_connector_get_display(c_conn);
+
+		if (!display)
+			return;
 		poms_pending = display->poms_pending;
 	}
 
@@ -1156,8 +1189,10 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	}
 
 	c_conn = to_sde_connector(connector);
-	display = (struct dsi_display *) c_conn->display;
+	display = _sde_connector_get_display(c_conn);
 
+	if (!display)
+		return;
 	/*
 	 * Special handling for some panels which need atleast
 	 * one frame to be transferred to GRAM before enabling backlight.
@@ -1190,7 +1225,10 @@ int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)
 	}
 
 	c_conn = to_sde_connector(connector);
-	display = (struct dsi_display *) c_conn->display;
+	display = _sde_connector_get_display(c_conn);
+
+	if (!display)
+		return -EINVAL;
 
 	if (display && c_conn->ops.clk_ctrl)
 		rc = c_conn->ops.clk_ctrl(display->mdp_clk_handle,
@@ -1964,6 +2002,25 @@ static void sde_connector_update_colorspace(struct drm_connector *connector)
 		SDE_ERROR("failed to set colorspace property for connector\n");
 }
 
+static enum drm_connector_status
+sde_connector_detect(struct drm_connector *connector, bool force)
+{
+	enum drm_connector_status status = connector_status_unknown;
+	struct sde_connector *c_conn;
+
+	if (!connector) {
+		SDE_ERROR("invalid connector\n");
+		return status;
+	}
+
+	c_conn = to_sde_connector(connector);
+
+	if (c_conn->ops.detect)
+		status = c_conn->ops.detect(connector, force, c_conn->display);
+
+	return status;
+}
+
 static int
 sde_connector_detect_ctx(struct drm_connector *connector,
 		struct drm_modeset_acquire_ctx *ctx,
@@ -2649,6 +2706,7 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 
 static const struct drm_connector_funcs sde_connector_ops = {
 	.reset =                  sde_connector_atomic_reset,
+	.detect =                 sde_connector_detect,
 	.destroy =                sde_connector_destroy,
 	.fill_modes =             sde_connector_fill_modes,
 	.atomic_duplicate_state = sde_connector_atomic_duplicate_state,
@@ -2867,7 +2925,10 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	if (!sde_conn || !sde_conn->ops.check_status)
 		return ret;
 
-	display = sde_conn->display;
+	display = _sde_connector_get_display(sde_conn);
+
+	if (!display)
+		return -EINVAL;
 
 	/* protect this call with ESD status check call */
 	mutex_lock(&sde_conn->lock);
@@ -2935,6 +2996,22 @@ static void sde_connector_check_status_work(struct work_struct *work)
 	}
 
 	_sde_connector_report_panel_dead(conn, false);
+}
+
+int sde_connector_get_tile_map(struct drm_connector *connector,
+		int num_tile, int *tile_map)
+{
+	struct sde_connector *sde_conn = NULL;
+
+	if (!connector || num_tile < 2 || !tile_map)
+		return -EINVAL;
+
+	sde_conn = to_sde_connector(connector);
+	if (!sde_conn->ops.get_tile_map)
+		return -EINVAL;
+
+	return sde_conn->ops.get_tile_map(connector, sde_conn->display,
+			num_tile, tile_map);
 }
 
 static const struct drm_connector_helper_funcs sde_connector_helper_ops = {
@@ -3020,6 +3097,8 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 
 		sde_kms_info_add_keyint(info, "allowed_mode_switch",
 			mode_info.allowed_mode_switches);
+
+		sde_roi_misr_populate_roi_range(c_conn, info, mode, &mode_info);
 
 		if (!mode_info.roi_caps.num_roi)
 			continue;
@@ -3152,7 +3231,11 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			DRM_MODE_PROP_IMMUTABLE, CONNECTOR_PROP_MODE_INFO);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = (struct dsi_display *)(display);
+		dsi_display = _sde_connector_get_display(c_conn);
+
+		if (!dsi_display)
+			return -EINVAL;
+
 		if (dsi_display && dsi_display->panel) {
 			msm_property_install_blob(&c_conn->property_info,
 				"dimming_bl_lut", DRM_MODE_PROP_BLOB,
@@ -3320,7 +3403,7 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		void *display,
 		const struct sde_connector_ops *ops,
 		int connector_poll,
-		int connector_type)
+		int connector_type, bool shared)
 {
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
@@ -3357,6 +3440,7 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 
 	spin_lock_init(&c_conn->event_lock);
 
+	c_conn->shared = shared;
 	c_conn->panel = panel;
 	c_conn->connector_type = connector_type;
 	c_conn->encoder = encoder;

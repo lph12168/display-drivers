@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -217,6 +217,8 @@ struct dp_display_private {
 	u32 intf_idx[DP_STREAM_MAX];
 	u32 phy_idx;
 	u32 stream_cnt;
+	enum dp_phy_bond_mode phy_bond_mode;
+	struct drm_connector *bond_primary;
 
 	struct device *msm_hdcp_dev;
 };
@@ -1015,7 +1017,7 @@ static void dp_display_send_force_connect_event(struct dp_display_private *dp)
 	connector = dp->dp_display.base_connector;
 
 	if (!connector) {
-		pr_err("DP%d connector not set\n", dp->cell_idx);
+		DP_ERR("DP%d connector not set\n", dp->cell_idx);
 		return;
 	}
 
@@ -1105,6 +1107,18 @@ static void dp_display_set_mst_mgr_state(struct dp_display_private *dp,
 	DP_MST_DEBUG("mst_mgr_state: %d\n", state);
 }
 
+static void dp_display_change_phy_bond_mode(struct dp_display_private *dp,
+		enum dp_phy_bond_mode mode)
+{
+	if (dp->phy_bond_mode != mode)
+		DP_INFO("DP%d  %d -> %d\n", dp->cell_idx,
+				dp->phy_bond_mode, mode);
+
+	dp->phy_bond_mode = mode;
+	/* Propagate to dp_ctrl, dp_catalog, dp_power and dp_panel */
+	dp->ctrl->set_phy_bond_mode(dp->ctrl, mode);
+}
+
 static int dp_display_host_init(struct dp_display_private *dp)
 {
 	bool flip = false;
@@ -1139,6 +1153,7 @@ static int dp_display_host_init(struct dp_display_private *dp)
 	enable_irq(dp->irq);
 	dp_display_abort_hdcp(dp, false);
 
+	dp_display_state_remove(DP_STATE_ABORTED);
 	dp_display_state_add(DP_STATE_INITIALIZED);
 
 	/* log this as it results from user action of cable connection */
@@ -1261,6 +1276,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp,
 
 	dp->dp_display.max_pclk_khz = min(dp->parser->max_pclk_khz,
 					dp->debug->max_pclk_khz);
+	dp->dp_display.force_bond_mode = dp->parser->force_bond_mode ||
+					dp->debug->force_bond_mode;
 
 	/*
 	 * If dp video session is not restored from a previous session teardown
@@ -1644,7 +1661,7 @@ static void dp_display_clean(struct dp_display_private *dp)
 		dp_panel->deinit(dp_panel, 0);
 	}
 
-	if (!dp->parser->force_connect_mode)
+	if (dp->parser->force_connect_mode)
 		dp_display_state_remove(DP_STATE_ENABLED)
 	else
 		dp_display_state_remove(DP_STATE_ENABLED | DP_STATE_CONNECTED);
@@ -1697,7 +1714,12 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	dp->aux->abort(dp->aux, true);
 
 	mutex_lock(&dp->session_lock);
-	if (!dp->active_stream_cnt) {
+	/**
+	 * Can't disable the clock for the bond PLL here.
+	 * The clock tear down sequence need to be guaranteed.
+	 * Will be handled in dp_display_unprepare via bond bridge.
+	 */
+	if (!dp->active_stream_cnt && !IS_BOND_MODE(dp->phy_bond_mode)) {
 		dp_display_clean(dp);
 		dp_display_host_unready(dp);
 	}
@@ -2048,7 +2070,11 @@ static void dp_display_connect_work(struct work_struct *work)
 	 * SST panel in normal mode will reset by the mode change commit.
 	 */
 	if (dp->active_stream_cnt) {
-		if (dp->active_panels[DP_STREAM_0] == dp->panel &&
+		if (IS_BOND_MODE(dp->phy_bond_mode)) {
+			dp->aux->abort(dp->aux, false);
+			dp->ctrl->abort(dp->ctrl, false);
+			reset_connector = dp->bond_primary;
+		} else if (dp->active_panels[DP_STREAM_0] == dp->panel &&
 				!dp->panel->video_test) {
 			dp->aux->abort(dp->aux, false);
 			dp->ctrl->abort(dp->ctrl, false);
@@ -2473,15 +2499,13 @@ static int dp_display_post_init(struct dp_display *dp_display)
 
 	if (!dp_display) {
 		DP_ERR("invalid input\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	dp = container_of(dp_display, struct dp_display_private, dp_display);
 	if (IS_ERR_OR_NULL(dp)) {
 		DP_ERR("invalid params\n");
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	rc = dp_init_sub_modules(dp);
@@ -3006,9 +3030,13 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	 * Check if the power off sequence was triggered
 	 * by a source initialated action like framework
 	 * reboot or suspend-resume but not from normal
-	 * hot plug.
+	 * hot plug. If connector is in MST mode, skip
+	 * powering down host as aux need keep alive
+	 * to handle hot-plug sideband message.
 	 */
-	 if (dp_display_is_ready(dp) || dp->parser->force_connect_mode)
+	if ((dp_display_is_ready(dp) && !dp->mst.mst_active)
+			|| dp->parser->force_connect_mode
+			|| IS_BOND_MODE(dp->phy_bond_mode))
 		 flags |= DP_PANEL_SRC_INITIATED_POWER_DOWN;
 
 	/*
@@ -3036,6 +3064,12 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	/* log this as it results from user action of cable dis-connection */
 	DP_INFO("DP%d [OK]\n", dp->cell_idx);
 end:
+	/**
+	 * Once the DP driver is turned off, set to non-bond mode.
+	 * If bond mode is required afterwards, call set_phy_bond_mode.
+	 */
+	dp_display_change_phy_bond_mode(dp, DP_PHY_BOND_MODE_NONE);
+
 	dp_panel->deinit(dp_panel, flags);
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -3131,16 +3165,16 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough lm %d %d\n",
 				dp->cell_idx, mode->name, fps,
 				num_lm, num_lm, avail_res->num_lm);
-		return -EPERM;
+		//return -EPERM;
 	} else if (!num_dsc && (num_lm == dual && !num_3dmux)) {
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough 3dmux %d %d\n",
 				dp->cell_idx, mode->name, fps,
 				num_3dmux, avail_res->num_3dmux);
-		return -EPERM;
+		//return -EPERM;
 	} else if (num_lm == quad && num_dsc != quad)  {
 		DP_DEBUG("DP%d mode %sx%d is invalid, unsupported DP topology lm:%d dsc:%d\n",
 				dp->cell_idx, mode->name, fps, num_lm, num_dsc);
-		return -EPERM;
+		//return -EPERM;
 	}
 
 	DP_DEBUG("DP%d mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
@@ -3375,7 +3409,7 @@ static int dp_display_setup_colospace(struct dp_display *dp_display,
 	struct dp_display_private *dp;
 
 	if (!dp_display || !panel) {
-		pr_err("invalid input\n");
+		DP_ERR("invalid input\n");
 		return -EINVAL;
 	}
 
@@ -3453,7 +3487,7 @@ static int dp_display_init_aux_bridge(struct dp_display_private *dp)
 	struct device_node *bridge_node;
 
 	if (!dp->pdev->dev.of_node) {
-		pr_err("cannot find dev.of_node\n");
+		DP_ERR("cannot find dev.of_node\n");
 		rc = -ENODEV;
 		goto end;
 	}
@@ -3465,7 +3499,7 @@ static int dp_display_init_aux_bridge(struct dp_display_private *dp)
 
 	dp->aux_bridge = of_dp_aux_find_bridge(bridge_node);
 	if (!dp->aux_bridge) {
-		pr_err("failed to find dp aux bridge\n");
+		DP_ERR("failed to find dp aux bridge\n");
 		rc = -EPROBE_DEFER;
 		goto end;
 	}
@@ -3864,6 +3898,43 @@ static int dp_display_mst_get_fixed_topology_display_type(
 	return 0;
 }
 
+static int dp_display_set_phy_bond_mode(struct dp_display *dp_display,
+		enum dp_phy_bond_mode mode,
+		struct drm_connector *primary_connector)
+{
+	struct dp_display_private *dp;
+
+	if (!dp_display) {
+		DP_ERR("invalid input\n");
+		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	mutex_lock(&dp->session_lock);
+
+	if (dp->phy_bond_mode != mode) {
+		/*
+		 * The DP driver has been firstly inited in process_hpd_high.
+		 * Then the upper layer will decide the display mode after
+		 * receiving the HPD event.
+		 * If the bond mode need to be changed afterwards, tear it
+		 * down here and allow it to be re-init in dp_display_prepare,
+		 * where the master/slave order is guaranteed by the bond
+		 * bridge.
+		 */
+		dp_display_clean(dp);
+		dp_display_host_unready(dp);
+		dp_display_change_phy_bond_mode(dp, mode);
+	}
+
+	dp->bond_primary = primary_connector;
+
+	mutex_unlock(&dp->session_lock);
+
+	return 0;
+}
+
 static int dp_display_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -3879,7 +3950,7 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	index = dp_display_get_num_of_displays(NULL);
 	if (index >= MAX_DP_ACTIVE_DISPLAY) {
-		pr_err("exceeds max dp count\n");
+		DP_ERR("exceeds max dp count\n");
 		rc = -EINVAL;
 		goto bail;
 	}
@@ -3897,6 +3968,8 @@ static int dp_display_probe(struct platform_device *pdev)
 	if (!dp->name)
 		dp->name = "drm_dp";
 
+	dp->cell_idx = -1;
+	dp->phy_idx = -1;
 	memset(&dp->mst, 0, sizeof(dp->mst));
 
 	rc = dp_display_get_cell_info(dp);
@@ -3959,6 +4032,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	dp_display->get_display_type = dp_display_get_display_type;
 	dp_display->mst_get_fixed_topology_display_type =
 				dp_display_mst_get_fixed_topology_display_type;
+	dp_display->set_phy_bond_mode = dp_display_set_phy_bond_mode;
 
 	rc = component_add(&pdev->dev, &dp_display_comp_ops);
 	if (rc) {
@@ -4031,6 +4105,46 @@ int dp_display_get_num_of_streams(struct drm_device *dev)
 	return count;
 }
 
+int dp_display_get_num_of_bonds(void *dp_display)
+{
+	struct dp_display_private *dp;
+	int i, cnt = 0;
+	struct {
+		const char *name;
+		enum dp_bond_type type;
+	} static const bond_types[] =
+	{
+		{ "qcom,bond-dual-ctrl-phy", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-dual-ctrl-pclk", DP_BOND_DUAL_PCLK },
+		{ "qcom,bond-tri-ctrl-phy", DP_BOND_TRIPLE_PHY },
+		{ "qcom,bond-tri-ctrl-pclk", DP_BOND_TRIPLE_PCLK },
+		/* for backward compatiblity */
+		{ "qcom,bond-dual-ctrl", DP_BOND_DUAL_PHY },
+		{ "qcom,bond-tri-ctrl", DP_BOND_TRIPLE_PCLK },
+	};
+
+	if (!dp_display) {
+		DP_DEBUG("dp display not initialized\n");
+		return 0;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+	if (!dp->parser) {
+		for (i = 0; i < ARRAY_SIZE(bond_types); i++) {
+			if (of_property_count_u32_elems(dp->pdev->dev.of_node,
+					bond_types[i].name) == num_bond_dp[bond_types[i].type])
+				cnt++;
+		}
+	} else {
+		for (i = 0; i < DP_BOND_MAX; i++) {
+			if (dp->parser->bond_cfg[i].enable)
+				cnt++;
+		}
+	}
+
+	return cnt;
+}
+
 int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info)
 {
 	struct dp_display_private *dp;
@@ -4052,6 +4166,62 @@ int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info)
 
 	return 0;
  }
+
+int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
+		struct dp_display_bond_displays *dp_bond_info)
+{
+	struct dp_display_private *dp;
+	int i, j, n = 0;
+
+	if (!dp_display) {
+		DP_DEBUG("dp display not initialized\n");
+		return -EINVAL;
+	}
+
+	if (type < 0 || type >= DP_BOND_MAX) {
+		DP_DEBUG("invalid bond type\n");
+		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	memset(dp_bond_info, 0, sizeof(*dp_bond_info));
+
+	if (!dp->parser->bond_cfg[type].enable)
+		return 0;
+
+	dp_bond_info->dp_display_num = num_bond_dp[type];
+
+	for (i = 0; i < MAX_DP_ACTIVE_DISPLAY; i++) {
+		struct dp_display *display = g_dp_display[i];
+		struct dp_display_private *dp_disp;
+
+		if (!display)
+			break;
+
+		dp_disp = container_of(display,
+				struct dp_display_private, dp_display);
+
+		for (j = 0; j < dp_bond_info->dp_display_num; j++) {
+			if (dp->parser->bond_cfg[type].ctrl[j] ==
+					dp_disp->cell_idx) {
+				dp_bond_info->dp_display[j] = display;
+				n++;
+				break;
+			}
+		}
+		if (n == dp_bond_info->dp_display_num)
+			break;
+	}
+
+	if (n < dp_bond_info->dp_display_num) {
+		DP_WARN("no enough dp displays (%d:%d) for bond type %d, disabled\n",
+				n, dp_bond_info->dp_display_num, type);
+		dp_bond_info->dp_display_num = 0;
+	}
+
+	return 0;
+}
 
 static void dp_display_set_mst_state(void *dp_display,
 		enum dp_drv_state mst_state)

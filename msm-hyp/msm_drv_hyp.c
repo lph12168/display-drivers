@@ -3,7 +3,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  *
  * Copyright (c) 2017-2018,2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1628,9 +1628,11 @@ static void _msm_hyp_prepare_fence(
 		msm_hyp_fence_prepare(c->output_fence);
 
 		/* create output fence */
-		if (cstate->output_fence_ptr)
+		if (cstate->output_fence_ptr) {
 			msm_hyp_fence_create(c->output_fence,
 					cstate->output_fence_ptr, 1);
+			cstate->output_fence_ptr = NULL;
+		}
 
 		drm_connector_list_iter_begin(dev, &conn_iter);
 		drm_for_each_connector_iter(connector, &conn_iter)
@@ -1643,11 +1645,13 @@ static void _msm_hyp_prepare_fence(
 				msm_hyp_fence_prepare(conn->retire_fence);
 
 				/* create retire fence */
-				if (conn_state->retire_fence_ptr)
+				if (conn_state->retire_fence_ptr) {
 					msm_hyp_fence_create(
 						conn->retire_fence,
 						conn_state->retire_fence_ptr,
 						0);
+					conn_state->retire_fence_ptr = NULL;
+				}
 			}
 		drm_connector_list_iter_end(&conn_iter);
 	}
@@ -1898,6 +1902,26 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	HYP_ATRACE_END(__func__);
 }
 
+static int msm_hyp_atomic_helper_check(struct drm_device *dev,
+		struct drm_atomic_state *state)
+{
+	int i = 0, ret = 0;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+
+	ret = drm_atomic_helper_check(dev, state);
+	if (ret)
+	{
+		DRM_ERROR("drm_atomic_helper_check - failed\n");
+		return ret;
+	}
+
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i)
+		new_crtc_state->no_vblank = true;
+
+	return ret;
+}
+
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 		struct drm_atomic_state *state,
 		bool nonblock)
@@ -1948,7 +1972,7 @@ error:
 
 static const struct drm_mode_config_funcs msm_hyp_mode_config_funcs = {
 	.fb_create = msm_hyp_framebuffer_create,
-	.atomic_check = drm_atomic_helper_check,
+	.atomic_check = msm_hyp_atomic_helper_check,
 	.atomic_commit = msm_hyp_atomic_helper_commit,
 };
 

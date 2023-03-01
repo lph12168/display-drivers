@@ -35,7 +35,8 @@ struct dp_power {
 	int (*clk_enable)(struct dp_power *power, enum dp_pm_type pm_type,
 				bool enable);
 	bool (*clk_status)(struct dp_power *power, enum dp_pm_type pm_type);
-	int (*set_pixel_clk_parent)(struct dp_power *power, u32 stream_id);
+	int (*set_pixel_clk_parent)(struct dp_power *power, u32 stream_id,
+				enum dp_phy_bond_mode bond_mode);
 	int (*park_clocks)(struct dp_power *power);
 	u64 (*clk_get_rate)(struct dp_power *power, char *clk_name);
 	int (*power_client_init)(struct dp_power *power,

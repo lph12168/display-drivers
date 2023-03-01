@@ -783,6 +783,8 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 	struct dsi_display_mode *display_mode;
 	struct dsi_display_mode_priv_info *priv_info;
 	u32 usecs_fps = 0;
+	u32 pixel_clk_hz = 0;
+	u32 htotal = 0, vtotal = 0;
 
 	display_mode = container_of(mode, struct dsi_display_mode, timing);
 
@@ -832,6 +834,12 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 		       rc);
 		goto error;
 	}
+
+	rc = utils->read_u32(utils->data,
+			"qcom,mdss-dsi-panel-pixel-clk-hz",
+			&pixel_clk_hz);
+	display_mode->priv_info->pixel_clk_hz_override =
+			rc ? 0 : pixel_clk_hz;
 
 	usecs_fps = DIV_ROUND_UP((1 * 1000 * 1000), mode->refresh_rate);
 	if (mode->mdp_transfer_time_us > usecs_fps)
@@ -924,6 +932,15 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 	DSI_DEBUG("panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
 		mode->v_active, mode->v_front_porch, mode->v_back_porch,
 		mode->v_sync_width);
+
+	htotal = mode->h_active + mode->h_front_porch
+			+ mode->h_back_porch + mode->h_sync_width;
+	vtotal = mode->v_active + mode->v_front_porch
+			+ mode->v_back_porch + mode->v_sync_width;
+
+	if (display_mode->priv_info->pixel_clk_hz_override)
+		mode->refresh_rate = DIV_ROUND_CLOSEST(pixel_clk_hz,
+				(htotal * vtotal));
 
 error:
 	return rc;
@@ -3171,6 +3188,9 @@ static int dsi_panel_parse_topology(
 		topology[top_sel].num_lm,
 		topology[top_sel].num_enc,
 		topology[top_sel].num_intf);
+
+	priv_info->swap_intf = utils->read_bool(utils->data,
+			"qcom,mdss-dsi-panel-swap-intf");
 
 parse_done:
 	memcpy(&priv_info->topology, &topology[top_sel],

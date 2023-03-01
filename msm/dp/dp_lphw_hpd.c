@@ -153,7 +153,7 @@ static void dp_lphw_hpd_host_deinit(struct dp_hpd *dp_hpd,
 static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 {
 	struct dp_lphw_hpd_private *lphw_hpd;
-	u32 isr = 0;
+	u32 isr = 0, status;
 	int rc = 0;
 
 	if (!dp_hpd) {
@@ -164,8 +164,54 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 	lphw_hpd = container_of(dp_hpd, struct dp_lphw_hpd_private, base);
 
 	isr = lphw_hpd->catalog->get_interrupt(lphw_hpd->catalog);
+	status = (isr >> 29) & 0x7;
 
-	if (isr & DP_HPD_UNPLUG_INT_STATUS) { /* disconnect interrupt */
+	/* Check for uncommon cases */
+	switch (status) {
+	case DP_HPD_STATUS_DISCONNECTED:
+		if (!(isr & DP_HPD_UNPLUG_INT_STATUS))
+			DP_INFO("DP%d disconnect but no interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		if (isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS))
+			DP_INFO("DP%d missed connect interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		if (isr & DP_IRQ_HPD_INT_STATUS)
+			DP_INFO("DP%d missed hpd_irq interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		break;
+	case DP_HPD_STATUS_CONNECT_PENDING:
+		DP_INFO("DP%d connect pending, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
+		break;
+	case DP_HPD_STATUS_CONNECTED:
+		if (!(isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS)))
+			DP_INFO("DP%d connect but no interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		if (isr & DP_HPD_UNPLUG_INT_STATUS)
+			DP_INFO("DP%d missed disconnect interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		if (isr & DP_IRQ_HPD_INT_STATUS)
+			DP_INFO("DP%d missed hpd_irq interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
+		break;
+	case DP_HPD_STATUS_HPD_IO_GLITCH_COUNT:
+		DP_INFO("DP%d hpd io glich counting, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
+		break;
+	case DP_HPD_STATUS_IRQ_HPD_PULSE_COUNT:
+		DP_INFO("DP%d hpd irq counting, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
+		break;
+	case DP_HPD_STATUS_HPD_REPLUG_COUNT:
+		DP_INFO("DP%d hpd replug counting, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
+		break;
+	default:
+		break;
+	}
+
+	/* Process based on most updated HPD status, instead of interrupt */
+	if (status == DP_HPD_STATUS_DISCONNECTED) { /* disconnect status */
 
 		DP_DEBUG("DP%d disconnect interrupt, hpd isr state: 0x%x\n",
 				lphw_hpd->parser->cell_idx, isr);
@@ -182,19 +228,11 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 				DP_DEBUG("DP%d disconnect not queued\n",
 						lphw_hpd->parser->cell_idx);
 		} else {
-			DP_ERR("DP%d already disconnected\n", lphw_hpd->parser->cell_idx);
+			DP_INFO("DP%d already disconnected\n", lphw_hpd->parser->cell_idx);
 		}
 
-	} else if (isr & DP_IRQ_HPD_INT_STATUS) { /* attention interrupt */
-
-		DP_DEBUG("DP%d hpd_irq interrupt, hpd isr state: 0x%x\n",
-				lphw_hpd->parser->cell_idx, isr);
-
-		rc = queue_work(lphw_hpd->connect_wq, &lphw_hpd->attention);
-		if (!rc)
-			DP_DEBUG("DP%d attention not queued\n",
-					lphw_hpd->parser->cell_idx);
-	} else if (isr & DP_HPD_PLUG_INT_STATUS) {
+	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
+			!(isr & DP_IRQ_HPD_INT_STATUS)) { /* connected status */
 
 		DP_DEBUG("DP%d connect interrupt, hpd isr state: 0x%x\n",
 				lphw_hpd->parser->cell_idx, isr);
@@ -207,8 +245,23 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 				DP_DEBUG("DP%d connect not queued\n",
 						lphw_hpd->parser->cell_idx);
 		} else {
-			DP_ERR("DP%d already connected\n", lphw_hpd->parser->cell_idx);
+			DP_INFO("DP%d already connected\n", lphw_hpd->parser->cell_idx);
 		}
+
+	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
+			(isr & DP_IRQ_HPD_INT_STATUS)) { /* attention interrupt */
+
+		DP_DEBUG("DP%d hpd_irq interrupt, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
+
+		rc = queue_work(lphw_hpd->connect_wq, &lphw_hpd->attention);
+		if (!rc)
+			DP_DEBUG("DP%d attention not queued\n", lphw_hpd->parser->cell_idx);
+
+	} else { /* intermediate status */
+
+		DP_INFO("DP%d ignored, hpd isr state: 0x%x\n",
+				lphw_hpd->parser->cell_idx, isr);
 
 	}
 }

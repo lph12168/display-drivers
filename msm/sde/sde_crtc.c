@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -46,6 +46,7 @@
 #include "sde_trace.h"
 #include "msm_drv.h"
 #include "sde_vm.h"
+#include "sde_roi_misr_helper.h"
 
 #define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
 #define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
@@ -606,6 +607,44 @@ static void sde_crtc_event_notify(struct drm_crtc *crtc, uint32_t type, void *pa
 			((uint64_t)payload) >> 32, ((uint64_t)payload) & 0xFFFFFFFF);
 	SDE_DEBUG("crtc:%d event(%lu) ptr(%pK) value(%lu) notified\n",
 			DRMID(crtc), type, payload, *data);
+}
+
+static void sde_crtc_post_commit_init(struct sde_crtc *sde_crtc)
+{
+	struct sde_kms *kms = _sde_crtc_get_kms(&sde_crtc->base);
+
+	sde_post_commit_fence_ctx_init(
+			&sde_crtc->post_commit_fence_ctx,
+			sde_crtc->name,
+			&sde_crtc->output_fence->done_count);
+
+	if (kms && kms->catalog && kms->catalog->has_roi_misr)
+		sde_roi_misr_init(sde_crtc);
+}
+
+static void sde_crtc_post_commit_prepare_fence(
+		struct drm_crtc *crtc)
+{
+	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
+	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc->state);
+
+	sde_post_commit_fence_create(
+			&sde_crtc->post_commit_fence_ctx,
+			cstate->post_commit_fence_mask,
+			sde_crtc->output_fence->commit_count);
+}
+
+static void sde_crtc_post_commit_update_fence(
+		struct drm_crtc *crtc)
+{
+	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
+	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc->state);
+
+	if (!cstate->post_commit_fence_mask)
+		return;
+
+	sde_post_commit_fence_update(
+			&sde_crtc->post_commit_fence_ctx);
 }
 
 static void sde_crtc_destroy(struct drm_crtc *crtc)
@@ -1524,7 +1563,7 @@ static int pstate_cmp(const void *a, const void *b)
 	struct plane_state *pb = (struct plane_state *)b;
 	int rc = 0;
 	int pa_zpos, pb_zpos;
-	enum sde_layout pa_layout, pb_layout;
+	u32 pa_layout, pb_layout;
 
 	if ((!pa || !pa->sde_pstate) || (!pb || !pb->sde_pstate))
 		return rc;
@@ -1555,7 +1594,7 @@ static int _sde_crtc_validate_src_split_order(struct drm_crtc *crtc,
 		struct plane_state *pstates, int cnt)
 {
 	struct plane_state *prv_pstate, *cur_pstate;
-	enum sde_layout prev_layout, cur_layout;
+	u32 prev_layout, cur_layout;
 	struct sde_rect left_rect, right_rect;
 	struct sde_kms *sde_kms;
 	int32_t left_pid, right_pid;
@@ -1634,7 +1673,7 @@ static void _sde_crtc_set_src_split_order(struct drm_crtc *crtc,
 		struct plane_state *pstates, int cnt)
 {
 	struct plane_state *prv_pstate, *cur_pstate, *nxt_pstate;
-	enum sde_layout prev_layout, cur_layout;
+	u32 prev_layout, cur_layout;
 	struct sde_kms *sde_kms;
 	struct sde_rect left_rect, right_rect;
 	int32_t left_pid, right_pid;
@@ -1654,8 +1693,7 @@ static void _sde_crtc_set_src_split_order(struct drm_crtc *crtc,
 		prv_pstate = (i > 0) ? &pstates[i - 1] : NULL;
 		cur_pstate = &pstates[i];
 		nxt_pstate = ((i + 1) < cnt) ? &pstates[i + 1] : NULL;
-		prev_layout = prv_pstate ? prv_pstate->sde_pstate->layout :
-							SDE_LAYOUT_NONE;
+		prev_layout = prv_pstate ? prv_pstate->sde_pstate->layout : 0;
 		cur_layout = cur_pstate->sde_pstate->layout;
 
 		if ((!prv_pstate) || (prv_pstate->stage != cur_pstate->stage)
@@ -1833,14 +1871,12 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 					pstate->rotation, mode);
 
 			/*
-			 * none or left layout will program to layer mixer
-			 * group 0, right layout will program to layer mixer
-			 * group 1.
+			 * first layout will program to layer mixer group 0,
+			 * second layout will program to layer mixer group 1,
+			 * third layout will program to layer mixer group 2,
+			 * and so on.
 			 */
-			if (pstate->layout <= SDE_LAYOUT_LEFT)
-				layout_idx = 0;
-			else
-				layout_idx = 1;
+			layout_idx = pstate->layout;
 
 			stage_cfg = &sde_crtc->stage_cfg[layout_idx];
 			stage_idx = zpos_cnt[layout_idx][pstate->stage]++;
@@ -2798,6 +2834,9 @@ void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 
 	/* prepare main output fence */
 	sde_fence_prepare(sde_crtc->output_fence);
+
+	/* prepare post-commit rfence */
+	sde_crtc_post_commit_prepare_fence(crtc);
 	SDE_ATRACE_END("sde_crtc_prepare_commit");
 }
 
@@ -3067,6 +3106,8 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 
 	if (fevent->event & SDE_ENCODER_FRAME_EVENT_SIGNAL_RELEASE_FENCE) {
 		SDE_ATRACE_BEGIN("signal_release_fence");
+		sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
+
 		sde_fence_signal(sde_crtc->output_fence, fevent->ts,
 				(fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR)
 				? SDE_FENCE_SIGNAL_ERROR : SDE_FENCE_SIGNAL, NULL);
@@ -3423,6 +3464,11 @@ static int _sde_crtc_check_dest_scaler_validate_ds(struct drm_crtc *crtc,
 	struct sde_kms *kms;
 
 	kms = _sde_crtc_get_kms(crtc);
+
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("invalid kms handle\n");
+		return -EINVAL;
+	}
 
 	for (i = 0; i < cstate->num_ds; i++) {
 		cfg = &cstate->ds_cfg[i];
@@ -3822,17 +3868,24 @@ static void _sde_crtc_setup_mixer_for_encoder(
 		struct drm_encoder *enc)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
+	struct sde_crtc_state *sde_crtc_state = to_sde_crtc_state(crtc->state);
 	struct sde_kms *sde_kms = _sde_crtc_get_kms(crtc);
 	struct sde_rm *rm = &sde_kms->rm;
 	struct sde_crtc_mixer *mixer;
 	struct sde_hw_ctl *last_valid_ctl = NULL;
 	int i;
 	struct sde_rm_hw_iter lm_iter, ctl_iter, dspp_iter, ds_iter;
+	struct sde_rm_hw_iter roi_misr_iter;
+	bool is_right_mixer;
+	bool is_3dmux_case;
 
 	sde_rm_init_hw_iter(&lm_iter, enc->base.id, SDE_HW_BLK_LM);
 	sde_rm_init_hw_iter(&ctl_iter, enc->base.id, SDE_HW_BLK_CTL);
 	sde_rm_init_hw_iter(&dspp_iter, enc->base.id, SDE_HW_BLK_DSPP);
 	sde_rm_init_hw_iter(&ds_iter, enc->base.id, SDE_HW_BLK_DS);
+	sde_rm_init_hw_iter(&roi_misr_iter, enc->base.id, SDE_HW_BLK_ROI_MISR);
+
+	is_3dmux_case = TOPOLOGY_3DMUX_MODE(sde_crtc_state->topology_name);
 
 	/* Set up all the mixers and ctls reserved by this encoder */
 	for (i = sde_crtc->num_mixers; i < ARRAY_SIZE(sde_crtc->mixers); i++) {
@@ -3868,6 +3921,17 @@ static void _sde_crtc_setup_mixer_for_encoder(
 		(void) sde_rm_get_hw(rm, &ds_iter);
 		mixer->hw_ds = to_sde_hw_ds(ds_iter.hw);
 
+		/**
+		 * In 3dmux case, only reserve roi misr for left mixer.
+		 * Otherwise, reserve roi misr for every mixer.
+		 */
+		is_right_mixer = i % MAX_MIXERS_PER_LAYOUT;
+		if (!(is_3dmux_case && is_right_mixer)) {
+			(void) sde_rm_get_hw(rm, &roi_misr_iter);
+			mixer->hw_roi_misr = to_sde_hw_roi_misr(
+					roi_misr_iter.hw);
+		}
+
 		mixer->encoder = enc;
 
 		sde_crtc->num_mixers++;
@@ -3878,6 +3942,9 @@ static void _sde_crtc_setup_mixer_for_encoder(
 		if (mixer->hw_ds)
 			SDE_DEBUG("setup mixer %d: ds %d\n",
 				i, mixer->hw_ds->idx - DS_0);
+		if (mixer->hw_roi_misr)
+			SDE_DEBUG("setup mixer %d: roi_misr %d\n",
+				i, mixer->hw_roi_misr->idx - ROI_MISR_0);
 	}
 }
 
@@ -4083,6 +4150,8 @@ static void _sde_crtc_atomic_begin(struct drm_crtc *crtc,
 
 	if (!sde_crtc->enabled)
 		sde_cp_crtc_mark_features_dirty(crtc);
+
+	sde_crtc_post_commit_update_fence(crtc);
 
 	/*
 	 * PP_DONE irq is only used by command mode for now.
@@ -4729,6 +4798,13 @@ static struct drm_crtc_state *sde_crtc_duplicate_state(struct drm_crtc *crtc)
 	msm_property_duplicate_state(&sde_crtc->property_info,
 			old_cstate, cstate,
 			&cstate->property_state, cstate->property_values);
+
+	/**
+	 * roi misr data's lifecycle only valid during last atomic commit,
+	 * so we need to clear these states when do state duplication operation
+	 */
+	cstate->misr_state.roi_misr_cfg.user_fence_fd_addr = NULL;
+	cstate->post_commit_fence_mask = 0;
 	sde_cp_duplicate_state_info(&old_cstate->base, &cstate->base);
 
 	/* duplicate base helper */
@@ -5453,7 +5529,6 @@ sec_err:
 static int _sde_crtc_check_secure_conn(struct drm_crtc *crtc,
 		struct drm_crtc_state *state, uint32_t fb_sec)
 {
-
 	bool conn_secure = false, is_wb = false;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
@@ -5691,7 +5766,7 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 	u32 zpos_cnt = 0;
 	struct drm_crtc *crtc;
 	struct sde_kms *kms;
-	enum sde_layout layout;
+	u32 layout;
 
 	crtc = &sde_crtc->base;
 	kms = _sde_crtc_get_kms(crtc);
@@ -5720,7 +5795,7 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 	}
 
 	z_pos = -1;
-	layout = SDE_LAYOUT_NONE;
+	layout = -1;
 	for (i = 0; i < cnt; i++) {
 		/* reset counts at every new blend stage */
 		if (pstates[i].stage != z_pos ||
@@ -5824,8 +5899,16 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	if (!sde_rm_topology_is_group(&kms->rm, crtc_state,
+	if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_TRIPLEPIPE))
+		layout_split = crtc_state->mode.hdisplay * 2 / 3;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
 			SDE_RM_TOPOLOGY_GROUP_QUADPIPE))
+		layout_split = crtc_state->mode.hdisplay >> 1;
+	else if (sde_rm_topology_is_group(&kms->rm, crtc_state,
+			SDE_RM_TOPOLOGY_GROUP_SIXPIPE))
+		layout_split = crtc_state->mode.hdisplay / 3;
+	else
 		return 0;
 
 	mode = &crtc->state->adjusted_mode;
@@ -5838,19 +5921,19 @@ static int _sde_crtc_check_plane_layout(struct drm_crtc *crtc,
 			continue;
 
 		pstate = to_sde_plane_state(plane_state);
-		layout_split = crtc_width >> 1;
 
-		if (plane_state->crtc_x >= layout_split) {
-			plane_state->crtc_x -= layout_split;
-			pstate->layout_offset = layout_split;
-			pstate->layout = SDE_LAYOUT_RIGHT;
-		} else {
-			pstate->layout_offset = -1;
-			pstate->layout = SDE_LAYOUT_LEFT;
-		}
+		/* update layout based on global coordinate */
+		pstate->layout = plane_state->crtc_x / layout_split;
+		pstate->layout_offset = pstate->layout * layout_split;
+		plane_state->crtc_x -= pstate->layout_offset;
 		SDE_DEBUG("plane%d updated: crtc_x=%d layout=%d\n",
 				DRMID(plane), plane_state->crtc_x,
 				pstate->layout);
+
+		if (pstate->layout >= MAX_LAYOUTS_PER_CRTC) {
+			SDE_ERROR("invalid layout >= %d\n", MAX_LAYOUTS_PER_CRTC);
+			return -E2BIG;
+		}
 
 		/* check layout boundary */
 		if (CHECK_LAYER_BOUNDS(plane_state->crtc_x,
@@ -5972,6 +6055,13 @@ static int _sde_crtc_atomic_check(struct drm_crtc *crtc,
 	rc = sde_cp_crtc_check_properties(crtc, state);
 	if (rc) {
 		SDE_ERROR("crtc%d failed cp properties check %d\n",
+				crtc->base.id, rc);
+		goto end;
+	}
+
+	rc = sde_roi_misr_check_rois(state);
+	if (rc) {
+		SDE_ERROR("crtc%d failed misr roi check %d\n",
 				crtc->base.id, rc);
 		goto end;
 	}
@@ -6486,6 +6576,10 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 		msm_property_install_range(&sde_crtc->property_info, "frame_data",
 				0x0, 0, ~0, 0, CRTC_PROP_FRAME_DATA_BUF);
 
+	if (catalog->has_roi_misr)
+		msm_property_install_volatile_range(&sde_crtc->property_info,
+				"roi_misr", 0x0, 0, ~0, 0, CRTC_PROP_ROI_MISR);
+
 	vfree(info);
 }
 
@@ -6667,6 +6761,12 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 		break;
 	case CRTC_PROP_FRAME_DATA_BUF:
 		_sde_crtc_set_frame_data_buffers(crtc, cstate, (void __user *)(uintptr_t)val);
+		break;
+	case CRTC_PROP_ROI_MISR:
+		ret = sde_roi_misr_cfg_set(state,
+				(void __user *)(uintptr_t)val);
+		if (ret)
+			SDE_ERROR("set roi misr info failed rc:%d\n", ret);
 		break;
 	default:
 		/* nothing to do */
@@ -7923,6 +8023,8 @@ struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 
 	kthread_init_delayed_work(&sde_crtc->static_cache_read_work,
 			__sde_crtc_static_cache_read_work);
+
+	sde_crtc_post_commit_init(sde_crtc);
 
 	SDE_DEBUG("%s: successfully initialized crtc, hwfence_out:%d, hwfence_in:%d\n",
 		sde_crtc->name,
