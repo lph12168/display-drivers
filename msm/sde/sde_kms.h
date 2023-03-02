@@ -299,6 +299,9 @@ struct sde_kms {
 	int dp_stream_count;
 	bool dsc_switch_support;
 
+	int dp_bond_count;
+	void *dp_bond_mgr;
+
 	bool has_danger_ctrl;
 
 	struct sde_kms_smmu_state_data smmu_state;

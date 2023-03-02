@@ -39,6 +39,8 @@ struct dp_ctrl {
 			enum dp_stream_id strm,
 			u32 ch_start_slot, u32 ch_tot_slots);
 	void (*set_sim_mode)(struct dp_ctrl *dp_ctrl, bool en);
+	void (*set_phy_bond_mode)(struct dp_ctrl *dp_ctrl,
+			enum dp_phy_bond_mode mode);
 };
 
 struct dp_ctrl_in {
@@ -50,6 +52,7 @@ struct dp_ctrl_in {
 	struct dp_power *power;
 	struct dp_catalog_ctrl *catalog;
 	struct dp_pll *pll;
+	enum dp_phy_bond_mode phy_bond_mode;
 };
 
 struct dp_ctrl *dp_ctrl_get(struct dp_ctrl_in *in);

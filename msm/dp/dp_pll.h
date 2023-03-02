@@ -136,6 +136,7 @@ struct dp_pll {
 
 	bool ssc_en;
 	bool bonding_en;
+	enum dp_phy_bond_mode bond_mode;
 
 	struct dp_pll_db pll_db;
 	struct dp_pll_vco_clk pll_clks[DP_PLL_NUM_CLKS];
@@ -146,7 +147,8 @@ struct dp_pll {
 	struct dp_pll_io io;
 	struct clk_onecell_data *clk_data;
 
-	int (*pll_cfg)(struct dp_pll *pll, unsigned long rate);
+	int (*pll_cfg)(struct dp_pll *pll, unsigned long rate,
+			enum dp_phy_bond_mode bond_mode);
 	int (*pll_prepare)(struct dp_pll *pll);
 	int (*pll_unprepare)(struct dp_pll *pll);
 };

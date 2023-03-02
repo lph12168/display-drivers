@@ -159,6 +159,15 @@ struct sde_hw_dspp_ops {
 			u32 *resp_in, u32 *resp_out);
 
 	/**
+	 * setup_roi_misr - update the roi misr property
+	 * @ctx: Pointer to dspp context
+	 * @roi_mask: The bitmask of roi should be set
+	 * @roi_cfg: Pointer to roi configuration
+	 */
+	void (*setup_roi_misr)(struct sde_hw_dspp *ctx, uint32_t roi_mask,
+			struct sde_rect *roi_cfg);
+
+	/**
 	 * setup_ltm_init - setup LTM INIT
 	 * @ctx: Pointer to dspp context
 	 * @cfg: Pointer to configuration
