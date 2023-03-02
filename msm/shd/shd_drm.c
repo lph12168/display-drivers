@@ -68,6 +68,14 @@ static enum drm_connector_status shd_display_base_detect(struct drm_connector *c
 	return connector_status_disconnected;
 }
 
+static int shd_display_base_detect_ctx(struct drm_connector *connector,
+		struct drm_modeset_acquire_ctx *ctx,
+		bool force,
+		void *display)
+{
+	return (int)connector_status_disconnected;
+}
+
 static inline bool shd_display_check_enc_intf(struct sde_encoder_hw_resources *hw_res,
 					      int intf_idx)
 {
@@ -123,6 +131,14 @@ static int shd_display_init_base_connector(struct drm_device *dev, struct shd_di
 		return -ENOENT;
 	}
 
+	/* set base connector disconnected */
+	base->ops = sde_conn->ops;
+	sde_conn->ops.detect = shd_display_base_detect;
+	sde_conn->ops.detect_ctx = shd_display_base_detect_ctx;
+	sde_conn->ops.set_info_blob = NULL;
+	sde_connector_set_blob_data(&sde_conn->base, NULL,
+		CONNECTOR_PROP_SDE_INFO);
+
 next:
 	SDE_DEBUG("found base connector %d\n", base->connector->base.id);
 
@@ -136,6 +152,7 @@ static int shd_display_init_base_encoder(struct drm_device *dev, struct shd_disp
 	struct sde_encoder_hw_resources *hw_res;
 	struct sde_connector_state *conn_state;
 	struct msm_compression_info *comp_info;
+	bool has_mst;
 	int rc = 0;
 
 	hw_res = kzalloc(sizeof(*hw_res), GFP_KERNEL);
@@ -166,9 +183,12 @@ static int shd_display_init_base_encoder(struct drm_device *dev, struct shd_disp
 				base->encoder = encoder;
 				break;
 			}
-		} else if (encoder->encoder_type == DRM_MODE_ENCODER_TMDS) {
+		} else if (encoder->encoder_type == DRM_MODE_ENCODER_TMDS ||
+			encoder->encoder_type == DRM_MODE_ENCODER_DPMST) {
 			sde_encoder_get_hw_resources(encoder, hw_res, &conn_state->base);
-			if (shd_display_check_enc_intf(hw_res, base->intf_idx)) {
+			has_mst = (encoder->encoder_type == DRM_MODE_ENCODER_DPMST);
+			if (shd_display_check_enc_intf(hw_res, base->intf_idx) &&
+					base->mst_port == has_mst) {
 				base->encoder = encoder;
 				break;
 			}
@@ -793,6 +813,36 @@ end:
 	return status;
 }
 
+static
+int shd_connector_detect_ctx(struct drm_connector *conn,
+		struct drm_modeset_acquire_ctx *ctx,
+		bool force,
+		void *display)
+{
+	struct shd_display *disp = display;
+	struct sde_connector *sde_conn;
+	struct drm_connector *b_conn;
+	enum drm_connector_status status = connector_status_disconnected;
+
+	if (!conn || !display || !disp->base) {
+		SDE_ERROR("invalid params\n");
+		goto end;
+	}
+
+	b_conn =  disp->base->connector;
+	if (b_conn) {
+		sde_conn = to_sde_connector(b_conn);
+
+		if (disp->base->ops.detect_ctx)
+			status = disp->base->ops.detect_ctx(b_conn, ctx, force, sde_conn->display);
+		else if (disp->base->ops.detect)
+			status = disp->base->ops.detect(b_conn, force, sde_conn->display);
+	}
+
+end:
+	return (int)status;
+}
+
 static int shd_drm_update_edid_name(struct edid *edid, const char *name)
 {
 	u8 *dtd = (u8 *)&edid->detailed_timings[3];
@@ -1088,7 +1138,6 @@ static int shd_drm_obj_init(struct shd_display *display)
 	struct shd_crtc *shd_crtc;
 	struct sde_connector *sde_conn;
 	struct msm_display_info info;
-	struct shd_display_base *base;
 	struct sde_kms *sde_kms;
 	int rc = 0;
 	u32 i;
@@ -1096,6 +1145,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 	static const struct sde_connector_ops shd_ops = {
 		.set_info_blob	= shd_conn_set_info_blob,
 		.detect		= shd_connector_detect,
+		.detect_ctx	= shd_connector_detect_ctx,
 		.get_modes	= shd_connector_get_modes,
 		.mode_valid	= shd_connector_mode_valid,
 		.get_info	= shd_connector_get_info,
@@ -1109,17 +1159,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 
 	dev = display->drm_dev;
 	priv = dev->dev_private;
-	base = display->base;
 
-	list_for_each_entry(base, &g_base_list, head) {
-		sde_conn = to_sde_connector(base->connector);
-
-		if (!base->fill_ops) {
-			base->ops = sde_conn->ops;
-			sde_conn->ops.detect = shd_display_base_detect;
-			base->fill_ops = true;
-		}
-	}
 
 	if (priv->num_crtcs >= MAX_CRTCS) {
 		SDE_ERROR("crtc reaches the maximum %d\n", priv->num_crtcs);
@@ -1225,22 +1265,6 @@ end:
 	return rc;
 }
 
-static int shd_drm_postinit(struct msm_kms *kms)
-{
-	struct shd_display_base *base;
-	struct sde_connector *sde_conn;
-
-	/* set base connector disconnected*/
-	list_for_each_entry(base, &g_base_list, head) {
-		sde_conn = to_sde_connector(base->connector);
-
-		sde_conn->ops.set_info_blob = NULL;
-		sde_connector_set_blob_data(&sde_conn->base, NULL, CONNECTOR_PROP_SDE_INFO);
-	}
-
-	return g_shd_kms->orig_funcs->postinit(kms);
-}
-
 static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *base)
 {
 	struct msm_drm_private *priv;
@@ -1273,7 +1297,6 @@ static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *b
 		g_shd_kms->funcs = *priv->kms->funcs;
 		g_shd_kms->orig_funcs = priv->kms->funcs;
 		g_shd_kms->funcs.atomic_check = shd_display_atomic_check;
-		g_shd_kms->funcs.postinit = shd_drm_postinit;
 	}
 
 	priv->kms->funcs = &g_shd_kms->funcs;
