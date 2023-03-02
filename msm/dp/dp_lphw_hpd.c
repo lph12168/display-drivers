@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -184,14 +184,12 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 				lphw_hpd->parser->cell_idx, isr);
 		break;
 	case DP_HPD_STATUS_CONNECTED:
-		if (!(isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS)))
-			DP_INFO("DP%d connect but no interrupt, hpd isr state: 0x%x\n",
+		if (!(isr & (DP_HPD_PLUG_INT_STATUS | DP_HPD_REPLUG_INT_STATUS
+			| DP_IRQ_HPD_INT_STATUS)) && !lphw_hpd->hpd)
+			DP_DEBUG("DP%d connect but no interrupt, hpd isr state: 0x%x\n",
 					lphw_hpd->parser->cell_idx, isr);
 		if (isr & DP_HPD_UNPLUG_INT_STATUS)
 			DP_INFO("DP%d missed disconnect interrupt, hpd isr state: 0x%x\n",
-					lphw_hpd->parser->cell_idx, isr);
-		if (isr & DP_IRQ_HPD_INT_STATUS)
-			DP_INFO("DP%d missed hpd_irq interrupt, hpd isr state: 0x%x\n",
 					lphw_hpd->parser->cell_idx, isr);
 		break;
 	case DP_HPD_STATUS_HPD_IO_GLITCH_COUNT:
@@ -233,11 +231,9 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 
 	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
 			!(isr & DP_IRQ_HPD_INT_STATUS)) { /* connected status */
-
-		DP_DEBUG("DP%d connect interrupt, hpd isr state: 0x%x\n",
-				lphw_hpd->parser->cell_idx, isr);
-
 		if (!lphw_hpd->hpd) {
+			DP_DEBUG("DP%d connect interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
 			lphw_hpd->hpd = true;
 			rc = queue_work(lphw_hpd->connect_wq,
 					&lphw_hpd->connect);
@@ -245,7 +241,8 @@ static void dp_lphw_hpd_isr(struct dp_hpd *dp_hpd)
 				DP_DEBUG("DP%d connect not queued\n",
 						lphw_hpd->parser->cell_idx);
 		} else {
-			DP_INFO("DP%d already connected\n", lphw_hpd->parser->cell_idx);
+			DP_DEBUG("DP%d redundent connect interrupt, hpd isr state: 0x%x\n",
+					lphw_hpd->parser->cell_idx, isr);
 		}
 
 	} else if ((status == DP_HPD_STATUS_CONNECTED) &&
