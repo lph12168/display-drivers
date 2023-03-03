@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <drm/drm_encoder.h>
@@ -329,7 +329,7 @@ int sde_roi_misr_check_rois(struct drm_crtc_state *state)
 	return 0;
 }
 
-static void sde_roi_misr_event_cb(void *data)
+static void sde_roi_misr_event_cb_v1(void *data)
 {
 	struct drm_crtc *crtc;
 	struct sde_crtc *sde_crtc;
@@ -356,6 +356,27 @@ static void sde_roi_misr_event_cb(void *data)
 	misr_event->crtc = crtc;
 	kthread_queue_work(&priv->event_thread[crtc_id].worker,
 			&misr_event->work);
+}
+
+static void sde_roi_misr_event_cb_v2(void *data)
+{
+	struct drm_crtc *crtc;
+	struct sde_crtc *sde_crtc;
+
+	if (!data) {
+		SDE_ERROR("invalid data parameters\n");
+		return;
+	}
+
+	crtc = (struct drm_crtc *)data;
+	if (!crtc || !crtc->dev || !crtc->dev->dev_private) {
+		SDE_ERROR("invalid crtc parameters\n");
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(crtc);
+
+	sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
 }
 
 static void sde_roi_misr_work(struct kthread_work *work)
@@ -534,20 +555,28 @@ void sde_roi_misr_setup(struct drm_crtc *crtc)
 	struct sde_hw_roi_misr *hw_misr;
 	struct sde_hw_dspp *hw_dspp;
 	struct sde_roi_misr_hw_cfg *misr_hw_cfg;
+	struct sde_encoder_virt *sde_enc;
 	struct sde_hw_intf_cfg_v1 dsc_cfg = {0};
 	int i;
 
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
+	sde_enc = to_sde_encoder_virt(sde_crtc->mixers[0].encoder);
 
 	sde_roi_misr_roi_calc(sde_crtc, cstate);
 
 	if (sde_roi_misr_dspp_is_used(sde_crtc))
 		sde_roi_misr_dspp_roi_calc(sde_crtc, cstate);
 
-	sde_encoder_register_roi_misr_callback(
-			sde_crtc->mixers[0].encoder,
-			sde_roi_misr_event_cb, crtc);
+	if (sde_enc->misr_mismatch)
+		sde_encoder_register_roi_misr_callback(
+				sde_crtc->mixers[0].encoder,
+				sde_roi_misr_event_cb_v1, crtc);
+	else
+		sde_encoder_register_roi_misr_callback(
+				sde_crtc->mixers[0].encoder,
+				sde_roi_misr_event_cb_v2, crtc);
+
 
 	hw_ctl = sde_crtc->mixers[0].hw_ctl;
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -71,8 +71,10 @@ struct sde_encoder_phys;
  *			Note: This is called from IRQ handler context.
  * @handle_underrun_virt: Notify virtual encoder of underrun IRQ reception
  *			Note: This is called from IRQ handler context.
- * @handle_roi_misr_virt: Notify virtual encoder of ROI MISR IRQ reception
- *			Note: This is called from IRQ handler context.
+ * @handle_roi_misr_virt_v1: Notify virtual encoder of ROI MISR IRQ reception
+ *			Note: This is called from mismatch IRQ handler context.
+ * @handle_roi_misr_virt_v2: Notify virtual encoder of ROI MISR IRQ reception
+ *			Note: This is called from vsync IRQ handler context.
  * @handle_frame_done:	Notify virtual encoder that this phys encoder
  *			completes last request frame.
  * @get_qsync_fps:	Returns the min fps for the qsync feature.
@@ -82,7 +84,9 @@ struct sde_encoder_virt_ops {
 			struct sde_encoder_phys *phys);
 	void (*handle_underrun_virt)(struct drm_encoder *parent,
 			struct sde_encoder_phys *phys);
-	void (*handle_roi_misr_virt)(struct drm_encoder *parent);
+	void (*handle_roi_misr_virt_v1)(struct drm_encoder *parent);
+	void (*handle_roi_misr_virt_v2)(struct drm_encoder *parent,
+			struct sde_encoder_phys *phys);
 	void (*handle_frame_done)(struct drm_encoder *parent,
 			struct sde_encoder_phys *phys, u32 event);
 	void (*get_qsync_fps)(struct drm_encoder *parent,

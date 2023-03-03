@@ -4993,6 +4993,10 @@ static int _sde_kms_hw_init_blocks(struct sde_kms *sde_kms,
 		goto power_error;
 	}
 	sde_kms->core_rev = sde_kms->catalog->hw_rev;
+	if (SDE_HW_MAJOR(sde_kms->core_rev) >= SDE_HW_MAJOR(SDE_HW_VER_840))
+		sde_kms->misr_mismatch_irq = false;
+	else
+		sde_kms->misr_mismatch_irq = true;
 
 	pr_info("sde hardware revision:0x%x\n", sde_kms->core_rev);
 

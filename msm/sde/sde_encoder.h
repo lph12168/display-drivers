@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -172,6 +172,7 @@ enum sde_enc_rc_states {
  * @disp_info:			local copy of msm_display_info struct
  * @misr_enable:		misr enable/disable status
  * @misr_reconfigure:		boolean entry indicates misr reconfigure status
+ * @misr_mismatch:		boolean to indicate misr callback from mismatch IRQ
  * @misr_frame_count:		misr frame count before start capturing the data
  * @idle_pc_enabled:		indicate if idle power collapse is enabled
  *				currently. This can be controlled by user-mode
@@ -251,6 +252,7 @@ struct sde_encoder_virt {
 	struct msm_display_info disp_info;
 	atomic_t misr_enable;
 	bool misr_reconfigure;
+	bool misr_mismatch;
 	u32 misr_frame_count;
 
 	bool idle_pc_enabled;

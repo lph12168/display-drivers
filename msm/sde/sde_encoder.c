@@ -3574,7 +3574,7 @@ static void sde_encoder_vblank_callback(struct drm_encoder *drm_enc,
 	SDE_ATRACE_END("encoder_vblank_callback");
 }
 
-static void sde_encoder_roi_misr_callback(struct drm_encoder *drm_enc)
+static void sde_encoder_roi_misr_callback_v1(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc = NULL;
 	unsigned long lock_flags;
@@ -3590,6 +3590,26 @@ static void sde_encoder_roi_misr_callback(struct drm_encoder *drm_enc)
 		sde_enc->misr_data.crtc_roi_misr_cb(
 			sde_enc->misr_data.crtc_roi_misr_cb_data);
 	spin_unlock_irqrestore(&sde_enc->enc_spinlock, lock_flags);
+
+	SDE_ATRACE_END("encoder_roi_misr_callback");
+}
+
+static void sde_encoder_roi_misr_callback_v2(struct drm_encoder *drm_enc,
+		struct sde_encoder_phys *phy_enc)
+{
+	struct sde_encoder_virt *sde_enc = NULL;
+
+	if (!drm_enc || !phy_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("encoder_roi_misr_callback");
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	atomic_inc(&phy_enc->roi_misr_cnt);
+	SDE_EVT32(DRMID(drm_enc), atomic_read(&phy_enc->roi_misr_cnt));
+
+	if (sde_enc->misr_data.crtc_roi_misr_cb)
+		sde_enc->misr_data.crtc_roi_misr_cb(
+			sde_enc->misr_data.crtc_roi_misr_cb_data);
 
 	SDE_ATRACE_END("encoder_roi_misr_callback");
 }
@@ -5357,7 +5377,8 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	struct sde_encoder_virt_ops parent_ops = {
 		sde_encoder_vblank_callback,
 		sde_encoder_underrun_callback,
-		sde_encoder_roi_misr_callback,
+		NULL,
+		NULL,
 		sde_encoder_frame_done_callback,
 		_sde_encoder_get_qsync_fps_callback,
 	};
@@ -5367,6 +5388,14 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 		SDE_ERROR("invalid arg(s), enc %d kms %d\n",
 				!sde_enc, !sde_kms);
 		return -EINVAL;
+	}
+
+	if (sde_kms->misr_mismatch_irq) {
+		parent_ops.handle_roi_misr_virt_v1 = sde_encoder_roi_misr_callback_v1;
+		sde_enc->misr_mismatch = true;
+	} else {
+		parent_ops.handle_roi_misr_virt_v2 = sde_encoder_roi_misr_callback_v2;
+		sde_enc->misr_mismatch = false;
 	}
 
 	memset(&phys_params, 0, sizeof(phys_params));
