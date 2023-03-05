@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/habmm.h>
@@ -1438,6 +1438,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPortModeAttribf_User(
 	WFDDevice device,
@@ -1492,6 +1493,7 @@ end:
 
 	return val;
 }
+#endif
 
 void
 wfdSetPortMode_User(
@@ -1644,6 +1646,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPortAttribf_User(
 	WFDDevice device,
@@ -1697,6 +1700,7 @@ end:
 	return val;
 
 }
+#endif
 
 void
 wfdGetPortAttribiv_User(
@@ -1871,6 +1875,7 @@ end:
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBI_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPortAttribf_User(
 	WFDDevice device,
@@ -1919,6 +1924,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBF_PROFILING, true);
 }
+#endif
 
 void
 wfdSetPortAttribiv_User(
@@ -1979,6 +1985,7 @@ end:
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPortAttribfv_User(
 	WFDDevice device,
@@ -2037,6 +2044,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBFV_PROFILING, true);
 }
+#endif
 
 WFDErrorCode
 wfdWaitForVSync_User(
@@ -2426,6 +2434,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPipelineAttribf_User(
 	WFDDevice device,
@@ -2478,6 +2487,7 @@ end:
 
 	return val;
 }
+#endif
 
 void
 wfdGetPipelineAttribiv_User(
@@ -2656,6 +2666,7 @@ end:
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBI_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPipelineAttribf_User(
 	WFDDevice device,
@@ -2704,6 +2715,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBF_PROFILING, true);
 }
+#endif
 
 void
 wfdSetPipelineAttribiv_User(
@@ -2766,6 +2778,7 @@ end:
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPipelineAttribfv_User(
 	WFDDevice device,
@@ -2824,6 +2837,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBFV_PROFILING, true);
 }
+#endif
 
 WFDint
 wfdGetPipelineLayerOrder_User(

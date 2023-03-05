@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _WIRE_FORMAT_H
@@ -331,6 +332,7 @@ union msg_get_port_mode_attribi {
 	} resp;
 };
 union msg_get_port_mode_attribf {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 port; /* WFDPort */
@@ -341,6 +343,7 @@ union msg_get_port_mode_attribf {
 	struct {
 		float val; /* WFDfloat */
 	} resp;
+#endif
 };
 union msg_set_port_mode {
 	struct {
@@ -375,6 +378,7 @@ union msg_get_port_attribi {
 	} resp;
 };
 union msg_get_port_attribf {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 port; /* WFDPort */
@@ -384,6 +388,7 @@ union msg_get_port_attribf {
 	struct {
 		float val; /* WFDfloat */
 	} resp;
+#endif
 };
 union msg_get_port_attribiv {
 	struct {
@@ -406,7 +411,12 @@ union msg_get_port_attribfv {
 	} req;
 
 	struct {
+#ifdef ENABLE_FLOAT_USAGE
 		float vals[MAX_PORT_ATTRIBS]; /* WFDfloat */
+#else
+		/* Kernel module can not handle float, use uint32 to save value */
+		u32 vals[MAX_PORT_ATTRIBS]; /* WFDuint32 */
+#endif
 	} resp;
 };
 union msg_set_port_attribi {
@@ -422,6 +432,7 @@ union msg_set_port_attribi {
 	} resp;
 };
 union msg_set_port_attribf {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 port; /* WFDPort */
@@ -432,6 +443,7 @@ union msg_set_port_attribf {
 	struct {
 		/* void */
 	} resp;
+#endif
 };
 union msg_set_port_attribiv {
 	struct {
@@ -447,6 +459,7 @@ union msg_set_port_attribiv {
 	} resp;
 };
 union msg_set_port_attribfv {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 port; /* WFDPort */
@@ -458,6 +471,7 @@ union msg_set_port_attribfv {
 	struct {
 		/* void */
 	} resp;
+#endif
 };
 union msg_wait_for_vsync {
 	struct {
@@ -525,6 +539,7 @@ union msg_get_pipeline_attribi {
 	} resp;
 };
 union msg_get_pipeline_attribf {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 pipe; /* WFDPipeline */
@@ -534,6 +549,7 @@ union msg_get_pipeline_attribf {
 	struct {
 		float val; /* WFDfloat */
 	} resp;
+#endif
 };
 union msg_get_pipeline_attribiv {
 	struct {
@@ -556,7 +572,12 @@ union msg_get_pipeline_attribfv {
 	} req;
 
 	struct {
+#ifdef ENABLE_FLOAT_USAGE
 		float vals[MAX_PIPELINE_ATTRIBS]; /* WFDfloat */
+#else
+		/* Kernel module can not handle float, use uint32 to save value */
+		u32 vals[MAX_PIPELINE_ATTRIBS]; /* WFDuint32 */
+#endif
 	} resp;
 };
 union msg_set_pipeline_attribi {
@@ -572,6 +593,7 @@ union msg_set_pipeline_attribi {
 	} resp;
 };
 union msg_set_pipeline_attribf {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 pipe; /* WFDPipeline */
@@ -582,6 +604,7 @@ union msg_set_pipeline_attribf {
 	struct {
 		/* void */
 	} resp;
+#endif
 };
 union msg_set_pipeline_attribiv {
 	struct {
@@ -597,6 +620,7 @@ union msg_set_pipeline_attribiv {
 	} resp;
 };
 union msg_set_pipeline_attribfv {
+#ifdef ENABLE_FLOAT_USAGE
 	struct {
 		u32 dev; /* WFDDevice */
 		u32 pipe; /* WFDPipeline */
@@ -608,6 +632,7 @@ union msg_set_pipeline_attribfv {
 	struct {
 		/* void */
 	} resp;
+#endif
 };
 struct rect {
 	i32 offsetX;

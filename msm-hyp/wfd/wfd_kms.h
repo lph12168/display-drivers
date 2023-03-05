@@ -33,6 +33,11 @@
 #include "wire_format.h"
 #include <msm_drv_hyp.h>
 
+#ifdef ENABLE_FLOAT_USAGE
+#else
+#include "wfd_kms_float.h"
+#endif
+
 #define PANEL_NAME_LEN 13
 
 enum WFD_QDILayerType {

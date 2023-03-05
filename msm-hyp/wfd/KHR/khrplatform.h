@@ -1,3 +1,4 @@
+
 #ifndef __khrplatform_h_
 #define __khrplatform_h_
 
@@ -251,8 +252,15 @@ typedef unsigned long  int     khronos_usize_t;
 #if KHRONOS_SUPPORT_FLOAT
 /*
  * Float type
+ * Let float to be unsigned int for Kernel module.
+ * Because floating registers will not be saved when system do
+ * process exchange, which will cause the parameters' value wrong.
  */
-typedef          float         khronos_float_t;
+#ifdef ENABLE_FLOAT_USAGE
+typedef            float       khronos_float_t;
+#else
+typedef khronos_uint32_t       khronos_float_t;
+#endif
 #endif
 
 #if KHRONOS_SUPPORT_INT64

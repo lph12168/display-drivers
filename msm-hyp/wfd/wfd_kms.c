@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright (C) 2014 Red Hat
@@ -935,6 +935,11 @@ static int wfd_kms_get_connector_infos(struct msm_hyp_kms *kms,
 					WFD_PORT_PHYSICAL_SIZE,
 					2, physical_size);
 
+#ifdef ENABLE_FLOAT_USAGE
+#else
+		physical_size[0] = wfd_kms_convert_float_paramter_handler(physical_size[0]) / 1000000;
+		physical_size[1] = wfd_kms_convert_float_paramter_handler(physical_size[1]) / 1000000;
+#endif
 		priv->base.display_info.width_mm =
 				(uint32_t)physical_size[0];
 		priv->base.display_info.height_mm =
@@ -1290,9 +1295,21 @@ static int wfd_kms_get_port_plane_infos(struct msm_hyp_kms *kms,
 				WFD_PIPELINE_SCALE_RANGE,
 				2,
 				val);
+
+#ifdef ENABLE_FLOAT_USAGE
+#else
+		val[0] = wfd_kms_convert_float_paramter_handler(val[0]);
+		val[1] = wfd_kms_convert_float_paramter_handler(val[1]);
+#endif
+
 		if (val[0] > 0 && val[1] > 0) {
+#ifdef ENABLE_FLOAT_USAGE
 			priv->base.maxdwnscale = (u32)(1.0f / val[0]);
 			priv->base.maxupscale = (u32)(val[1]);
+#else
+			priv->base.maxdwnscale = (u32)(1000000 / val[0]);
+			priv->base.maxupscale = (u32)(val[1] / 1000000);
+#endif
 		} else {
 			priv->base.maxdwnscale = SSPP_UNITY_SCALE;
 			priv->base.maxupscale = SSPP_UNITY_SCALE;
