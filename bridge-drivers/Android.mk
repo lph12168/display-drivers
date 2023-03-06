@@ -29,21 +29,8 @@ KBUILD_OPTIONS += MODNAME=lt9611uxc
 KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 KBUILD_OPTIONS += $(DISPLAY_SELECT)
 
-ifneq ($(TARGET_BOARD_AUTO), true)
-$(info Build the symbols respective to the platform)
-ifneq ($(call is-board-platform-in-list, $(NO_MMRM_BOARDS)),true)
-KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_MSM_EXT_DISP_BOARDS)),true)
+# Dependency module for lt9611
 KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,msm-ext-disp-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_SEC_BOARDS)),true)
-KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_HW_FENCE_BOARDS)),true)
-KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,hw-fence-module-symvers)/Module.symvers
-endif
-endif
 
 ###########################################################
 include $(CLEAR_VARS)
@@ -54,24 +41,9 @@ LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 
-ifneq ($(TARGET_BOARD_AUTO), true)
-ifneq ($(call is-board-platform-in-list, $(NO_MMRM_BOARDS)),true)
-LOCAL_REQUIRED_MODULES    += mmrm-module-symvers
-LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_MSM_EXT_DISP_BOARDS)),true)
+# Dependency module for lt9611
 LOCAL_REQUIRED_MODULES    += msm-ext-disp-module-symvers
 LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,msm-ext-disp-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_SEC_BOARDS)),true)
-LOCAL_REQUIRED_MODULES    += sec-module-symvers
-LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
-endif
-ifneq ($(call is-board-platform-in-list, $(NO_HW_FENCE_BOARDS)),true)
-LOCAL_REQUIRED_MODULES    += hw-fence-module-symvers
-LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,hw-fence-module-symvers)/Module.symvers
-endif
-endif
 
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###########################################################
