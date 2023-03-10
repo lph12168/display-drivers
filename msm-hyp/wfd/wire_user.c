@@ -132,30 +132,48 @@ const static u32 wire_user_cmd_size[OPENWFD_CMD_MAX] = {
 	[DESTROY_PORT]          = sizeof(union msg_destroy_port),
 	[GET_PORT_MODES]        = sizeof(union msg_get_port_modes),
 	[GET_PORT_MODE_ATTRIBI] = sizeof(union msg_get_port_mode_attribi),
+#ifdef ENABLE_FLOAT_USAGE
 	[GET_PORT_MODE_ATTRIBF] = sizeof(union msg_get_port_mode_attribf),
+#endif
 	[SET_PORT_MODE]         = sizeof(union msg_set_port_mode),
 	[GET_CURRENT_PORT_MODE] = sizeof(union msg_get_current_port_mode),
 	[GET_PORT_ATTRIBI]      = sizeof(union msg_get_port_attribi),
+#ifdef ENABLE_FLOAT_USAGE
 	[GET_PORT_ATTRIBF]      = sizeof(union msg_get_port_attribf),
+#endif
 	[GET_PORT_ATTRIBIV]     = sizeof(union msg_get_port_attribiv),
+#ifdef ENABLE_FLOAT_USAGE
 	[GET_PORT_ATTRIBFV]     = sizeof(union msg_get_port_attribfv),
+#endif
 	[SET_PORT_ATTRIBI]      = sizeof(union msg_set_port_attribi),
+#ifdef ENABLE_FLOAT_USAGE
 	[SET_PORT_ATTRIBF]      = sizeof(union msg_set_port_attribf),
+#endif
 	[SET_PORT_ATTRIBIV]     = sizeof(union msg_set_port_attribiv),
+#ifdef ENABLE_FLOAT_USAGE
 	[SET_PORT_ATTRIBFV]     = sizeof(union msg_set_port_attribfv),
+#endif
 	[WAIT_FOR_VSYNC]        = sizeof(union msg_wait_for_vsync),
 	[BIND_PIPELINE_TO_PORT] = sizeof(union msg_bind_pipeline_to_port),
 	[ENUMERATE_PIPELINES]   = sizeof(union msg_enumerate_pipelines),
 	[CREATE_PIPELINE]       = sizeof(union msg_create_pipeline),
 	[DESTROY_PIPELINE]      = sizeof(union msg_destroy_pipeline),
 	[GET_PIPELINE_ATTRIBI]  = sizeof(union msg_get_pipeline_attribi),
+#ifdef ENABLE_FLOAT_USAGE
 	[GET_PIPELINE_ATTRIBF]  = sizeof(union msg_get_pipeline_attribf),
+#endif
 	[GET_PIPELINE_ATTRIBIV] = sizeof(union msg_get_pipeline_attribiv),
+#ifdef ENABLE_FLOAT_USAGE
 	[GET_PIPELINE_ATTRIBFV] = sizeof(union msg_get_pipeline_attribfv),
+#endif
 	[SET_PIPELINE_ATTRIBI]  = sizeof(union msg_set_pipeline_attribi),
+#ifdef ENABLE_FLOAT_USAGE
 	[SET_PIPELINE_ATTRIBF]  = sizeof(union msg_set_pipeline_attribf),
+#endif
 	[SET_PIPELINE_ATTRIBIV] = sizeof(union msg_set_pipeline_attribiv),
+#ifdef ENABLE_FLOAT_USAGE
 	[SET_PIPELINE_ATTRIBFV] = sizeof(union msg_set_pipeline_attribfv),
+#endif
 	[BIND_SOURCE_TO_PIPELINE] = sizeof(union msg_bind_source_to_pipeline),
 	[GET_PIPELINE_LAYER_ORDER] = sizeof(union msg_get_pipeline_layer_order),
 	[CREATE_WFD_EGL_IMAGES] = sizeof(union msg_create_egl_images),
@@ -1454,6 +1472,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPortModeAttribf_User(
 	WFDDevice device,
@@ -1508,6 +1527,7 @@ end:
 
 	return val;
 }
+#endif
 
 void
 wfdSetPortMode_User(
@@ -1660,6 +1680,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPortAttribf_User(
 	WFDDevice device,
@@ -1713,6 +1734,7 @@ end:
 	return val;
 
 }
+#endif
 
 void
 wfdGetPortAttribiv_User(
@@ -1777,6 +1799,7 @@ end:
 	wire_user_profile_end(WFD_GET_PORT_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdGetPortAttribfv_User(
 	WFDDevice device,
@@ -1838,6 +1861,7 @@ end:
 	wire_user_profile_end(WFD_GET_PORT_ATTRIBFV_PROFILING, true);
 
 }
+#endif
 
 void
 wfdSetPortAttribi_User(
@@ -1887,6 +1911,7 @@ end:
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBI_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPortAttribf_User(
 	WFDDevice device,
@@ -1935,6 +1960,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBF_PROFILING, true);
 }
+#endif
 
 void
 wfdSetPortAttribiv_User(
@@ -1995,6 +2021,7 @@ end:
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPortAttribfv_User(
 	WFDDevice device,
@@ -2053,6 +2080,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PORT_ATTRIBFV_PROFILING, true);
 }
+#endif
 
 WFDErrorCode
 wfdWaitForVSync_User(
@@ -2442,6 +2470,7 @@ end:
 	return val;
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat
 wfdGetPipelineAttribf_User(
 	WFDDevice device,
@@ -2494,6 +2523,7 @@ end:
 
 	return val;
 }
+#endif
 
 void
 wfdGetPipelineAttribiv_User(
@@ -2558,6 +2588,7 @@ end:
 	wire_user_profile_end(WFD_GET_PIPELINE_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdGetPipelineAttribfv_User(
 	WFDDevice device,
@@ -2620,6 +2651,7 @@ end:
 
 	wire_user_profile_end(WFD_GET_PIPELINE_ATTRIBFV_PROFILING, true);
 }
+#endif
 
 void
 wfdSetPipelineAttribi_User(
@@ -2672,6 +2704,7 @@ end:
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBI_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPipelineAttribf_User(
 	WFDDevice device,
@@ -2720,6 +2753,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBF_PROFILING, true);
 }
+#endif
 
 void
 wfdSetPipelineAttribiv_User(
@@ -2782,6 +2816,7 @@ end:
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBIV_PROFILING, true);
 }
 
+#ifdef ENABLE_FLOAT_USAGE
 void
 wfdSetPipelineAttribfv_User(
 	WFDDevice device,
@@ -2840,6 +2875,7 @@ end:
 
 	wire_user_profile_end(WFD_SET_PIPELINE_ATTRIBFV_PROFILING, true);
 }
+#endif
 
 WFDint
 wfdGetPipelineLayerOrder_User(
