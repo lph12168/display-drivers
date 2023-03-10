@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright (C) 2014 Red Hat
@@ -881,7 +881,7 @@ static int wfd_kms_get_connector_infos(struct msm_hyp_kms *kms,
 	WFDint data[4];
 	WFDint port_connected;
 	WFDint host_cap;
-	WFDfloat physical_size[2];
+	WFDint physical_size[2];
 	WFDPortMode port_mode[MAX_PORT_MODES_CNT];
 	int num_mode;
 	int i, j, ret = 0;
@@ -930,7 +930,7 @@ static int wfd_kms_get_connector_infos(struct msm_hyp_kms *kms,
 				connector_status_connected :
 				connector_status_disconnected;
 
-		wfdGetPortAttribfv_User(priv->wfd_device,
+		wfdGetPortAttribiv_User(priv->wfd_device,
 					priv->wfd_port,
 					WFD_PORT_PHYSICAL_SIZE,
 					2, physical_size);
@@ -1238,7 +1238,7 @@ static int wfd_kms_get_port_plane_infos(struct msm_hyp_kms *kms,
 	struct wfd_kms *wfd_kms = to_wfd_kms(kms);
 	struct wfd_plane_info_priv *priv;
 	int i, ret = 0, master_idx;
-	WFDfloat val[2] = {0.0, 0.0};
+	WFDint val[2] = {0, 0};
 	WFDint val_i[2] = {0, 0};
 	WFDint max_width = wfd_kms->dev->mode_config.max_width;
 
@@ -1285,13 +1285,13 @@ static int wfd_kms_get_port_plane_infos(struct msm_hyp_kms *kms,
 
 		priv->base.possible_crtcs = 1 << port_idx;
 
-		wfdGetPipelineAttribfv_User(priv->wfd_device,
+		wfdGetPipelineAttribiv_User(priv->wfd_device,
 				priv->wfd_pipeline,
 				WFD_PIPELINE_SCALE_RANGE,
 				2,
 				val);
 		if (val[0] > 0 && val[1] > 0) {
-			priv->base.maxdwnscale = (u32)(1.0f / val[0]);
+			priv->base.maxdwnscale = (u32)(val[0]);
 			priv->base.maxupscale = (u32)(val[1]);
 		} else {
 			priv->base.maxdwnscale = SSPP_UNITY_SCALE;
