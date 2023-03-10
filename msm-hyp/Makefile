@@ -4,9 +4,6 @@ ccflags-y += -I$(srctree)/techpack/display/include
 ccflags-y += -I$(srctree)/techpack/display/msm
 ccflags-$(CONFIG_DRM_MSM_HYP_WFD) += -I$(srctree)/techpack/display/msm-hyp/wfd
 
-CFLAGS_REMOVE_wfd/wfd_kms.o += -mgeneral-regs-only
-CFLAGS_REMOVE_wfd/wire_user.o += -mgeneral-regs-only
-
 msm_hyp-y := \
 			msm_hyp_trace_point.o \
 			msm_drv_hyp.o\

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017,2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright (c) 2009 The Khronos Group Inc.
@@ -57,7 +58,9 @@ typedef khronos_int32_t             WFDint;
 typedef khronos_uint32_t            WFDuint32;
 typedef khronos_int64_t             WFDint64;
 typedef khronos_uint64_t            WFDuint64;
+#ifdef ENABLE_FLOAT_USAGE
 typedef khronos_float_t             WFDfloat;
+#endif
 typedef khronos_uint32_t            WFDbitfield;
 #if defined(__aarch64__)
 typedef void *                      WFDHandle;
