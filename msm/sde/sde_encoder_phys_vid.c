@@ -1318,12 +1318,16 @@ static void sde_encoder_phys_vid_irq_control(struct sde_encoder_phys *phys_enc,
 		bool enable)
 {
 	struct sde_encoder_phys_vid *vid_enc;
+	struct sde_encoder_virt *sde_enc;
 	int ret;
 
 	if (!phys_enc)
 		return;
 
 	vid_enc = to_sde_encoder_phys_vid(phys_enc);
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (!sde_enc)
+		return;
 
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0,
 			enable, atomic_read(&phys_enc->vblank_refcount));
@@ -1334,11 +1338,13 @@ static void sde_encoder_phys_vid_irq_control(struct sde_encoder_phys *phys_enc,
 			return;
 
 		sde_encoder_helper_register_irq(phys_enc, INTR_IDX_UNDERRUN);
-		sde_encoder_phys_vid_control_roi_misr_irq(phys_enc, true);
+		if (sde_enc->misr_mismatch)
+			sde_encoder_phys_vid_control_roi_misr_irq(phys_enc, true);
 	} else {
 		sde_encoder_phys_vid_control_vblank_irq(phys_enc, false);
 		sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_UNDERRUN);
-		sde_encoder_phys_vid_control_roi_misr_irq(phys_enc, false);
+		if (sde_enc->misr_mismatch)
+			sde_encoder_phys_vid_control_roi_misr_irq(phys_enc, false);
 	}
 }
 
