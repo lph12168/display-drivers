@@ -5,6 +5,7 @@
  */
 
 #include <linux/habmm.h>
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/types.h>
@@ -994,9 +995,16 @@ retry:
 			WIRE_LOG_ERROR("RPC call failed");
 
 			retry_times++;
-			if (retry_times >= 3) {
+			if (retry_times >= 6) {
+				/*
+				 * Drm fe try 6 times to send message to BE and wait 250ms, but no reply.
+				 * Need catch the system frame buffer to debug.
+				 * Normally, 100us is enough for the reply.
+				 */
 				panic("wfdDeviceCommit");
 			} else {
+				/* Add this msleep to let watch dog thread can be feed */
+				msleep(1);
 				goto retry;
 			}
 		}
