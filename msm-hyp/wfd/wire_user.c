@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/habmm.h>
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/types.h>
@@ -976,9 +977,16 @@ retry:
 			WIRE_LOG_ERROR("RPC call failed");
 
 			retry_times++;
-			if (retry_times >= 3) {
+			if (retry_times >= 6) {
+				/*
+				 * Drm fe try 6 times to send message to BE and wait 250ms, but no reply.
+				 * Need catch the system frame buffer to debug.
+				 * Normally, 100us is enough for the reply.
+				 */
 				panic("wfdDeviceCommit");
 			} else {
+				/* Add this msleep to let watch dog thread can be feed */
+				msleep(1);
 				goto retry;
 			}
 		}
