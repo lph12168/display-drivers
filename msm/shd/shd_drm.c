@@ -1173,6 +1173,33 @@ static int shd_drm_obj_init(struct shd_display *display)
 		goto end;
 	}
 
+	/* search plane that doesn't belong to any crtc */
+	primary = NULL;
+	for (i = 0; i < priv->num_planes; i++) {
+		bool found = false;
+
+		drm_for_each_crtc(crtc, dev) {
+			if (crtc->primary == priv->planes[i]) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			primary = priv->planes[i];
+			primary->type = DRM_PLANE_TYPE_PRIMARY;
+			break;
+		}
+	}
+
+	if (!primary) {
+		SDE_ERROR("failed to find primary plane\n");
+		rc = -ENOENT;
+		goto end;
+	}
+
+	SDE_DEBUG("find primary plane %d\n", DRMID(primary));
+
 	memset(&info, 0x0, sizeof(info));
 	rc = shd_connector_get_info(NULL, &info, display);
 	if (rc) {
@@ -1217,22 +1244,9 @@ static int shd_drm_obj_init(struct shd_display *display)
 
 	SDE_DEBUG("create connector %d\n", DRMID(connector));
 
-	dev->mode_config.allow_fb_modifiers = false;
-
-	/* create primary plane for crtc */
-	primary = sde_plane_init(dev, SSPP_DMA0, true, 0, 0);
-	dev->mode_config.allow_fb_modifiers = true;
-
-	if (IS_ERR(primary))
-		return -ENOMEM;
-
-	SDE_DEBUG("created primary plane %d\n", DRMID(primary));
-	priv->planes[priv->num_planes++] = primary;
-
 	crtc = sde_crtc_init(dev, primary);
 	if (IS_ERR(crtc)) {
 		rc = PTR_ERR(crtc);
-
 		goto end;
 	}
 	priv->crtcs[priv->num_crtcs++] = crtc;
