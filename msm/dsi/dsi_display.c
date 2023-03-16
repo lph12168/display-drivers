@@ -2658,6 +2658,28 @@ error:
 	return rc;
 }
 
+int dsi_display_phy_pll_toggle(void *priv, bool prepare)
+{
+	int rc = 0;
+	struct dsi_display *display = priv;
+	struct dsi_display_ctrl *m_ctrl;
+
+	if (!display) {
+		DSI_ERR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	m_ctrl = &display->ctrl[display->clk_master_idx];
+	if (!m_ctrl->phy) {
+		DSI_ERR("[%s] PHY not found\n", display->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_phy_pll_toggle(m_ctrl->phy, prepare);
+
+	return rc;
+}
+
 #if defined (CONFIG_DEEPSLEEP) || defined (CONFIG_HIBERNATION)
 static int dsi_display_unset_clk_src(struct dsi_display *display)
 {
@@ -5703,6 +5725,7 @@ static int dsi_display_bind(struct device *dev,
 	info.pre_clkon_cb = dsi_pre_clkon_cb;
 	info.post_clkoff_cb = dsi_post_clkoff_cb;
 	info.post_clkon_cb = dsi_post_clkon_cb;
+	info.phy_pll_toggle_cb = dsi_display_phy_pll_toggle;
 	info.priv_data = display;
 	info.master_ndx = display->clk_master_idx;
 	info.dsi_ctrl_count = display->ctrl_count;
@@ -8252,6 +8275,7 @@ static void dsi_display_panel_id_notification(struct dsi_display *display)
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
+	int mask = 0;
 	struct dsi_display_mode *mode;
 
 	if (!display || !display->panel) {
@@ -8284,6 +8308,11 @@ int dsi_display_enable(struct dsi_display *display)
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
 		dsi_display_panel_id_notification(display);
 
+		if (display->is_hibernate_exit) {
+			/* mask underflow/overflow errors in hibernation exit*/
+			mask = BIT(DSI_FIFO_UNDERFLOW) | BIT(DSI_FIFO_OVERFLOW);
+			dsi_display_mask_ctrl_error_interrupts(display, mask, true);
+		}
 		return 0;
 	}
 
@@ -8350,8 +8379,12 @@ int dsi_display_enable(struct dsi_display *display)
 		rc = -EINVAL;
 		goto error_disable_panel;
 	}
-	if(display->is_hibernate_exit)
+
+	if(display->is_hibernate_exit) {
 		display->is_hibernate_exit = false;
+		/* Unmask error interrupts*/
+		dsi_display_mask_ctrl_error_interrupts(display, mask, false);
+	}
 	goto error;
 
 error_disable_panel:
