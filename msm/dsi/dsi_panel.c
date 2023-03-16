@@ -615,7 +615,6 @@ static int dsi_panel_pinctrl_init(struct dsi_panel *panel)
 		DSI_ERR("failed to get pinctrl suspend state, rc=%d\n", rc);
 		goto error;
 	}
-	dsi_panel_set_pinctrl_state(panel, true); /*need to configure the pinctrl for pwm even if splash is enabled*/
 
 error:
 	return rc;
