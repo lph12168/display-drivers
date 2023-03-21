@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -2452,6 +2452,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		pr_err("invalid input\n");
 		return -EINVAL;
 	}
+
 	adap = cec_allocate_adapter(&lt9611_cec_ops, pdata,
 			"lt9611_cec", cec_flags, 1);
 	if (!adap) {
@@ -2460,7 +2461,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 	}
 
 	pdata->cec_notifier = cec_notifier_cec_adap_register(pdata->dev,
-					NULL, pdata->cec_adapter);
+					NULL, adap);
 	if (!pdata->cec_notifier) {
 		pr_err("Get CEC notifier failed!\n");
 		cec_delete_adapter(adap);
