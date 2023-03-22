@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2655,6 +2655,28 @@ static int dsi_display_phy_power_off(struct dsi_display *display)
 		}
 	}
 error:
+	return rc;
+}
+
+int dsi_display_phy_pll_toggle(void *priv, bool prepare)
+{
+	int rc = 0;
+	struct dsi_display *display = priv;
+	struct dsi_display_ctrl *m_ctrl;
+
+	if (!display) {
+		DSI_ERR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	m_ctrl = &display->ctrl[display->clk_master_idx];
+	if (!m_ctrl->phy) {
+		DSI_ERR("[%s] PHY not found\n", display->name);
+		return -EINVAL;
+	}
+
+	rc = dsi_phy_pll_toggle(m_ctrl->phy, prepare);
+
 	return rc;
 }
 
@@ -5572,8 +5594,7 @@ static int dsi_display_pre_acquire(void *data)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int dsi_display_pm_hibernate_helper(struct dsi_display *dsi_display) {
+int dsi_display_pm_hibernate_helper(struct dsi_display *dsi_display) {
 
 	int rc = 0;
 
@@ -5588,30 +5609,6 @@ static int dsi_display_pm_hibernate_helper(struct dsi_display *dsi_display) {
 
 	return rc;
 }
-
-static int dsi_display_pm_restore(struct device *dev)
-{
-	int ret = 0;
-	struct dsi_display *display;
-	struct platform_device *pdev = to_platform_device(dev);
-
-	if (!dev)
-		return -EINVAL;
-
-	display = platform_get_drvdata(pdev);
-
-	if(!display->is_splash_enable ||
-		!display->hibernate_splash_enable)
-		return 0;
-
-	ret = dsi_display_pm_hibernate_helper(display);
-	if (ret) {
-		DSI_ERR("dsi hibernate helper failed.\n");
-		return ret;
-	}
-	return ret;
-}
-#endif
 
 /**
  * dsi_display_bind - bind dsi device with controlling device
@@ -5728,6 +5725,7 @@ static int dsi_display_bind(struct device *dev,
 	info.pre_clkon_cb = dsi_pre_clkon_cb;
 	info.post_clkoff_cb = dsi_post_clkoff_cb;
 	info.post_clkon_cb = dsi_post_clkon_cb;
+	info.phy_pll_toggle_cb = dsi_display_phy_pll_toggle;
 	info.priv_data = display;
 	info.master_ndx = display->clk_master_idx;
 	info.dsi_ctrl_count = display->ctrl_count;
@@ -5903,10 +5901,6 @@ static const struct component_ops dsi_display_comp_ops = {
 	.unbind = dsi_display_unbind,
 };
 
-static const struct dev_pm_ops dsi_pm_ops = {
-	.restore_early = dsi_display_pm_restore,
-};
-
 static struct platform_driver dsi_display_driver = {
 	.probe = dsi_display_dev_probe,
 	.remove = dsi_display_dev_remove,
@@ -5914,7 +5908,6 @@ static struct platform_driver dsi_display_driver = {
 		.name = "msm-dsi-display",
 		.of_match_table = dsi_display_dt_match,
 		.suppress_bind_attrs = true,
-		.pm = &dsi_pm_ops,
 	},
 };
 
@@ -6318,6 +6311,9 @@ static int dsi_display_ext_get_info(struct drm_connector *connector,
 		return -EINVAL;
 	}
 
+	if (display->panel->num_timing_nodes)
+		return dsi_display_get_info(connector, info, disp);
+
 	mutex_lock(&display->display_lock);
 
 	memset(info, 0, sizeof(struct msm_display_info));
@@ -6348,22 +6344,25 @@ static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
 	void *display, const struct msm_resource_caps_info *avail_res)
 {
 	struct msm_display_topology *topology;
+	struct dsi_display *ext_display = (struct dsi_display *)display;
 
 	if (!drm_mode || !mode_info ||
 			!avail_res || !avail_res->max_mixer_width)
 		return -EINVAL;
 
+	if (ext_display->panel->num_timing_nodes)
+		return dsi_conn_get_mode_info(connector, drm_mode,
+			mode_info, display, avail_res);
+
 	memset(mode_info, 0, sizeof(*mode_info));
 	mode_info->frame_rate = drm_mode->vrefresh;
 	mode_info->vtotal = drm_mode->vtotal;
+	mode_info->comp_info.comp_type = MSM_DISPLAY_COMPRESSION_NONE;
 
 	topology = &mode_info->topology;
-	topology->num_lm = (avail_res->max_mixer_width
-			<= drm_mode->hdisplay) ? 2 : 1;
+	topology->num_lm = ext_display->ctrl_count;
 	topology->num_enc = 0;
 	topology->num_intf = topology->num_lm;
-
-	mode_info->comp_info.comp_type = MSM_DISPLAY_COMPRESSION_NONE;
 
 	return 0;
 }
@@ -8276,6 +8275,7 @@ static void dsi_display_panel_id_notification(struct dsi_display *display)
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
+	int mask = 0;
 	struct dsi_display_mode *mode;
 
 	if (!display || !display->panel) {
@@ -8308,6 +8308,11 @@ int dsi_display_enable(struct dsi_display *display)
 		DSI_DEBUG("cont splash enabled, display enable not required\n");
 		dsi_display_panel_id_notification(display);
 
+		if (display->is_hibernate_exit) {
+			/* mask underflow/overflow errors in hibernation exit*/
+			mask = BIT(DSI_FIFO_UNDERFLOW) | BIT(DSI_FIFO_OVERFLOW);
+			dsi_display_mask_ctrl_error_interrupts(display, mask, true);
+		}
 		return 0;
 	}
 
@@ -8374,8 +8379,12 @@ int dsi_display_enable(struct dsi_display *display)
 		rc = -EINVAL;
 		goto error_disable_panel;
 	}
-	if(display->is_hibernate_exit)
+
+	if(display->is_hibernate_exit) {
 		display->is_hibernate_exit = false;
+		/* Unmask error interrupts*/
+		dsi_display_mask_ctrl_error_interrupts(display, mask, false);
+	}
 	goto error;
 
 error_disable_panel:

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -105,7 +106,9 @@ struct msm_kms_funcs {
 				const int32_t connector_id);
 	/* pm suspend/resume hooks */
 	int (*pm_suspend)(struct device *dev);
+	int (*pm_freeze_late)(struct device *dev);
 	int (*pm_resume)(struct device *dev);
+	int (*pm_restore)(struct device *dev);
 	/* cleanup: */
 	void (*destroy)(struct msm_kms *kms);
 	/* get address space */
