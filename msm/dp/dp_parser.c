@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -706,12 +706,22 @@ static int dp_parser_mst(struct dp_parser *parser)
 static void dp_parser_dsc(struct dp_parser *parser)
 {
 	struct device *dev = &parser->pdev->dev;
+	u32 version;
+	int rc;
 
 	parser->dsc_feature_enable = of_property_read_bool(dev->of_node,
 			"qcom,dsc-feature-enable");
 
 	parser->dsc_continuous_pps = of_property_read_bool(dev->of_node,
 			"qcom,dsc-continuous-pps");
+
+	rc = of_property_read_u32(dev->of_node,
+			"qcom,dsc-version", &version);
+	if (!rc) {
+		parser->dsc_version = version;
+		DP_DEBUG("dsc version: 0x%x",
+			parser->dsc_version);
+	}
 
 	DP_DEBUG("dsc parsing successful. dsc:%d\n",
 			parser->dsc_feature_enable);

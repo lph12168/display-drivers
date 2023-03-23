@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -197,6 +197,7 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @gpio_aux_switch: presence GPIO AUX switch status
  * @dsc_feature_enable: DSC feature enable status
  * @fec_feature_enable: FEC feature enable status
+ * @dsc_version: Max. DSC version supported by HW
  * @dsc_continuous_pps: PPS sent every frame by HW
  * @has_widebus: widebus (2PPC) feature eanble status
   *@mst_fixed_port: mst port_num reserved for fixed topology
@@ -231,6 +232,7 @@ struct dp_parser {
 	u32 mst_fixed_port[MAX_DP_MST_STREAMS];
 	u32 qos_cpu_mask;
 	unsigned long qos_cpu_latency;
+	u32 dsc_version;
 
 	int (*parse)(struct dp_parser *parser);
 	struct dp_io_data *(*get_io)(struct dp_parser *parser, char *name);
