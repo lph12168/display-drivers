@@ -53,6 +53,7 @@ static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 					 drm_mode->vdisplay;
 
 	dsi_mode->timing.refresh_rate = drm_mode_vrefresh(drm_mode);
+	dsi_mode->pixel_clk_khz = drm_mode->clock;
 
 	dsi_mode->timing.h_sync_polarity =
 			!!(drm_mode->flags & DRM_MODE_FLAG_PHSYNC);
@@ -1242,6 +1243,7 @@ enum drm_mode_status dsi_conn_mode_valid(struct drm_connector *connector,
 	struct dsi_display_mode *full_dsi_mode = NULL;
 	struct sde_connector_state *conn_state;
 	int rc;
+	struct dsi_display *dsi_display = display;
 
 	if (!connector || !mode) {
 		DSI_ERR("Invalid params\n");
@@ -1250,18 +1252,24 @@ enum drm_mode_status dsi_conn_mode_valid(struct drm_connector *connector,
 
 	convert_to_dsi_mode(mode, &dsi_mode);
 
-	conn_state = to_sde_connector_state(connector->state);
-	if (conn_state)
-		msm_parse_mode_priv_info(&conn_state->msm_mode, &dsi_mode);
+	if (dsi_display->panel->num_timing_nodes) {
+		conn_state = to_sde_connector_state(connector->state);
+		if (conn_state)
+			msm_parse_mode_priv_info(&conn_state->msm_mode, &dsi_mode);
 
-	rc = dsi_display_find_mode(display, &dsi_mode, NULL, &full_dsi_mode);
-	if (rc) {
-		DSI_ERR("could not find mode %s\n", mode->name);
-		return MODE_ERROR;
+		rc = dsi_display_find_mode(display, &dsi_mode, NULL, &full_dsi_mode);
+		if (rc) {
+			DSI_ERR("could not find mode %s\n", mode->name);
+			return MODE_ERROR;
+		}
+
+		rc = dsi_display_validate_mode(display, full_dsi_mode,
+				DSI_VALIDATE_FLAG_ALLOW_ADJUST);
+	} else {
+		rc = dsi_display_validate_mode(display, &dsi_mode,
+				DSI_VALIDATE_FLAG_ALLOW_ADJUST);
 	}
 
-	rc = dsi_display_validate_mode(display, full_dsi_mode,
-			DSI_VALIDATE_FLAG_ALLOW_ADJUST);
 	if (rc) {
 		DSI_ERR("mode not supported, rc=%d\n", rc);
 		return MODE_BAD;
