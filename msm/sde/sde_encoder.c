@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -156,6 +156,7 @@ ktime_t sde_encoder_calc_last_vsync_timestamp(struct drm_encoder *drm_enc)
 	u64 vsync_counter, qtmr_counter, hw_diff, hw_diff_ns, frametime_ns;
 	ktime_t tvblank, cur_time;
 	struct intf_status intf_status = {0};
+	unsigned long features;
 	u32 fps;
 
 	sde_enc = to_sde_encoder_virt(drm_enc);
@@ -168,11 +169,14 @@ ktime_t sde_encoder_calc_last_vsync_timestamp(struct drm_encoder *drm_enc)
 			&& !sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_VIDEO_MODE)))
 		return 0;
 
+	features = cur_master->hw_intf->cap->features;
+
 	/*
-	 * avoid calculation and rely on ktime_get, if programmable fetch is enabled
-	 * as the HW VSYNC timestamp will be updated at panel vsync and not at MDP VSYNC
+	 * if MDP VSYNC HW timestamp is not supported and if programmable fetch is enabled,
+	 * avoid calculation and rely on ktime_get, as the HW vsync timestamp will be updated
+	 * at panel vsync and not at MDP VSYNC
 	 */
-	if (cur_master->hw_intf->ops.get_status) {
+	if (!test_bit(SDE_INTF_MDP_VSYNC_TS, &features) && cur_master->hw_intf->ops.get_status) {
 		cur_master->hw_intf->ops.get_status(cur_master->hw_intf, &intf_status);
 		if (intf_status.is_prog_fetch_en)
 			return 0;
@@ -2192,7 +2196,11 @@ static int _sde_encoder_rc_idle(struct drm_encoder *drm_enc,
 		goto end;
 	}
 
-	if (is_vid_mode) {
+	/**
+	 * Avoid power collapse entry for writeback crtc since HAL does not repopulate
+	 * crtc, plane properties like luts for idlepc exit commit.
+	 */
+	if (is_vid_mode || _is_crtc_intf_mode_wb(crtc)) {
 		sde_encoder_irq_control(drm_enc, false);
 		_sde_encoder_pm_qos_remove_request(drm_enc);
 	} else {
@@ -2963,10 +2971,6 @@ void sde_encoder_virt_restore(struct drm_encoder *drm_enc)
 		sde_enc->cur_master->ops.restore(sde_enc->cur_master);
 
 	_sde_encoder_virt_enable_helper(drm_enc);
-
-	if (sde_enc->cur_master->ops.reset_tearcheck_rd_ptr)
-		sde_enc->cur_master->ops.reset_tearcheck_rd_ptr(sde_enc->cur_master);
-
 	sde_encoder_control_te(drm_enc, true);
 }
 
@@ -3275,7 +3279,6 @@ void sde_encoder_helper_phys_disable(struct sde_encoder_phys *phys_enc,
 	struct sde_hw_dsc *hw_dsc = NULL;
 	int i;
 
-	ctl->ops.reset(ctl);
 	sde_encoder_helper_reset_mixers(phys_enc, NULL);
 
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
@@ -5467,24 +5470,15 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_enc,
 	return ret;
 }
 
-void sde_encoder_helper_get_jitter_bounds_ns(struct drm_encoder *drm_enc,
-		u64 *l_bound, u64 *u_bound)
+void sde_encoder_helper_get_jitter_bounds_ns(u32 frame_rate,
+		u32 jitter_num, u32 jitter_denom,
+		ktime_t *l_bound, ktime_t *u_bound)
 {
-	struct sde_encoder_virt *sde_enc;
-	u64 jitter_ns, frametime_ns;
-	struct msm_mode_info *info;
+	ktime_t jitter_ns, frametime_ns;
 
-	if (!drm_enc) {
-		SDE_ERROR("invalid encoder\n");
-		return;
-	}
-
-	sde_enc = to_sde_encoder_virt(drm_enc);
-	info = &sde_enc->mode_info;
-
-	frametime_ns = (1 * 1000000000) / info->frame_rate;
-	jitter_ns =  info->jitter_numer * frametime_ns;
-	do_div(jitter_ns, info->jitter_denom * 100);
+	frametime_ns = (1 * 1000000000) / frame_rate;
+	jitter_ns =  jitter_num * frametime_ns;
+	do_div(jitter_ns, jitter_denom * 100);
 
 	*l_bound = frametime_ns - jitter_ns;
 	*u_bound = frametime_ns + jitter_ns;
