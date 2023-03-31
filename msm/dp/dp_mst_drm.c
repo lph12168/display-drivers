@@ -1141,7 +1141,8 @@ void dp_mst_drm_bridge_deinit(void *display)
 }
 
 static struct drm_connector *
-dp_mst_find_sibling_connector(struct drm_connector *connector)
+dp_mst_find_sibling_connector(struct drm_connector *connector,
+		struct drm_modeset_acquire_ctx *ctx)
 {
 	struct sde_connector *c_conn = to_sde_connector(connector);
 	struct dp_display *dp_display = c_conn->display;
@@ -1149,9 +1150,6 @@ dp_mst_find_sibling_connector(struct drm_connector *connector)
 	enum drm_connector_status status;
 	struct drm_connector_list_iter conn_iter;
 	struct drm_connector *sibling_conn = NULL, *p;
-	struct drm_modeset_acquire_ctx ctx;
-
-	drm_modeset_acquire_init(&ctx, 0);
 
 	drm_connector_list_iter_begin(connector->dev, &conn_iter);
 	drm_for_each_connector_iter(p, &conn_iter) {
@@ -1163,7 +1161,7 @@ dp_mst_find_sibling_connector(struct drm_connector *connector)
 			continue;
 
 		status = mst->mst_fw_cbs->detect_port_ctx(connector,
-				&ctx, &mst->mst_mgr, c_conn->mst_port);
+				ctx, &mst->mst_mgr, c_conn->mst_port);
 
 		if (status != connector_status_connected)
 			continue;
@@ -1180,9 +1178,6 @@ dp_mst_find_sibling_connector(struct drm_connector *connector)
 		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
-
-	drm_modeset_drop_locks(&ctx);
-	drm_modeset_acquire_fini(&ctx);
 
 	return sibling_conn;
 }
@@ -1227,7 +1222,7 @@ static void dp_mst_fixup_tile_mode(struct drm_connector *connector)
 	}
 
 	/* update display info for sibling connectors */
-	sibling_conn = dp_mst_find_sibling_connector(connector);
+	sibling_conn = dp_mst_find_sibling_connector(connector, NULL);
 	if (sibling_conn)
 		sibling_conn->display_info = connector->display_info;
 }
@@ -1301,7 +1296,8 @@ static bool dp_mst_atomic_find_super_encoder(struct drm_connector *connector,
 
 	if (dp_mst_is_tile_mode(&crtc_state->mode)) {
 		/* fail if tiled conn can't be found */
-		sibling_conn = dp_mst_find_sibling_connector(connector);
+		sibling_conn = dp_mst_find_sibling_connector(connector,
+				state->state->acquire_ctx);
 		if (!sibling_conn)
 			return true;
 
@@ -1371,7 +1367,7 @@ dp_mst_connector_detect(struct drm_connector *connector,
 		if (dp_display->force_bond_mode) {
 			struct drm_connector *p;
 
-			p = dp_mst_find_sibling_connector(connector);
+			p = dp_mst_find_sibling_connector(connector, ctx);
 			if (!p || p->connector_type_id <
 					connector->connector_type_id)
 				status = connector_status_disconnected;
@@ -1379,7 +1375,7 @@ dp_mst_connector_detect(struct drm_connector *connector,
 
 		if (connector->has_tile && connector->tile_h_loc) {
 			struct drm_connector *p =
-					dp_mst_find_sibling_connector(connector);
+					dp_mst_find_sibling_connector(connector, ctx);
 			if (!p || p->connector_type_id < connector->connector_type_id)
 				status = connector_status_disconnected;
 		}
@@ -1542,7 +1538,7 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 		struct drm_connector *sibling_conn;
 		struct drm_display_mode tmp;
 
-		sibling_conn = dp_mst_find_sibling_connector(connector);
+		sibling_conn = dp_mst_find_sibling_connector(connector, NULL);
 		if (!sibling_conn) {
 			DP_DEBUG("mode:%s requires dual ports\n", mode->name);
 			return MODE_BAD;
@@ -2302,7 +2298,6 @@ dp_mst_add_fixed_connector(struct drm_dp_mst_topology_mgr *mgr,
 	struct drm_device *dev;
 	struct dp_display *dp_display;
 	struct drm_connector *connector;
-	struct sde_connector *c_conn;
 	int i, enc_idx;
 
 	DP_MST_DEBUG("enter\n");
@@ -2349,10 +2344,6 @@ dp_mst_add_fixed_connector(struct drm_dp_mst_topology_mgr *mgr,
 
 	/* clear encoder list */
 	connector->possible_encoders = 0;
-
-	c_conn = to_sde_connector(connector);
-	c_conn->ops.late_register = dp_mst_register_fixed_connector;
-	c_conn->ops.early_unregister = dp_mst_destroy_fixed_connector;
 
 	/* re-attach encoders from first available encoders */
 	for (i = enc_idx; i < MAX_DP_MST_DRM_BRIDGES; i++)
@@ -2472,6 +2463,8 @@ dp_mst_drm_fixed_connector_init(struct dp_display *dp_display,
 		.config_hdr = dp_mst_connector_config_hdr,
 		.pre_destroy = dp_mst_connector_pre_destroy,
 		.update_pps = dp_mst_connector_update_pps,
+		.late_register = dp_mst_register_fixed_connector,
+		.early_unregister = dp_mst_destroy_fixed_connector,
 	};
 	struct drm_device *dev;
 	struct drm_connector *connector;
