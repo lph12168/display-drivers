@@ -2,10 +2,10 @@
 
 KDIR := $(TOP)/kernel_platform/msm-kernel
 
-ifeq (y, $(findstring y, $(CONFIG_QTI_QUIN_GVM)))
+#ifeq (y, $(findstring y, $(CONFIG_QTI_QUIN_GVM)))
 include $(DISPLAY_ROOT)/config/gvmdisp.conf
 LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmdispconf.h
-endif
+#endif
 
 LINUX_INC +=    -Iinclude/linux \
         -Iinclude/linux/drm \
@@ -16,6 +16,7 @@ LINUX_INC +=	-I$(DISPLAY_ROOT) \
 	-I$(DISPLAY_ROOT)/msm-hyp \
 	-I$(DISPLAY_ROOT)/msm \
 	-I$(DISPLAY_ROOT)/msm-hyp/wfd \
+	-I$(DISPLAY_ROOT)/msm-hyp/virtio \
 	-I$(DISPLAY_ROOT)/include/uapi/display \
 
 CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
@@ -62,6 +63,7 @@ ccflags-$(CONFIG_DRM_MSM_HYP) := -I$(KERNEL_ROOT)/include/drm \
              -I$(DISPLAY_ROOT)/msm \
 
 ccflags-$(CONFIG_DRM_MSM_HYP_WFD) += -I$(DISPLAY_ROOT)/msm-hyp/wfd
+ccflags-$(CONFIG_DRM_MSM_HYP_VIRTIO) += -I$(DISPLAY_ROOT)/msm-hyp/virtio
 
 CFLAGS_REMOVE_wfd/wfd_kms.o += -mgeneral-regs-only
 CFLAGS_REMOVE_wfd/wire_user.o += -mgeneral-regs-only
@@ -79,6 +81,10 @@ msm_hyp-$(CONFIG_DRM_MSM_HYP_WFD) += \
 			wfd/wfd_kms.o\
 			wfd/user_hab_utils.o\
 			wfd/wire_user.o
+
+msm_hyp-$(CONFIG_DRM_MSM_HYP_VIRTIO) += \
+			virtio/virtio_kms.o\
+			virtio/virtgpu_vq.o
 
 obj-$(CONFIG_DRM_MSM_HYP) += msm_hyp.o
 

@@ -90,6 +90,8 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_writeback.h>
+#include <drm/drm_modeset_helper_vtables.h>
 #include "msm_drv_hyp.h"
 #include "msm_hyp_utils.h"
 #include "msm_hyp_trace.h"
@@ -718,13 +720,13 @@ static int _msm_hyp_connector_encoder_init(struct drm_device *ddev,
 }
 
 static void msm_hyp_crtc_atomic_enable(struct drm_crtc *crtc,
-	struct drm_atomic_state *old_state)
+		struct drm_atomic_state *old_state)
 {
 	drm_crtc_vblank_on(crtc);
 }
 
 static void msm_hyp_crtc_atomic_disable(struct drm_crtc *crtc,
-	struct drm_atomic_state *old_state)
+		struct drm_atomic_state *old_state)
 {
 	drm_crtc_vblank_off(crtc);
 }
@@ -900,17 +902,16 @@ static void msm_hyp_disable_vblank(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs msm_hyp_crtc_funcs = {
-	.set_config             = drm_atomic_helper_set_config,
-	.destroy                = msm_hyp_crtc_destroy,
-	.page_flip              = drm_atomic_helper_page_flip,
-	.atomic_set_property    = msm_hyp_crtc_set_property,
-	.atomic_get_property    = msm_hyp_crtc_get_property,
-	.reset                  = msm_hyp_crtc_reset,
-	.atomic_duplicate_state = msm_hyp_crtc_duplicate_state,
-	.atomic_destroy_state   = msm_hyp_crtc_destroy_state,
-	.enable_vblank          = msm_hyp_enable_vblank,
-	.disable_vblank         = msm_hyp_disable_vblank,
-
+	.set_config               = drm_atomic_helper_set_config,
+	.destroy                  = msm_hyp_crtc_destroy,
+	.page_flip                = drm_atomic_helper_page_flip,
+	.atomic_set_property      = msm_hyp_crtc_set_property,
+	.atomic_get_property      = msm_hyp_crtc_get_property,
+	.reset                    = msm_hyp_crtc_reset,
+	.atomic_duplicate_state   = msm_hyp_crtc_duplicate_state,
+	.atomic_destroy_state     = msm_hyp_crtc_destroy_state,
+	.enable_vblank            = msm_hyp_enable_vblank,
+	.disable_vblank           = msm_hyp_disable_vblank,
 };
 
 static int _msm_hyp_crtc_init_caps(struct msm_hyp_crtc *crtc)
@@ -1534,7 +1535,7 @@ static struct drm_framebuffer *msm_hyp_framebuffer_create(
 
 	ret = msm_hyp_shmem_sync_sg_for_device(bo);
 	if (ret) {
-		DRM_ERROR("failed to do dumb buffer sync\n");
+		pr_err("failed to do dumb buffer sync\n");
 		return ERR_PTR(ret);
 	}
 
@@ -1795,7 +1796,7 @@ static void _msm_hyp_complete_commit(struct msm_hyp_commit *c)
 	HYP_ATRACE_BEGIN("Input_Fence_WAIT");
 
 	if (first_frame) {
-		place_marker("kernel_fe: First commit start");
+//		place_marker("kernel_fe: First commit start");
 		first_frame = false;
 	}
 
@@ -1843,7 +1844,10 @@ static void _msm_hyp_drm_commit_work_cb(struct kthread_work *work)
 	}
 
 	commit = container_of(work, struct msm_hyp_commit, commit_work);
-
+	if (!commit) {
+		pr_err("commit is NULL\n");
+		return;
+	}
 	_msm_hyp_complete_commit(commit);
 }
 
@@ -1895,11 +1899,57 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	else if (!nonblock)
 		kthread_flush_work(&commit->commit_work);
 
+
 	/* free nonblocking commits in this context, after processing */
 	if (!nonblock)
 		kfree(commit);
 
 	HYP_ATRACE_END(__func__);
+}
+
+int msm_hyp_atomic_helper_prepare_planes(struct drm_device *dev, struct drm_atomic_state *state)
+{
+	struct drm_connector *connector;
+	struct drm_connector_state *new_conn_state;
+	struct drm_plane *plane;
+	struct drm_plane_state *new_plane_state;
+	int ret, i, j;
+
+	for_each_new_connector_in_state(state, connector, new_conn_state, i) {
+		if (!new_conn_state->writeback_job)
+			continue;
+		ret = drm_writeback_prepare_job(new_conn_state->writeback_job);
+		if (ret < 0)
+			return ret;
+	}
+
+	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
+		const struct drm_plane_helper_funcs *funcs;
+
+		funcs = plane->helper_private;
+
+		if (funcs->prepare_fb) {
+			ret = funcs->prepare_fb(plane, new_plane_state);
+			if (ret)
+				goto fail;
+		}
+	}
+	return 0;
+
+fail:
+	for_each_new_plane_in_state(state, plane, new_plane_state, j) {
+		const struct drm_plane_helper_funcs *funcs;
+
+		if (j >= i)
+			continue;
+
+		funcs = plane->helper_private;
+
+		if (funcs->cleanup_fb)
+			funcs->cleanup_fb(plane, new_plane_state);
+	}
+
+	return ret;
 }
 
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
@@ -1912,10 +1962,11 @@ static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 	struct msm_hyp_commit *c;
 	int ret, i;
 
-	ret = drm_atomic_helper_prepare_planes(dev, state);
+	//TODO drm_atomic_helper_prepare_planes is crashing need to debug that
+	ret = msm_hyp_atomic_helper_prepare_planes(dev, state);
+//	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret)
 		return ret;
-
 	c = _msm_hyp_commit_init(state, nonblock);
 	if (!c) {
 		ret = -ENOMEM;
@@ -1958,7 +2009,7 @@ static const struct drm_mode_config_funcs msm_hyp_mode_config_funcs = {
 
 static int _msm_hyp_hw_init(struct drm_device *ddev)
 {
-	int ret;
+	int ret = 0;
 
 	ret = _msm_hyp_mode_create_properties(ddev);
 	if (ret) {
@@ -1983,7 +2034,6 @@ static int _msm_hyp_hw_init(struct drm_device *ddev)
 fail:
 	return ret;
 }
-
 
 static int msm_hyp_open(struct drm_device *dev, struct drm_file *file)
 {
@@ -2296,7 +2346,9 @@ static struct platform_driver msm_platform_driver = {
 static int __init msm_drm_register(void)
 {
 	DRM_DEBUG("init");
+	msm_lease_drm_register();
 	wfd_kms_register();
+	virtio_kms_register();
 	return platform_driver_register(&msm_platform_driver);
 }
 
@@ -2305,6 +2357,8 @@ static void __exit msm_drm_unregister(void)
 	DRM_DEBUG("fini");
 	platform_driver_unregister(&msm_platform_driver);
 	wfd_kms_unregister();
+	virtio_kms_unregister();
+	msm_lease_drm_unregister();
 }
 
 module_init(msm_drm_register);
