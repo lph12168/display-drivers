@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -24,6 +24,7 @@
 #include <drm/sde_drm.h>
 #include <drm/msm_drm_pp.h>
 #include <linux/version.h>
+#include <drm/drm_blend.h>
 
 #include "msm_prop.h"
 #include "msm_drv.h"
@@ -4592,7 +4593,7 @@ void sde_plane_get_frame_data(struct drm_plane *plane,
 	if (ubwc_stats->error || ubwc_stats->meta_error) {
 		SDE_EVT32(DRMID(plane),  ubwc_stats->error, ubwc_stats->meta_error,
 				SDE_EVTLOG_ERROR);
-		SDE_DEBUG_PLANE(psde, "plane%d ubwc_error %d meta_error %d\n",
+		SDE_DEBUG_PLANE(psde, "ubwc_error:0x%x meta_error:0x%x\n",
 				ubwc_stats->error, ubwc_stats->meta_error);
 	}
 }
@@ -4810,6 +4811,14 @@ static void sde_plane_early_unregister(struct drm_plane *plane)
 	_sde_plane_destroy_debugfs(plane);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+static bool sde_plane_format_mod_supported(struct drm_plane *plane,
+		uint32_t format, uint64_t modifier)
+{
+	return (sde_get_sde_format_ext(format, modifier) != NULL);
+}
+#endif
+
 static const struct drm_plane_funcs sde_plane_funcs = {
 		.update_plane = drm_atomic_helper_update_plane,
 		.disable_plane = drm_atomic_helper_disable_plane,
@@ -4821,6 +4830,9 @@ static const struct drm_plane_funcs sde_plane_funcs = {
 		.atomic_destroy_state = sde_plane_destroy_state,
 		.late_register = sde_plane_late_register,
 		.early_unregister = sde_plane_early_unregister,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+		.format_mod_supported = sde_plane_format_mod_supported,
+#endif
 };
 
 static const struct drm_plane_helper_funcs sde_plane_helper_funcs = {
