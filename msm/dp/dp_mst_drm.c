@@ -2466,10 +2466,23 @@ dp_mst_add_fixed_connector(struct drm_dp_mst_topology_mgr *mgr,
 	if (port->input || port->mstb)
 		enc_idx = MAX_DP_MST_DRM_BRIDGES;
 	else {
-		/* if port is already reserved, return immediately */
+		/*
+		 * if port is already reserved, then protect this fixed
+		 * topology port from connector destroy when hpd happens,
+		 * and return immediately
+		 */
 		connector = dp_mst_find_fixed_connector(dp_mst, port);
-		if (connector != NULL)
+		if (connector != NULL) {
+			/* Increase the refcount, avoid the connector to be freed */
+			drm_connector_get(connector);
+			/*
+			 * drm_dp_delayed_destroy_port already unregistered the
+			 * connector. We want the connector to be re-registered,
+			 * so have to reset the registration_state.
+			 */
+			connector->registration_state = DRM_CONNECTOR_INITIALIZING;
 			return connector;
+		}
 
 		/* first available bridge index for non-reserved port */
 		enc_idx = dp_mst_find_first_available_encoder_idx(dp_mst);
