@@ -2482,6 +2482,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		pr_info("CEC adapter registered successfully.\n");
 		pdata->cec_en = true;
 		pdata->cec_support = true;
+		pdata->cec_adapter = adap;
 		pdata->cec_log_addr = CEC_LOG_ADDR_PLAYBACK_1;
 	}
 	return ret;
@@ -2563,7 +2564,6 @@ static int lt9611_probe(struct i2c_client *client,
 			ret = lt9611_cec_adap_init(pdata);
 			if (ret != 0) {
 				pdata->cec_hw_support = false;
-				pdata->cec_support = false;
 				pr_err("LT9611 CEC initialize failed.\n");
 			} else
 				pr_info("LT9611 CEC initialize success.\n");
