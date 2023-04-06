@@ -494,25 +494,11 @@ wire_port_send_recv(
 	struct wire_batch_packet *p;
 	u32 type;
 	u32 size;
+	u32 realloc_size;
 	u8 *payload;
 
 	if (port && device->ctx->support_batch_mode) {
 		commit = &port->commit;
-
-		if (commit->size + sizeof(struct wire_batch_packet) >= commit->alloc_size) {
-			size = commit->alloc_size + SZ_4K;
-
-			p = krealloc(commit->packet, size, GFP_KERNEL);
-			if (!p)
-				return -ENOMEM;
-
-			if (!commit->alloc_size)
-				memset(p, 0, sizeof(struct wire_batch_packet));
-
-			commit->packet = p;
-			commit->alloc_size = size;
-		}
-
 		type = req->payload.wfd_req.reqs[0].type;
 		if (type >= OPENWFD_CMD_MAX) {
 			WIRE_LOG_ERROR("invalid req type");
@@ -520,6 +506,20 @@ wire_port_send_recv(
 		}
 
 		size = wire_user_cmd_size[type] + sizeof(struct openwfd_batch_cmd);
+		if (commit->size + size >= commit->alloc_size) {
+			realloc_size = commit->alloc_size + SZ_4K;
+
+			p = krealloc(commit->packet, realloc_size, GFP_KERNEL);
+			if (!p)
+				return -ENOMEM;
+
+			if (!commit->alloc_size)
+				memset(p, 0, sizeof(struct wire_batch_packet));
+
+			commit->packet = p;
+			commit->alloc_size = realloc_size;
+		}
+
 		payload = (u8 *)commit->packet->wfd_req.reqs;
 		memcpy(&payload[commit->size], &req->payload.wfd_req.reqs[0], size);
 		commit->size += size;
