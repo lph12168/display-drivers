@@ -662,7 +662,10 @@ static void dsi_display_parse_te_data(struct dsi_display *display)
 		rc = of_property_read_u32(dev->of_node,
 			"qcom,panel-te-source", &val);
 
-	if (rc || (val  > MAX_TE_SOURCE_ID)) {
+	if (rc) {
+		DSI_DEBUG("no vsync source selection\n");
+		val = 0;
+	} else if (val  > MAX_TE_SOURCE_ID) {
 		DSI_ERR("invalid vsync source selection\n");
 		val = 0;
 	}
@@ -6031,7 +6034,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	if (!dsi_display_validate_res(display)) {
 		rc = -EPROBE_DEFER;
-		DSI_ERR("resources required for display probe not present: rc=%d\n", rc);
+		DSI_INFO("resources required for display probe not present: rc=%d\n", rc);
 		goto end;
 	}
 
