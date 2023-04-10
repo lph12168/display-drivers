@@ -698,8 +698,18 @@ void sde_encoder_phys_shd_destroy(struct sde_encoder_phys *phys_enc)
 static inline
 void sde_encoder_phys_shd_irq_ctrl(struct sde_encoder_phys *phys_enc, bool enable)
 {
+	struct sde_encoder_virt *sde_enc;
+
+	if (!phys_enc)
+		return;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (!sde_enc)
+		return;
+
 	sde_encoder_phys_shd_control_vblank_irq(phys_enc, enable);
-	sde_encoder_phys_shd_control_roi_misr_irq(phys_enc, enable);
+	if (sde_enc->misr_mismatch)
+		sde_encoder_phys_shd_control_roi_misr_irq(phys_enc, enable);
 }
 
 static inline
@@ -826,7 +836,7 @@ void *sde_encoder_phys_shd_init(enum sde_intf_type type, u32 controller_id,
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	if (!sde_enc) {
 		ret = -EINVAL;
-		goto fail_alloc;
+		goto fail_ctl;
 	}
 
 	if (sde_enc->misr_mismatch) {
