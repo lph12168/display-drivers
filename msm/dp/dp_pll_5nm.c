@@ -443,7 +443,7 @@ char *dp_5nm_pll_get_status_name(enum dp_5nm_pll_status status)
 }
 
 static bool dp_5nm_pll_get_status(struct dp_pll *pll,
-		enum dp_5nm_pll_status status)
+		enum dp_5nm_pll_status status, bool check_only)
 {
 	u32 reg, state, bit;
 	void __iomem *base;
@@ -483,8 +483,12 @@ static bool dp_5nm_pll_get_status(struct dp_pll *pll,
 			((state & bit) > 0),
 			DP_PHY_PLL_POLL_SLEEP_US,
 			DP_PHY_PLL_POLL_TIMEOUT_US)) {
-		DP_ERR("%s failed, status=%x\n",
-			dp_5nm_pll_get_status_name(status), state);
+		if (check_only)
+			DP_DEBUG("%s failed, status=%x\n",
+				dp_5nm_pll_get_status_name(status), state);
+		else
+			DP_ERR("%s failed, status=%x\n",
+				dp_5nm_pll_get_status_name(status), state);
 
 		success = false;
 	}
@@ -505,17 +509,17 @@ static int dp_pll_enable_5nm(struct dp_pll *pll)
 	dp_pll_write(dp_pll, QSERDES_COM_RESETSM_CNTRL, 0x20);
 	wmb();	/* Make sure the PLL register writes are done */
 
-	if (!dp_5nm_pll_get_status(pll, C_READY)) {
+	if (!dp_5nm_pll_get_status(pll, C_READY, false)) {
 		rc = -EINVAL;
 		goto lock_err;
 	}
 
-	if (!dp_5nm_pll_get_status(pll, FREQ_DONE)) {
+	if (!dp_5nm_pll_get_status(pll, FREQ_DONE, false)) {
 		rc = -EINVAL;
 		goto lock_err;
 	}
 
-	if (!dp_5nm_pll_get_status(pll, PLL_LOCKED)) {
+	if (!dp_5nm_pll_get_status(pll, PLL_LOCKED, false)) {
 		rc = -EINVAL;
 		goto lock_err;
 	}
@@ -524,12 +528,12 @@ static int dp_pll_enable_5nm(struct dp_pll *pll)
 	/* Make sure the PHY register writes are done */
 	wmb();
 
-	if (!dp_5nm_pll_get_status(pll, TSYNC_DONE)) {
+	if (!dp_5nm_pll_get_status(pll, TSYNC_DONE, false)) {
 		rc = -EINVAL;
 		goto lock_err;
 	}
 
-	if (!dp_5nm_pll_get_status(pll, PHY_READY)) {
+	if (!dp_5nm_pll_get_status(pll, PHY_READY, false)) {
 		rc = -EINVAL;
 		goto lock_err;
 	}
