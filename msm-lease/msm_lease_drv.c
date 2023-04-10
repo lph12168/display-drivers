@@ -3,7 +3,7 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 // SPDX-License-Identifier: GPL-2.0-or-later
@@ -1171,11 +1171,17 @@ static int msm_lease_bind(struct device *dev, struct device *master,
 	}
 
 	drm = dev_get_drvdata(master);
+	if (!drm) {
+		pr_err("invalid param drm %pK\n", drm);
+		rc = -EINVAL;
+		goto end;
+	}
+
 	priv = drm->dev_private;
 	lease_drv = platform_get_drvdata(pdev);
-	if (!drm || !lease_drv || !priv) {
-		pr_err("invalid param(s), drm %pK, lease_drv %pK, priv %pK\n",
-				drm, lease_drv, priv);
+	if (!lease_drv || !priv) {
+		pr_err("invalid param(s), lease_drv %pK, priv %pK\n",
+				lease_drv, priv);
 		rc = -EINVAL;
 		goto end;
 	}

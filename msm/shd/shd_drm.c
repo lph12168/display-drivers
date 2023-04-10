@@ -68,6 +68,14 @@ static enum drm_connector_status shd_display_base_detect(struct drm_connector *c
 	return connector_status_disconnected;
 }
 
+static int shd_display_base_detect_ctx(struct drm_connector *connector,
+		struct drm_modeset_acquire_ctx *ctx,
+		bool force,
+		void *display)
+{
+	return (int)connector_status_disconnected;
+}
+
 static inline bool shd_display_check_enc_intf(struct sde_encoder_hw_resources *hw_res,
 					      int intf_idx)
 {
@@ -123,6 +131,14 @@ static int shd_display_init_base_connector(struct drm_device *dev, struct shd_di
 		return -ENOENT;
 	}
 
+	/* set base connector disconnected */
+	base->ops = sde_conn->ops;
+	sde_conn->ops.detect = shd_display_base_detect;
+	sde_conn->ops.detect_ctx = shd_display_base_detect_ctx;
+	sde_conn->ops.set_info_blob = NULL;
+	sde_connector_set_blob_data(&sde_conn->base, NULL,
+		CONNECTOR_PROP_SDE_INFO);
+
 next:
 	SDE_DEBUG("found base connector %d\n", base->connector->base.id);
 
@@ -136,6 +152,7 @@ static int shd_display_init_base_encoder(struct drm_device *dev, struct shd_disp
 	struct sde_encoder_hw_resources *hw_res;
 	struct sde_connector_state *conn_state;
 	struct msm_compression_info *comp_info;
+	bool has_mst;
 	int rc = 0;
 
 	hw_res = kzalloc(sizeof(*hw_res), GFP_KERNEL);
@@ -166,9 +183,12 @@ static int shd_display_init_base_encoder(struct drm_device *dev, struct shd_disp
 				base->encoder = encoder;
 				break;
 			}
-		} else if (encoder->encoder_type == DRM_MODE_ENCODER_TMDS) {
+		} else if (encoder->encoder_type == DRM_MODE_ENCODER_TMDS ||
+			encoder->encoder_type == DRM_MODE_ENCODER_DPMST) {
 			sde_encoder_get_hw_resources(encoder, hw_res, &conn_state->base);
-			if (shd_display_check_enc_intf(hw_res, base->intf_idx)) {
+			has_mst = (encoder->encoder_type == DRM_MODE_ENCODER_DPMST);
+			if (shd_display_check_enc_intf(hw_res, base->intf_idx) &&
+					base->mst_port == has_mst) {
 				base->encoder = encoder;
 				break;
 			}
@@ -567,6 +587,10 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	u32 crtc_mask, active_mask;
 	bool active;
 	int i, rc;
+	int hw_dev_id;
+
+	priv = state->dev->dev_private;
+	hw_dev_id = priv->instance_id;
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		if (new_crtc_state->mode_changed && new_crtc_state->active)
@@ -596,6 +620,9 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	 */
 	if (change_mask) {
 		list_for_each_entry(base, &g_base_list, head) {
+			if (base->hw_dev_id != hw_dev_id)
+				continue;
+
 			if (!(drm_crtc_mask(base->crtc) & change_mask))
 				continue;
 
@@ -622,6 +649,9 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	 * enabled/disabled before shared crtcs.
 	 */
 	list_for_each_entry(base, &g_base_list, head) {
+		if (base->hw_dev_id != hw_dev_id)
+			continue;
+
 		if (!(drm_crtc_mask(base->crtc) & base_mask))
 			continue;
 
@@ -783,6 +813,36 @@ end:
 	return status;
 }
 
+static
+int shd_connector_detect_ctx(struct drm_connector *conn,
+		struct drm_modeset_acquire_ctx *ctx,
+		bool force,
+		void *display)
+{
+	struct shd_display *disp = display;
+	struct sde_connector *sde_conn;
+	struct drm_connector *b_conn;
+	enum drm_connector_status status = connector_status_disconnected;
+
+	if (!conn || !display || !disp->base) {
+		SDE_ERROR("invalid params\n");
+		goto end;
+	}
+
+	b_conn =  disp->base->connector;
+	if (b_conn) {
+		sde_conn = to_sde_connector(b_conn);
+
+		if (disp->base->ops.detect_ctx)
+			status = disp->base->ops.detect_ctx(b_conn, ctx, force, sde_conn->display);
+		else if (disp->base->ops.detect)
+			status = disp->base->ops.detect(b_conn, force, sde_conn->display);
+	}
+
+end:
+	return (int)status;
+}
+
 static int shd_drm_update_edid_name(struct edid *edid, const char *name)
 {
 	u8 *dtd = (u8 *)&edid->detailed_timings[3];
@@ -822,6 +882,7 @@ static int shd_connector_get_modes(struct drm_connector *connector, void *data,
 	struct drm_display_mode *m, *base_mode = NULL;
 	struct sde_connector *sde_conn;
 	int count;
+	int base_vfresh;
 	int rc;
 	u32 edid_size;
 	struct edid edid;
@@ -945,6 +1006,9 @@ static int shd_connector_get_modes(struct drm_connector *connector, void *data,
 	if (!m)
 		return 0;
 
+	/* duplicate refresh rate from base */
+	base_vfresh = drm_mode_vrefresh(m);
+
 	/* update roi size */
 	if (disp->full_screen) {
 		disp->src.w = base_mode->hdisplay;
@@ -960,6 +1024,8 @@ static int shd_connector_get_modes(struct drm_connector *connector, void *data,
 		m->vsync_start = m->vdisplay;
 		m->vsync_end = m->vsync_start;
 		m->vtotal = m->vsync_end;
+		/* update shd clock in KHZ */
+		m->clock = m->vtotal * m->htotal * base_vfresh / 1000;
 		drm_mode_set_name(m);
 	}
 
@@ -1078,7 +1144,6 @@ static int shd_drm_obj_init(struct shd_display *display)
 	struct shd_crtc *shd_crtc;
 	struct sde_connector *sde_conn;
 	struct msm_display_info info;
-	struct shd_display_base *base;
 	struct sde_kms *sde_kms;
 	int rc = 0;
 	u32 i;
@@ -1086,6 +1151,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 	static const struct sde_connector_ops shd_ops = {
 		.set_info_blob	= shd_conn_set_info_blob,
 		.detect		= shd_connector_detect,
+		.detect_ctx	= shd_connector_detect_ctx,
 		.get_modes	= shd_connector_get_modes,
 		.mode_valid	= shd_connector_mode_valid,
 		.get_info	= shd_connector_get_info,
@@ -1099,17 +1165,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 
 	dev = display->drm_dev;
 	priv = dev->dev_private;
-	base = display->base;
 
-	list_for_each_entry(base, &g_base_list, head) {
-		sde_conn = to_sde_connector(base->connector);
-
-		if (!base->fill_ops) {
-			base->ops = sde_conn->ops;
-			sde_conn->ops.detect = shd_display_base_detect;
-			base->fill_ops = true;
-		}
-	}
 
 	if (priv->num_crtcs >= MAX_CRTCS) {
 		SDE_ERROR("crtc reaches the maximum %d\n", priv->num_crtcs);
@@ -1215,22 +1271,6 @@ end:
 	return rc;
 }
 
-static int shd_drm_postinit(struct msm_kms *kms)
-{
-	struct shd_display_base *base;
-	struct sde_connector *sde_conn;
-
-	/* set base connector disconnected*/
-	list_for_each_entry(base, &g_base_list, head) {
-		sde_conn = to_sde_connector(base->connector);
-
-		sde_conn->ops.set_info_blob = NULL;
-		sde_connector_set_blob_data(&sde_conn->base, NULL, CONNECTOR_PROP_SDE_INFO);
-	}
-
-	return g_shd_kms->orig_funcs->postinit(kms);
-}
-
 static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *base)
 {
 	struct msm_drm_private *priv;
@@ -1254,17 +1294,19 @@ static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *b
 		return rc;
 	}
 
+	priv = ddev->dev_private;
+
 	if (!g_shd_kms) {
-		priv = ddev->dev_private;
 		g_shd_kms = kzalloc(sizeof(*g_shd_kms), GFP_KERNEL);
 		if (!g_shd_kms)
 			return -ENOMEM;
 		g_shd_kms->funcs = *priv->kms->funcs;
 		g_shd_kms->orig_funcs = priv->kms->funcs;
 		g_shd_kms->funcs.atomic_check = shd_display_atomic_check;
-		g_shd_kms->funcs.postinit = shd_drm_postinit;
-		priv->kms->funcs = &g_shd_kms->funcs;
 	}
+
+	priv->kms->funcs = &g_shd_kms->funcs;
+
 	return rc;
 }
 
@@ -1390,9 +1432,13 @@ static int shd_parse_base(struct drm_device *drm_dev, struct shd_display_base *b
 	bool tile_mode;
 	struct drm_connector *connector;
 	struct drm_connector_list_iter conn_iter;
+	struct msm_drm_private *priv;
 	const char *name;
 	u32 flags = 0;
 	int rc;
+
+	priv = drm_dev->dev_private;
+	base->hw_dev_id = priv->instance_id;
 
 	rc = of_property_read_u32(of_node, "qcom,shared-display-base-intf", &base->intf_idx);
 	if (!rc) {

@@ -3106,7 +3106,9 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 
 	if (fevent->event & SDE_ENCODER_FRAME_EVENT_SIGNAL_RELEASE_FENCE) {
 		SDE_ATRACE_BEGIN("signal_release_fence");
-		sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
+
+		if (sde_kms->misr_mismatch_irq)
+			sde_post_commit_signal_fence(&sde_crtc->post_commit_fence_ctx);
 
 		sde_fence_signal(sde_crtc->output_fence, fevent->ts,
 				(fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm-shd:%s:%d] " fmt, __func__, __LINE__
@@ -35,10 +35,18 @@
 
 /* SDE_ROI_MISR_CTL */
 #define ROI_MISR_OP_MODE                 0x00
+#if defined(CONFIG_ARCH_LEMANS)
+#define ROI_MISR_POSITION(i)            (0x40 + 0x4 * (i))
+#define ROI_MISR_SIZE(i)                (0x80 + 0x4 * (i))
+#define ROI_MISR_CTRL(i)                (0xc0 + 0x4 * (i))
+#define ROI_MISR_CAPTURED(i)            (0x100 + 0x4 * (i))
+#define ROI_MISR_EXPECTED(i)            (0x140 + 0x4 * (i))
+#else
 #define ROI_MISR_POSITION(i)            (0x10 + 0x4 * (i))
 #define ROI_MISR_SIZE(i)                (0x20 + 0x4 * (i))
 #define ROI_MISR_CTRL(i)                (0x30 + 0x4 * (i))
 #define ROI_MISR_EXPECTED(i)            (0x50 + 0x4 * (i))
+#endif
 
 /* ROI_MISR_CTRL register */
 #define ROI_MISR_CTRL_ENABLE            BIT(8)

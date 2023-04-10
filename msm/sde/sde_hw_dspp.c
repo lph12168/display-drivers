@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -19,8 +19,14 @@
 #define DSPP_VALID_START_OFF 0x800
 
 #define ROI_MISR_OP_MODE(i)                    (BIT(i) | BIT((i) + 16))
+
+#if defined(CONFIG_ARCH_LEMANS)
+#define ROI_MISR_ROI_POSITION(i)               (0x40 + 0x4 * (i))
+#define ROI_MISR_ROI_SIZE(i)                   (0x80 + 0x4 * (i))
+#else
 #define ROI_MISR_ROI_POSITION(i)               (0x10 + 0x4 * (i))
 #define ROI_MISR_ROI_SIZE(i)                   (0x20 + 0x4 * (i))
+#endif
 
 #define ROI_POSITION_VAL(x, y)                 ((x) | ((y) << 16))
 #define ROI_SIZE_VAL(w, h)                     ((w) | ((h) << 16))

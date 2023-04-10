@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -1222,8 +1223,10 @@ static int dsi_pll_read_stored_trim_codes(struct dsi_pll_resource *pll_res,
 	int i;
 	bool found = false;
 
-	if (!pll_res->dfps)
+	if (!pll_res || !pll_res->dfps) {
+		DSI_PLL_ERR(pll_res, "pll configuration not found\n");
 		return -EINVAL;
+	}
 
 	for (i = 0; i < pll_res->dfps->vco_rate_cnt; i++) {
 		struct dfps_codes_info *codes_info =

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -862,7 +862,17 @@ static int dsi_ctrl_supplies_deinit(struct dsi_ctrl *ctrl)
 	int rc = 0;
 	struct dsi_regulator_info *regs;
 
+	if (!ctrl) {
+		DSI_CTRL_ERR(ctrl, "ctrl is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	regs = &ctrl->pwr_info.digital;
+	if (!regs) {
+		DSI_CTRL_ERR(ctrl, "regs is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < regs->count; i++) {
 		if (!regs->vregs[i].vreg)
 			DSI_CTRL_ERR(ctrl,
@@ -872,6 +882,11 @@ static int dsi_ctrl_supplies_deinit(struct dsi_ctrl *ctrl)
 	}
 
 	regs = &ctrl->pwr_info.host_pwr;
+	if (!regs) {
+		DSI_CTRL_ERR(ctrl, "regs is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < regs->count; i++) {
 		if (!regs->vregs[i].vreg)
 			DSI_CTRL_ERR(ctrl,
@@ -1258,6 +1273,11 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
 		u32 *flags)
 {
 	int rc = 0;
+
+	if (!dsi_ctrl) {
+		DSI_CTRL_ERR(dsi_ctrl, "dsi_ctrl is NULL, should not reach here\n");
+		return -EINVAL;
+	}
 
 	if (*flags & DSI_CTRL_CMD_FIFO_STORE) {
 		/* if command size plus header is greater than fifo size */
@@ -1842,6 +1862,11 @@ static int dsi_enable_ulps(struct dsi_ctrl *dsi_ctrl)
 	u32 lanes = 0;
 	u32 ulps_lanes;
 
+	if (!dsi_ctrl) {
+		DSI_CTRL_ERR(dsi_ctrl, "dsi_ctrl is NULL, should not reach here\n");
+		return -EINVAL;
+	}
+
 	lanes = dsi_ctrl->host_config.common_config.data_lanes;
 
 	rc = dsi_ctrl->hw.ops.wait_for_lane_idle(&dsi_ctrl->hw, lanes);
@@ -1875,6 +1900,11 @@ static int dsi_disable_ulps(struct dsi_ctrl *dsi_ctrl)
 {
 	int rc = 0;
 	u32 ulps_lanes, lanes = 0;
+
+	if (!dsi_ctrl) {
+		DSI_CTRL_ERR(dsi_ctrl, "dsi_ctrl is NULL, should not reach here\n");
+		return -EINVAL;
+	}
 
 	dsi_ctrl->hw.ops.clear_phy0_ln_err(&dsi_ctrl->hw);
 
