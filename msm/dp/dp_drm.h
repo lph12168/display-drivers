@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -281,6 +281,13 @@ static inline int dp_connnector_set_info_blob(struct drm_connector *connector,
 	return 0;
 }
 
+static inline struct drm_encoder *dp_connector_atomic_best_encoder(
+		struct drm_connector *connector, void *display,
+		struct drm_connector_state *state)
+{
+	return NULL;
+}
+
 int dp_connector_get_tile_map(struct drm_connector *connector,
 		void *display, int num_tile, int *tile_map)
 {
@@ -295,6 +302,14 @@ static inline int dp_drm_bridge_init(void *display, struct drm_encoder *encoder,
 
 static inline void dp_drm_bridge_deinit(void *display)
 {
+}
+
+static inline int dp_drm_bond_bridge_init(void *display,
+		struct drm_encoder *encoder,
+		enum dp_bond_type type,
+		struct dp_display_bond_displays *bond_displays)
+{
+	return 0;
 }
 
 static inline void convert_to_drm_mode(const struct dp_display_mode *dp_mode,

@@ -152,6 +152,10 @@ static inline int dp_display_get_num_of_streams(struct drm_device *dev)
 {
 	return 0;
 }
+static inline int dp_display_get_num_of_bonds(void *dp_display)
+{
+	return 0;
+}
 static inline int dp_connector_update_pps(struct drm_connector *connector,
 		char *pps_cmd, void *display)
 {
@@ -161,11 +165,7 @@ static inline int dp_display_get_info(void *dp_display, struct dp_display_info *
 {
 	return 0;
 }
-static int dp_display_get_info(void *dp_display, struct dp_display_info *dp_info)
-{
-	return 0;
-}
-static int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
+static inline int dp_display_get_bond_displays(void *dp_display, enum dp_bond_type type,
 		struct dp_display_bond_displays *dp_bond_info)
 {
 	return 0;
