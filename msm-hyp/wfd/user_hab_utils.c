@@ -415,7 +415,15 @@ user_os_utils_send_recv(
 	u32 num_of_wfd_cmds = 0;
 	enum openwfd_cmd_type wfd_cmd_type = OPENWFD_CMD_MAX;
 	char marker_buff[MARKER_BUFF_LENGTH] = {0};
-	unsigned long delay = jiffies + (HZ / 2);
+	/*
+	 * Hold this CPU for 0.25s since here we call spin_lock_irqsave().
+	 * Normally it will be 100us to get reply, 250ms is enough.
+	 *
+	 * Be careful if hoping to increase such duration to be longer
+	 * since actually inside this duration, it is possible that the
+	 * watchdog pet procedure could not move ahead.
+	 */
+	unsigned long delay = jiffies + (HZ / 4);
 
 	if (!req || !resp) {
 		UTILS_LOG_ERROR("NULL req(0x%p) or resp(0x%p)",

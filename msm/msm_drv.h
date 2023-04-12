@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -39,6 +39,7 @@
 #include <linux/sizes.h>
 #include <linux/kthread.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
@@ -48,8 +49,13 @@
 #include <drm/sde_drm.h>
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#include <drm/display/drm_dsc.h>
+#else
 #include <drm/drm_dsc.h>
+#endif
 #include <drm/drm_bridge.h>
+#include <drm/drm_framebuffer.h>
 
 #include "sde_power_handle.h"
 
@@ -1224,7 +1230,10 @@ int msm_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 int msm_gem_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
 		uint32_t handle, uint64_t *offset);
 struct sg_table *msm_gem_prime_get_sg_table(struct drm_gem_object *obj);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+int msm_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map);
+void msm_gem_prime_vunmap(struct drm_gem_object *obj, struct iosys_map *map);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 int msm_gem_prime_vmap(struct drm_gem_object *obj, struct dma_buf_map *map);
 void msm_gem_prime_vunmap(struct drm_gem_object *obj, struct dma_buf_map *map);
 #else

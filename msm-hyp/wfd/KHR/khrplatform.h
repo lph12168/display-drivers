@@ -251,8 +251,13 @@ typedef unsigned long  int     khronos_usize_t;
 #if KHRONOS_SUPPORT_FLOAT
 /*
  * Float type
+ * Disable float for Kernel module.
+ * Because floating registers will not be saved when system do
+ * process switch, or cause the wrong parameters to be used.
  */
-typedef          float         khronos_float_t;
+#ifdef ENABLE_FLOAT_USAGE
+typedef        float         khronos_float_t;
+#endif
 #endif
 
 #if KHRONOS_SUPPORT_INT64

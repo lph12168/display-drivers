@@ -166,11 +166,13 @@ WFDint wfdGetPortModeAttribi_User(
 		WFDPortMode mode,
 		WFDPortModeAttrib attrib);
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat wfdGetPortModeAttribf_User(
 		WFDDevice device,
 		WFDPort port,
 		WFDPortMode mode,
 		WFDPortModeAttrib attrib);
+#endif
 
 void wfdSetPortMode_User(
 		WFDDevice device,
@@ -186,10 +188,12 @@ WFDint wfdGetPortAttribi_User(
 		WFDPort port,
 		WFDPortConfigAttrib attrib);
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat wfdGetPortAttribf_User(
 		WFDDevice device,
 		WFDPort port,
 		WFDPortConfigAttrib attrib);
+#endif
 
 void wfdGetPortAttribiv_User(
 		WFDDevice device,
@@ -198,12 +202,14 @@ void wfdGetPortAttribiv_User(
 		WFDint count,
 		WFDint *value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdGetPortAttribfv_User(
 		WFDDevice device,
 		WFDPort port,
 		WFDPortConfigAttrib attrib,
 		WFDint count,
 		WFDfloat *value);
+#endif
 
 void wfdSetPortAttribi_User(
 		WFDDevice device,
@@ -211,11 +217,13 @@ void wfdSetPortAttribi_User(
 		WFDPortConfigAttrib attrib,
 		WFDint value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdSetPortAttribf_User(
 		WFDDevice device,
 		WFDPort port,
 		WFDPortConfigAttrib attrib,
 		WFDfloat value);
+#endif
 
 void wfdSetPortAttribiv_User(
 		WFDDevice device,
@@ -224,12 +232,14 @@ void wfdSetPortAttribiv_User(
 		WFDint count,
 		const WFDint *value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdSetPortAttribfv_User(
 		WFDDevice device,
 		WFDPort port,
 		WFDPortConfigAttrib attrib,
 		WFDint count,
 		const WFDfloat *value);
+#endif
 
 WFDErrorCode wfdWaitForVSync_User(
 		WFDDevice device,
@@ -268,10 +278,12 @@ WFDint wfdGetPipelineAttribi_User(
 		WFDPipeline pipeline,
 		WFDPipelineConfigAttrib attrib);
 
+#ifdef ENABLE_FLOAT_USAGE
 WFDfloat wfdGetPipelineAttribf_User(
 		WFDDevice device,
 		WFDPipeline pipeline,
 		WFDPipelineConfigAttrib attrib);
+#endif
 
 void wfdGetPipelineAttribiv_User(
 		WFDDevice device,
@@ -280,12 +292,14 @@ void wfdGetPipelineAttribiv_User(
 		WFDint count,
 		WFDint *value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdGetPipelineAttribfv_User(
 		WFDDevice device,
 		WFDPipeline pipeline,
 		WFDPipelineConfigAttrib attrib,
 		WFDint count,
 		WFDfloat *value);
+#endif
 
 void wfdSetPipelineAttribi_User(
 		WFDDevice device,
@@ -293,11 +307,13 @@ void wfdSetPipelineAttribi_User(
 		WFDPipelineConfigAttrib attrib,
 		WFDint value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdSetPipelineAttribf_User(
 		WFDDevice device,
 		WFDPipeline pipeline,
 		WFDPipelineConfigAttrib attrib,
 		WFDfloat value);
+#endif
 
 void wfdSetPipelineAttribiv_User(
 		WFDDevice device,
@@ -306,12 +322,14 @@ void wfdSetPipelineAttribiv_User(
 		WFDint count,
 		const WFDint *value);
 
+#ifdef ENABLE_FLOAT_USAGE
 void wfdSetPipelineAttribfv_User(
 		WFDDevice device,
 		WFDPipeline pipeline,
 		WFDPipelineConfigAttrib attrib,
 		WFDint count,
 		const WFDfloat *value);
+#endif
 
 WFDint wfdGetPipelineLayerOrder_User(
 		WFDDevice device,
