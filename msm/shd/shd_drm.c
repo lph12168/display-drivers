@@ -23,6 +23,7 @@
 #include <drm/drm_vblank.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_modes.h>
+#include <drm/drm_edid.h>
 #include "msm_drv.h"
 #include "msm_kms.h"
 #include "sde_connector.h"
@@ -63,7 +64,7 @@ struct sde_cp_node_dummy {
 static struct shd_kms *g_shd_kms;
 
 static enum drm_connector_status shd_display_base_detect(struct drm_connector *connector,
-							 bool force, void *disp)
+		bool force, void *disp)
 {
 	return connector_status_disconnected;
 }
@@ -77,7 +78,7 @@ static int shd_display_base_detect_ctx(struct drm_connector *connector,
 }
 
 static inline bool shd_display_check_enc_intf(struct sde_encoder_hw_resources *hw_res,
-					      int intf_idx)
+		int intf_idx)
 {
 	if (intf_idx >= INTF_MAX - INTF_0)
 		return false;
@@ -104,7 +105,8 @@ static inline int shd_display_get_enc_intf(struct sde_encoder_hw_resources *hw_r
 	return INTF_MAX;
 }
 
-static int shd_display_init_base_connector(struct drm_device *dev, struct shd_display_base *base)
+static int shd_display_init_base_connector(struct drm_device *dev,
+		struct shd_display_base *base)
 {
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
@@ -145,7 +147,8 @@ next:
 	return rc;
 }
 
-static int shd_display_init_base_encoder(struct drm_device *dev, struct shd_display_base *base)
+static int shd_display_init_base_encoder(struct drm_device *dev,
+		struct shd_display_base *base)
 {
 	struct drm_encoder *encoder = 0;
 	struct sde_connector *sde_conn = 0;
@@ -210,7 +213,8 @@ end:
 	return rc;
 }
 
-static int shd_display_init_base_crtc(struct drm_device *dev, struct shd_display_base *base)
+static int shd_display_init_base_crtc(struct drm_device *dev,
+		struct shd_display_base *base)
 {
 	struct drm_crtc *crtc = NULL;
 	struct msm_drm_private *priv;
@@ -244,11 +248,15 @@ static int shd_display_init_base_crtc(struct drm_device *dev, struct shd_display
 	if (priv->num_planes >= MAX_PLANES)
 		return -ENOENT;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
 	dev->mode_config.allow_fb_modifiers = false;
+#endif
 
 	/* create dummy primary plane for base crtc */
 	primary = sde_plane_init(dev, SSPP_DMA0, true, 0, 0);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
 	dev->mode_config.allow_fb_modifiers = true;
+#endif
 
 	if (IS_ERR(primary))
 		return -ENOMEM;
@@ -290,7 +298,7 @@ static int shd_display_init_base_crtc(struct drm_device *dev, struct shd_display
 }
 
 static int shd_crtc_validate_shared_display(struct drm_crtc *crtc,
-					    struct drm_atomic_state *atomic_state)
+		struct drm_atomic_state *atomic_state)
 {
 	struct sde_crtc *sde_crtc;
 	struct shd_crtc *shd_crtc;
@@ -358,7 +366,8 @@ static int shd_crtc_validate_shared_display(struct drm_crtc *crtc,
 	return 0;
 }
 
-static int shd_crtc_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state *atomic_state)
+static int shd_crtc_atomic_check(struct drm_crtc *crtc,
+		struct drm_atomic_state *atomic_state)
 {
 	struct drm_crtc_state *state = drm_atomic_get_new_crtc_state(atomic_state, crtc);
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
@@ -394,9 +403,9 @@ static int shd_crtc_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state 
 }
 
 static int shd_crtc_atomic_set_property(struct drm_crtc *crtc,
-					struct drm_crtc_state *state,
-					struct drm_property *property,
-					uint64_t val)
+		struct drm_crtc_state *state,
+		struct drm_property *property,
+		uint64_t val)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
 	struct shd_crtc *shd_crtc = sde_crtc->priv_handle;
@@ -446,7 +455,7 @@ u32 shd_get_shared_crtc_mask(struct drm_crtc *src_crtc)
 }
 
 void shd_skip_shared_plane_update(struct drm_plane *plane,
-				struct drm_crtc *crtc)
+		struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc;
 	struct shd_crtc *shd_crtc;
@@ -475,8 +484,8 @@ void shd_skip_shared_plane_update(struct drm_plane *plane,
 }
 
 static int shd_display_set_default_clock(struct drm_crtc_state *crtc_state,
-					 struct drm_connector_state *conn_state,
-					 struct drm_display_mode *mode)
+		struct drm_connector_state *conn_state,
+		struct drm_display_mode *mode)
 {
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
@@ -731,8 +740,8 @@ static int shd_display_atomic_check(struct msm_kms *kms, struct drm_atomic_state
 	return 0;
 }
 
-static int shd_connector_get_info(struct drm_connector *connector, struct msm_display_info *info,
-				  void *data)
+static int shd_connector_get_info(struct drm_connector *connector,
+		struct msm_display_info *info, void *data)
 {
 	struct shd_display *display = data;
 
@@ -750,11 +759,64 @@ static int shd_connector_get_info(struct drm_connector *connector, struct msm_di
 	return 0;
 }
 
+static int shd_connector_get_roi_misr_mode_info(
+		struct drm_connector *connector,
+		struct msm_mode_info *mode_info,
+		struct sde_roi_misr_mode_info *misr_mode_info,
+		void *display)
+{
+	struct shd_display *shd_display = display;
+	struct sde_kms *sde_kms;
+	struct msm_drm_private *priv;
+	struct sde_rect *roi_ptr;
+	struct drm_clip_rect *roi_range;
+	enum sde_rm_topology_name topology_name;
+	int num_misrs;
+	int i;
+
+	if (!mode_info || !misr_mode_info || !display) {
+		SDE_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	priv = shd_display->base->crtc->dev->dev_private;
+	if (!priv || !priv->kms) {
+		SDE_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	sde_kms = to_sde_kms(priv->kms);
+	topology_name = sde_rm_get_topology_name(&sde_kms->rm,
+			mode_info->topology);
+	num_misrs = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_name);
+
+	misr_mode_info->num_misrs = num_misrs;
+	misr_mode_info->mixer_width =
+		shd_display->base->mode.hdisplay / num_misrs;
+
+	for (i = 0; i < ROI_MISR_MAX_ROIS_PER_CRTC; i++) {
+		roi_ptr = &shd_display->misr_range[i];
+		roi_range = &misr_mode_info->roi_range[i];
+
+		roi_range->x1 = roi_ptr->x;
+		roi_range->y1 = roi_ptr->y;
+		roi_range->x2 = roi_ptr->x + roi_ptr->w - 1;
+		roi_range->y2 = roi_ptr->y + roi_ptr->h - 1;
+
+		SDE_DEBUG("%s: idx[%d] roi(%u,%u,%u,%u)\n",
+				shd_display->name, i,
+				roi_range->x1, roi_range->y1,
+				roi_range->x2, roi_range->y2);
+	}
+
+	return 0;
+}
+
 static int shd_connector_get_mode_info(struct drm_connector *connector,
-				       const struct drm_display_mode *drm_mode,
-				       struct msm_sub_mode *sub_mode,
-				       struct msm_mode_info *mode_info, void *display,
-				       const struct msm_resource_caps_info *avail_res)
+		const struct drm_display_mode *drm_mode,
+		struct msm_sub_mode *sub_mode,
+		struct msm_mode_info *mode_info, void *display,
+		const struct msm_resource_caps_info *avail_res)
 {
 	struct shd_display *shd_display = display;
 	struct sde_connector *base_conn;
@@ -788,7 +850,7 @@ static int shd_connector_get_mode_info(struct drm_connector *connector,
 
 static
 enum drm_connector_status shd_connector_detect(struct drm_connector *conn, bool force,
-					       void *display)
+		void *display)
 {
 	struct shd_display *disp = display;
 	struct sde_connector *sde_conn;
@@ -875,13 +937,37 @@ static void shd_drm_update_checksum(struct edid *edid)
 	edid->checksum = 0x100 - (sum & 0xFF);
 }
 
+static int shd_check_roi_range(struct shd_display *display,
+		struct sde_rect *range_ptr, u32 roi_id)
+{
+	if ((range_ptr->x >= display->roi.x)
+		&& range_ptr->x <= display->roi.w
+		&& range_ptr->y >= display->roi.y
+		&& range_ptr->y <= display->roi.h
+		&& range_ptr->w <= display->roi.w
+		&& range_ptr->h <= display->roi.h)
+		return 0;
+
+	SDE_ERROR("%s check shared roi range failed:\n", display->name);
+	SDE_ERROR("SHD src %dx%d dst %d,%d %dx%d\n",
+			display->src.w, display->src.h,
+			display->roi.x, display->roi.y,
+			display->roi.w, display->roi.h);
+	SDE_ERROR("MISR range id %u, roi %u,%u %ux%u\n", roi_id,
+			range_ptr->x, range_ptr->y,
+			range_ptr->w, range_ptr->h);
+
+	return -EINVAL;
+}
+
 static int shd_connector_get_modes(struct drm_connector *connector, void *data,
-				   const struct msm_resource_caps_info *avail_res)
+		const struct msm_resource_caps_info *avail_res)
 {
 	struct shd_display *disp = data;
 	struct drm_display_mode *m, *base_mode = NULL;
 	struct sde_connector *sde_conn;
-	int count;
+	struct sde_rect *roi_ptr;
+	int count, i;
 	int base_vfresh;
 	int rc;
 	u32 edid_size;
@@ -1015,6 +1101,11 @@ static int shd_connector_get_modes(struct drm_connector *connector, void *data,
 		disp->src.h = base_mode->vdisplay;
 		disp->roi.w = base_mode->hdisplay;
 		disp->roi.h = base_mode->vdisplay;
+		for (i = 0; i < ROI_MISR_MAX_ROIS_PER_CRTC; i++) {
+			roi_ptr = &disp->misr_range[i];
+			if (shd_check_roi_range(disp, roi_ptr, i))
+				return 0;
+		}
 	} else {
 		m->hdisplay = disp->src.w;
 		m->hsync_start = m->hdisplay;
@@ -1047,14 +1138,14 @@ static int shd_connector_get_modes(struct drm_connector *connector, void *data,
 
 static
 enum drm_mode_status shd_connector_mode_valid(struct drm_connector *connector,
-					      struct drm_display_mode *mode, void *display,
-					      const struct msm_resource_caps_info *avail_res)
+		struct drm_display_mode *mode, void *display,
+		const struct msm_resource_caps_info *avail_res)
 {
 	return MODE_OK;
 }
 
-static int shd_conn_set_info_blob(struct drm_connector *connector, void *info, void *display,
-				  struct msm_mode_info *mode_info)
+static int shd_conn_set_info_blob(struct drm_connector *connector, void *info,
+		void *display, struct msm_mode_info *mode_info)
 {
 	struct shd_display *shd_display = display;
 
@@ -1074,8 +1165,8 @@ static int shd_conn_set_info_blob(struct drm_connector *connector, void *info, v
 }
 
 static int shd_conn_set_property(struct drm_connector *connector,
-				 struct drm_connector_state *state,
-				 int property_index, uint64_t value, void *display)
+		struct drm_connector_state *state,
+		int property_index, uint64_t value, void *display)
 {
 	struct sde_connector *c_conn;
 
@@ -1157,6 +1248,7 @@ static int shd_drm_obj_init(struct shd_display *display)
 		.get_info	= shd_connector_get_info,
 		.get_mode_info	= shd_connector_get_mode_info,
 		.set_property	= shd_conn_set_property,
+		.get_roi_misr_mode_info = shd_connector_get_roi_misr_mode_info,
 	};
 
 	static const struct sde_encoder_ops enc_ops = {
@@ -1172,6 +1264,33 @@ static int shd_drm_obj_init(struct shd_display *display)
 		rc = -ENOENT;
 		goto end;
 	}
+
+	/* search plane that doesn't belong to any crtc */
+	primary = NULL;
+	for (i = 0; i < priv->num_planes; i++) {
+		bool found = false;
+
+		drm_for_each_crtc(crtc, dev) {
+			if (crtc->primary == priv->planes[i]) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			primary = priv->planes[i];
+			primary->type = DRM_PLANE_TYPE_PRIMARY;
+			break;
+		}
+	}
+
+	if (!primary) {
+		SDE_ERROR("failed to find primary plane\n");
+		rc = -ENOENT;
+		goto end;
+	}
+
+	SDE_DEBUG("find primary plane %d\n", DRMID(primary));
 
 	memset(&info, 0x0, sizeof(info));
 	rc = shd_connector_get_info(NULL, &info, display);
@@ -1217,22 +1336,9 @@ static int shd_drm_obj_init(struct shd_display *display)
 
 	SDE_DEBUG("create connector %d\n", DRMID(connector));
 
-	dev->mode_config.allow_fb_modifiers = false;
-
-	/* create primary plane for crtc */
-	primary = sde_plane_init(dev, SSPP_DMA0, true, 0, 0);
-	dev->mode_config.allow_fb_modifiers = true;
-
-	if (IS_ERR(primary))
-		return -ENOMEM;
-
-	SDE_DEBUG("created primary plane %d\n", DRMID(primary));
-	priv->planes[priv->num_planes++] = primary;
-
 	crtc = sde_crtc_init(dev, primary);
 	if (IS_ERR(crtc)) {
 		rc = PTR_ERR(crtc);
-
 		goto end;
 	}
 	priv->crtcs[priv->num_crtcs++] = crtc;
@@ -1308,6 +1414,61 @@ static int shd_drm_base_init(struct drm_device *ddev, struct shd_display_base *b
 	priv->kms->funcs = &g_shd_kms->funcs;
 
 	return rc;
+}
+
+static int shd_parse_misr_shared_roi(struct shd_display *display)
+{
+	struct device_node *of_node = display->pdev->dev.of_node;
+	struct sde_rect *range_ptr;
+	const u32 elems_per_group = 5;
+	u32 roi_range[120];
+	u32 temp_id, temp_id_offset;
+	int cnt, i;
+
+	cnt = of_property_count_elems_of_size(of_node,
+			"qcom,misr_roi_range", sizeof(u32));
+	if (cnt < 0)
+		return 0;
+
+	if ((cnt % elems_per_group) != 0) {
+		/* The number of elements should be a multiple of 5 */
+		SDE_ERROR("The number of misr range is wrong\n");
+		goto error;
+	}
+
+	if (of_property_read_u32_array(of_node, "qcom,misr_roi_range",
+			roi_range, cnt)) {
+		SDE_ERROR("Failed to parse blend stage range\n");
+		goto error;
+	}
+
+	cnt /= elems_per_group;
+
+	for (i = 0; i < cnt; i++) {
+		temp_id_offset = i * elems_per_group;
+		temp_id = roi_range[temp_id_offset];
+		range_ptr = &display->misr_range[temp_id];
+
+		range_ptr->x = roi_range[temp_id_offset + 1];
+		range_ptr->y = roi_range[temp_id_offset + 2];
+		range_ptr->w = roi_range[temp_id_offset + 3];
+		range_ptr->h = roi_range[temp_id_offset + 4];
+
+		if (!display->full_screen && shd_check_roi_range(display, range_ptr, temp_id))
+			goto error;
+
+		display->misr_roi_mask |= BIT(temp_id);
+
+		SDE_DEBUG("%s misr range id %u, roi {%u,%u,%u,%u}\n",
+				display->name, temp_id,
+				range_ptr->x, range_ptr->y,
+				range_ptr->w, range_ptr->h);
+	}
+
+	return 0;
+
+error:
+	return -EINVAL;
 }
 
 static int shd_parse_display(struct shd_display *display)
@@ -1415,6 +1576,10 @@ next:
 	display->display_type = of_get_property(of_node, "qcom,display-type", NULL);
 	if (!display->display_type)
 		display->display_type = "unknown";
+
+	rc = shd_parse_misr_shared_roi(display);
+	if (rc)
+		SDE_ERROR("Failed to parse shared ROI range\n");
 
 error:
 	return rc;

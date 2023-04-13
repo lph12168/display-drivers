@@ -873,13 +873,17 @@ static int sde_shp_bind(struct device *dev, struct device *master,
 	}
 
 	drm = dev_get_drvdata(master);
-	if (drm)
-		priv = drm->dev_private;
-
 	shp_dev = platform_get_drvdata(pdev);
-	if (!drm || !shp_dev || !priv) {
-		pr_err("invalid param(s), drm %pK, shp_dev %pK, priv %pK\n",
-				drm, shp_dev, priv);
+	if (!drm || !shp_dev) {
+		pr_err("invalid param(s), drm %pK, shp_dev %pK\n",
+				drm, shp_dev);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	priv = drm->dev_private;
+	if (!priv) {
+		pr_err("invalid param(s), priv %pK\n", priv);
 		rc = -EINVAL;
 		goto end;
 	}

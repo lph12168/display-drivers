@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -4159,6 +4159,9 @@ void reg_dmav1_setup_ltm_vlutv1(struct sde_hw_dspp *ctx, void *cfg)
 	idx = (enum sde_ltm)ctx->idx;
 	num_mixers = hw_cfg->num_of_mixers;
 	opmode = kvzalloc((num_mixers * sizeof(u32)), GFP_KERNEL);
+	if (!opmode)
+		return;
+
 	dma_ops = sde_reg_dma_get_ops();
 
 	rc = reg_dmav1_setup_ltm_vlutv1_common(ctx, cfg, dma_ops,
@@ -4232,6 +4235,9 @@ void reg_dmav1_setup_ltm_vlutv1_2(struct sde_hw_dspp *ctx, void *cfg)
 	idx = (enum sde_ltm)ctx->idx;
 	num_mixers = hw_cfg->num_of_mixers;
 	opmode = kvzalloc((num_mixers * sizeof(u32)), GFP_KERNEL);
+	if (!opmode)
+		return;
+
 	dma_ops = sde_reg_dma_get_ops();
 
 	rc = reg_dmav1_setup_ltm_vlutv1_common(ctx, cfg, dma_ops,

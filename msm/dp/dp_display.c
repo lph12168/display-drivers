@@ -11,7 +11,6 @@
 #include <linux/component.h>
 #include <linux/of_irq.h>
 #include <linux/delay.h>
-#include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/usb/phy.h>
 #include <linux/jiffies.h>
 #include <linux/pm_qos.h>
@@ -826,6 +825,87 @@ static int dp_display_get_cell_info(struct dp_display_private *dp)
 	return 0;
 }
 
+static ssize_t status_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct dp_display_private *dp = NULL;
+	struct drm_connector *connector;
+
+	char *p = buf;
+
+	if (!dev) {
+		pr_err("invalid device pointer\n");
+		return -ENODEV;
+	}
+
+	dp = dev_get_drvdata(dev);
+	if (!dp) {
+		pr_err("invalid driver pointer\n");
+		return -ENODEV;
+	}
+
+	connector = dp->dp_display.base_connector;
+
+	if (!connector) {
+		pr_err("DP%d connector not set\n", dp->cell_idx);
+		p += scnprintf(p, PAGE_SIZE, "connector not set");
+		goto out;
+	}
+
+	p += scnprintf(p, PAGE_SIZE + buf - p, "name=%s", connector->name);
+
+	p += scnprintf(p, PAGE_SIZE + buf - p, " status=%s",
+			dp->hpd->hpd_high ? "connected" : "disconnected");
+
+	if ((dp->aux->state & DP_STATE_TRAIN_1_SUCCEEDED) &&
+			(dp->aux->state & DP_STATE_TRAIN_2_SUCCEEDED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=ready");
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_FAILED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_FAILED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=failed");
+	else if ((dp->aux->state & DP_STATE_TRAIN_1_STARTED) ||
+			(dp->aux->state & DP_STATE_TRAIN_2_STARTED))
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=training");
+	else if (dp->aux->state & DP_STATE_LINK_MAINTENANCE_STARTED)
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=maintaining");
+	else
+		p += scnprintf(p, PAGE_SIZE + buf - p, " link=not_ready");
+	p += scnprintf(p, PAGE_SIZE + buf - p, " stream=%s",
+			(dp->aux->state & DP_STATE_CTRL_POWERED_ON) ? "ON" : "OFF");
+	p += scnprintf(p, PAGE_SIZE + buf - p, " state=0x%X", dp->aux->state);
+
+out:
+	return p - buf;
+}
+
+static DEVICE_ATTR_RO(status);
+
+static struct attribute *dp_fs_attrs[] = {
+	&dev_attr_status.attr,
+	NULL
+};
+
+static struct attribute_group dp_fs_attr_group = {
+	.attrs = dp_fs_attrs
+};
+
+static int dp_display_sysfs_init(struct dp_display_private *dp)
+{
+	int ret;
+
+	ret = sysfs_create_group(&dp->pdev->dev.kobj, &dp_fs_attr_group);
+	if (ret)
+		pr_err("DP%d unable to register dp_display sysfs nodes\n", dp->cell_idx);
+
+	return 0;
+}
+
+static int dp_display_sysfs_deinit(struct dp_display_private *dp)
+{
+	sysfs_remove_group(&dp->pdev->dev.kobj, &dp_fs_attr_group);
+	return 0;
+}
+
 static int dp_display_bind(struct device *dev, struct device *master,
 		void *data)
 {
@@ -884,6 +964,7 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 	if (dp->aux)
 		(void)dp->aux->drm_aux_deregister(dp->aux);
 	dp_display_deinitialize_hdcp(dp);
+	dp_display_sysfs_deinit(dp);
 }
 
 static const struct component_ops dp_display_comp_ops = {
@@ -1453,7 +1534,7 @@ static int dp_display_process_hpd_low(struct dp_display_private *dp)
 	return rc;
 }
 
-static int dp_display_fsa4480_callback(struct notifier_block *self,
+static int dp_display_aux_switch_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
 	return 0;
@@ -1469,9 +1550,12 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 	if (dp->aux_switch_ready)
 	       return rc;
 
+	if (!dp->aux->switch_register_notifier)
+		return rc;
+
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY);
 
-	nb.notifier_call = dp_display_fsa4480_callback;
+	nb.notifier_call = dp_display_aux_switch_callback;
 	nb.priority = 0;
 
 	/*
@@ -1479,7 +1563,7 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 	 * Bootup DP with cable connected usecase can hit this scenario.
 	 */
 	for (retry = 0; retry < max_retries; retry++) {
-		rc = fsa4480_reg_notifier(&nb, dp->aux_switch_node);
+		rc = dp->aux->switch_register_notifier(&nb, dp->aux_switch_node);
 		if (rc == 0) {
 			DP_DEBUG("registered notifier successfully\n");
 			dp->aux_switch_ready = true;
@@ -1496,7 +1580,8 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 		return rc;
 	}
 
-	fsa4480_unreg_notifier(&nb, dp->aux_switch_node);
+	if (dp->aux->switch_unregister_notifier)
+		dp->aux->switch_unregister_notifier(&nb, dp->aux_switch_node);
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, rc);
 	return rc;
@@ -1539,12 +1624,12 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 	}
 
 	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
-	    && !dp->parser->gpio_aux_switch && dp->aux_switch_node) {
+	    && !dp->parser->gpio_aux_switch && dp->aux_switch_node && dp->aux->switch_configure) {
 		rc = dp_display_init_aux_switch(dp);
 		if (rc)
 			return rc;
 
-		rc = dp->aux->aux_switch(dp->aux, true, dp->hpd->orientation);
+		rc = dp->aux->switch_configure(dp->aux, true, dp->hpd->orientation);
 		if (rc)
 			return rc;
 	}
@@ -1584,6 +1669,23 @@ static void dp_display_clear_dsc_resources(struct dp_display_private *dp,
 {
 	dp->tot_dsc_blks_in_use -= panel->dsc_blks_in_use;
 	panel->dsc_blks_in_use = 0;
+}
+
+static int dp_display_get_mst_pbn_div(struct dp_display *dp_display)
+{
+	struct dp_display_private *dp;
+	u32 link_rate, lane_count;
+
+	if (!dp_display) {
+		DP_ERR("invalid params\n");
+		return 0;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+	link_rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
+	lane_count = dp->link->link_params.lane_count;
+
+	return link_rate * lane_count / 54000;
 }
 
 static int dp_display_stream_pre_disable(struct dp_display_private *dp,
@@ -1807,8 +1909,8 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 	}
 
 	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
-	    && !dp->parser->gpio_aux_switch)
-		dp->aux->aux_switch(dp->aux, false, ORIENTATION_NONE);
+	    && !dp->parser->gpio_aux_switch && dp->aux->switch_configure)
+		dp->aux->switch_configure(dp->aux, false, ORIENTATION_NONE);
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
 end:
@@ -2514,6 +2616,8 @@ static int dp_display_post_init(struct dp_display *dp_display)
 
 	dp_display_dbg_reister(dp);
 
+	dp_display_sysfs_init(dp);
+
 	dp_display->post_init = NULL;
 end:
 	DP_DEBUG("DP%d %s\n", dp->cell_idx, rc ? "failed" : "success");
@@ -3164,7 +3268,7 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 	if (num_lm > avail_res->num_lm) {
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough lm %d %d\n",
 				dp->cell_idx, mode->name, fps,
-				num_lm, num_lm, avail_res->num_lm);
+				num_lm, avail_res->num_lm);
 		return -EPERM;
 	} else if (!num_dsc && (num_lm == dual && !num_3dmux)) {
 		DP_DEBUG("DP%d mode %sx%d is invalid, not enough 3dmux %d %d\n",
@@ -4033,6 +4137,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	dp_display->mst_get_fixed_topology_display_type =
 				dp_display_mst_get_fixed_topology_display_type;
 	dp_display->set_phy_bond_mode = dp_display_set_phy_bond_mode;
+	dp_display->get_mst_pbn_div = dp_display_get_mst_pbn_div;
 
 	rc = component_add(&pdev->dev, &dp_display_comp_ops);
 	if (rc) {

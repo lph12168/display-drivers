@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _WIRE_FORMAT_H
@@ -330,6 +331,7 @@ union msg_get_port_mode_attribi {
 		i32 val; /* WFDint */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_get_port_mode_attribf {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -342,6 +344,7 @@ union msg_get_port_mode_attribf {
 		float val; /* WFDfloat */
 	} resp;
 };
+#endif
 union msg_set_port_mode {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -374,6 +377,7 @@ union msg_get_port_attribi {
 		i32 val; /* WFDint */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_get_port_attribf {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -385,6 +389,7 @@ union msg_get_port_attribf {
 		float val; /* WFDfloat */
 	} resp;
 };
+#endif
 union msg_get_port_attribiv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -397,6 +402,7 @@ union msg_get_port_attribiv {
 		i32 vals[MAX_PORT_ATTRIBS]; /* WFDint */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_get_port_attribfv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -409,6 +415,7 @@ union msg_get_port_attribfv {
 		float vals[MAX_PORT_ATTRIBS]; /* WFDfloat */
 	} resp;
 };
+#endif
 union msg_set_port_attribi {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -421,6 +428,7 @@ union msg_set_port_attribi {
 		/* void */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_set_port_attribf {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -433,6 +441,7 @@ union msg_set_port_attribf {
 		/* void */
 	} resp;
 };
+#endif
 union msg_set_port_attribiv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -446,6 +455,7 @@ union msg_set_port_attribiv {
 		/* void */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_set_port_attribfv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -459,6 +469,7 @@ union msg_set_port_attribfv {
 		/* void */
 	} resp;
 };
+#endif
 union msg_wait_for_vsync {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -524,6 +535,7 @@ union msg_get_pipeline_attribi {
 		i32 val; /* WFDint */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_get_pipeline_attribf {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -535,6 +547,7 @@ union msg_get_pipeline_attribf {
 		float val; /* WFDfloat */
 	} resp;
 };
+#endif
 union msg_get_pipeline_attribiv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -547,6 +560,7 @@ union msg_get_pipeline_attribiv {
 		i32 vals[MAX_PIPELINE_ATTRIBS]; /* WFDint */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_get_pipeline_attribfv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -559,6 +573,7 @@ union msg_get_pipeline_attribfv {
 		float vals[MAX_PIPELINE_ATTRIBS]; /* WFDfloat */
 	} resp;
 };
+#endif
 union msg_set_pipeline_attribi {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -571,6 +586,7 @@ union msg_set_pipeline_attribi {
 		/* void */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_set_pipeline_attribf {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -583,6 +599,7 @@ union msg_set_pipeline_attribf {
 		/* void */
 	} resp;
 };
+#endif
 union msg_set_pipeline_attribiv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -596,6 +613,7 @@ union msg_set_pipeline_attribiv {
 		/* void */
 	} resp;
 };
+#ifdef ENABLE_FLOAT_USAGE
 union msg_set_pipeline_attribfv {
 	struct {
 		u32 dev; /* WFDDevice */
@@ -609,6 +627,7 @@ union msg_set_pipeline_attribfv {
 		/* void */
 	} resp;
 };
+#endif
 struct rect {
 	i32 offsetX;
 	i32 offsetY;
@@ -768,17 +787,27 @@ struct openwfd_cmd {
 		union msg_destroy_port destroy_port;
 		union msg_get_port_modes get_port_modes;
 		union msg_get_port_mode_attribi get_port_mode_attribi;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_get_port_mode_attribf get_port_mode_attribf;
+#endif
 		union msg_set_port_mode set_port_mode;
 		union msg_get_current_port_mode get_current_port_mode;
 		union msg_get_port_attribi get_port_attribi;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_get_port_attribf get_port_attribf;
+#endif
 		union msg_get_port_attribiv get_port_attribiv;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_get_port_attribfv get_port_attribfv;
+#endif
 		union msg_set_port_attribi set_port_attribi;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_set_port_attribf set_port_attribf;
+#endif
 		union msg_set_port_attribiv set_port_attribiv;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_set_port_attribfv set_port_attribfv;
+#endif
 		union msg_wait_for_vsync wait_for_vsync;
 		union msg_bind_pipeline_to_port bind_pipe_to_port;
 
@@ -787,13 +816,21 @@ struct openwfd_cmd {
 		union msg_create_pipeline create_pipe;
 		union msg_destroy_pipeline destroy_pipe;
 		union msg_get_pipeline_attribi get_pipe_attribi;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_get_pipeline_attribf get_pipe_attribf;
+#endif
 		union msg_get_pipeline_attribiv get_pipe_attribiv;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_get_pipeline_attribfv get_pipe_attribfv;
+#endif
 		union msg_set_pipeline_attribi set_pipe_attribi;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_set_pipeline_attribf set_pipe_attribf;
+#endif
 		union msg_set_pipeline_attribiv set_pipe_attribiv;
+#ifdef ENABLE_FLOAT_USAGE
 		union msg_set_pipeline_attribfv set_pipe_attribfv;
+#endif
 		union msg_bind_source_to_pipeline bind_source_to_pipe;
 		union msg_get_pipeline_layer_order get_pipe_layer_order;
 
