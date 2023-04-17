@@ -2056,6 +2056,7 @@ static enum drm_mode_status lt9611_connector_mode_valid(
 static void lt9611_bridge_enable(struct drm_bridge *bridge)
 {
 	struct lt9611 *pdata;
+	int rc;
 
 	if (!bridge)
 		return;
@@ -2065,13 +2066,19 @@ static void lt9611_bridge_enable(struct drm_bridge *bridge)
 	pdata = bridge_to_lt9611(bridge);
 	if (pdata->audio_support) {
 		pr_debug("notify audio(%d)\n", EXT_DISPLAY_CABLE_CONNECT);
-		hdmi_audio_register_ext_disp(pdata);
+		rc = hdmi_audio_register_ext_disp(pdata);
+		if (rc) {
+			pr_err("hdmi audio register failed. rc=%d\n", rc);
+			return;
+		}
+#if defined(CONFIG_MSM_EXT_DISPLAY)
 		pdata->ext_audio_data.intf_ops.audio_config(pdata->ext_pdev,
 				&pdata->ext_audio_data.codec,
 				EXT_DISPLAY_CABLE_CONNECT);
 		pdata->ext_audio_data.intf_ops.audio_notify(pdata->ext_pdev,
 				&pdata->ext_audio_data.codec,
 				EXT_DISPLAY_CABLE_CONNECT);
+#endif
 	}
 }
 
