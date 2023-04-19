@@ -696,7 +696,7 @@ static void *get_vaddr(struct drm_gem_object *obj, unsigned madv)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
 	struct iosys_map map;
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-	struct dma_buf_map map;
+	struct dma_buf_map map = DMA_BUF_MAP_INIT_VADDR(msm_obj->vaddr);
 #endif
 	int ret = 0;
 

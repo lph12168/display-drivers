@@ -298,13 +298,16 @@ static void msm_smmu_unmap_dma_buf(struct msm_mmu *mmu, struct sg_table *sgt,
 		return;
 	}
 
-	if (sgt->sgl) {
-		DRM_DEBUG("%pad/0x%x/0x%x\n",
-				&sgt->sgl->dma_address, sgt->sgl->dma_length,
-				dir);
-		SDE_EVT32(sgt->sgl->dma_address, sgt->sgl->dma_length,
-				dir, client->secure, flags);
+	if (!sgt->sgl) {
+		DRM_ERROR("sg list is invalid\n");
+		return;
 	}
+
+	DRM_DEBUG("%pad/0x%x/0x%x\n",
+			&sgt->sgl->dma_address, sgt->sgl->dma_length,
+			dir);
+	SDE_EVT32(sgt->sgl->dma_address, sgt->sgl->dma_length,
+			dir, client->secure, flags);
 
 	if (!(flags & MSM_BO_EXTBUF))
 		dma_unmap_sg(client->dev, sgt->sgl, sgt->nents, dir);

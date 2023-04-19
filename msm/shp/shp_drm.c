@@ -863,7 +863,7 @@ static int sde_shp_bind(struct device *dev, struct device *master,
 	struct shp_device *shp_dev;
 	struct drm_device *drm = NULL;
 	struct platform_device *pdev = to_platform_device(dev);
-	struct msm_drm_private *priv;
+	struct msm_drm_private *priv = NULL;
 
 	if (!dev || !pdev || !master) {
 		pr_err("invalid param(s), dev %pK, pdev %pK, master %pK\n",
