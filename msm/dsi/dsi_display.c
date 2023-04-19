@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -5745,12 +5745,14 @@ static int dsi_display_bind(struct device *dev,
 	}
 
 	dsi_display_update_byte_intf_div(display);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
 	rc = dsi_display_mipi_host_init(display);
 	if (rc) {
 		DSI_ERR("[%s] failed to initialize mipi host, rc=%d\n",
 		       display->name, rc);
 		goto error_ctrl_deinit;
 	}
+#endif
 
 	rc = dsi_panel_drv_init(display->panel, &display->host);
 	if (rc) {
@@ -5906,6 +5908,15 @@ static int dsi_display_init(struct dsi_display *display)
 			goto end;
 		}
 	}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+        rc = dsi_display_mipi_host_init(display);
+        if (rc) {
+                DSI_ERR("[%s] failed to initialize mipi host, rc=%d\n",
+                       display->name, rc);
+                goto end;
+        }
+#endif
 
 	rc = component_add(&pdev->dev, &dsi_display_comp_ops);
 	if (rc) {

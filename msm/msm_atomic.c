@@ -236,7 +236,11 @@ msm_disable_outputs(struct drm_device *dev, struct drm_atomic_state *old_state)
 		 * it away), so we won't call disable hooks twice.
 		 */
 		bridge = drm_bridge_chain_get_first_bridge(encoder);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+		drm_atomic_bridge_chain_disable(bridge, old_state);
+#else
 		drm_bridge_chain_disable(bridge);
+#endif
 
 		/* Right function depends upon target state. */
 		if (connector->state->crtc && funcs->prepare)
@@ -522,7 +526,11 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 				 encoder->base.id, encoder->name);
 
 		bridge = drm_bridge_chain_get_first_bridge(encoder);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+		drm_atomic_bridge_chain_enable(bridge, old_state);
+#else
 		drm_bridge_chain_enable(bridge);
+#endif
 	}
 	SDE_ATRACE_END("msm_enable");
 }
