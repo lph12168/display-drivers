@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -2056,6 +2056,7 @@ static enum drm_mode_status lt9611_connector_mode_valid(
 static void lt9611_bridge_enable(struct drm_bridge *bridge)
 {
 	struct lt9611 *pdata;
+	int rc;
 
 	if (!bridge)
 		return;
@@ -2065,13 +2066,19 @@ static void lt9611_bridge_enable(struct drm_bridge *bridge)
 	pdata = bridge_to_lt9611(bridge);
 	if (pdata->audio_support) {
 		pr_debug("notify audio(%d)\n", EXT_DISPLAY_CABLE_CONNECT);
-		hdmi_audio_register_ext_disp(pdata);
+		rc = hdmi_audio_register_ext_disp(pdata);
+		if (rc) {
+			pr_err("hdmi audio register failed. rc=%d\n", rc);
+			return;
+		}
+#if defined(CONFIG_MSM_EXT_DISPLAY)
 		pdata->ext_audio_data.intf_ops.audio_config(pdata->ext_pdev,
 				&pdata->ext_audio_data.codec,
 				EXT_DISPLAY_CABLE_CONNECT);
 		pdata->ext_audio_data.intf_ops.audio_notify(pdata->ext_pdev,
 				&pdata->ext_audio_data.codec,
 				EXT_DISPLAY_CABLE_CONNECT);
+#endif
 	}
 }
 
@@ -2452,6 +2459,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		pr_err("invalid input\n");
 		return -EINVAL;
 	}
+
 	adap = cec_allocate_adapter(&lt9611_cec_ops, pdata,
 			"lt9611_cec", cec_flags, 1);
 	if (!adap) {
@@ -2460,7 +2468,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 	}
 
 	pdata->cec_notifier = cec_notifier_cec_adap_register(pdata->dev,
-					NULL, pdata->cec_adapter);
+					NULL, adap);
 	if (!pdata->cec_notifier) {
 		pr_err("Get CEC notifier failed!\n");
 		cec_delete_adapter(adap);
@@ -2481,6 +2489,7 @@ static int lt9611_cec_adap_init(struct lt9611 *pdata)
 		pr_info("CEC adapter registered successfully.\n");
 		pdata->cec_en = true;
 		pdata->cec_support = true;
+		pdata->cec_adapter = adap;
 		pdata->cec_log_addr = CEC_LOG_ADDR_PLAYBACK_1;
 	}
 	return ret;
@@ -2562,7 +2571,6 @@ static int lt9611_probe(struct i2c_client *client,
 			ret = lt9611_cec_adap_init(pdata);
 			if (ret != 0) {
 				pdata->cec_hw_support = false;
-				pdata->cec_support = false;
 				pr_err("LT9611 CEC initialize failed.\n");
 			} else
 				pr_info("LT9611 CEC initialize success.\n");

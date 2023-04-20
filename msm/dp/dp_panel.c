@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1473,9 +1473,23 @@ static int dp_panel_dsc_prepare_basic_params(
 	u32 slice_caps_2;
 	u32 dsc_version_major, dsc_version_minor;
 	bool dsc_version_supported = false;
+	struct dp_panel_private *panel;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
 	dsc_version_major = dp_panel->sink_dsc_caps.version & 0xF;
 	dsc_version_minor = (dp_panel->sink_dsc_caps.version >> 4) & 0xF;
+
+	if (panel->parser->dsc_version &&
+		(dsc_version_minor != (panel->parser->dsc_version & 0xF))) {
+		DP_DEBUG("DSC ver: %d.%d unsupported, fallback to %d.%d",
+				dsc_version_major,
+				dsc_version_minor,
+				dsc_version_major,
+				panel->parser->dsc_version & 0xF);
+		dsc_version_minor = panel->parser->dsc_version & 0xF;
+	}
+
 	dsc_version_supported = (dsc_version_major == 0x1 &&
 			(dsc_version_minor == 0x1 || dsc_version_minor == 0x2))
 			? true : false;

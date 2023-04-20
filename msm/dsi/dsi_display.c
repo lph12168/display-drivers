@@ -2104,7 +2104,7 @@ static void adjust_timing_by_ctrl_count(const struct dsi_display *display,
 		mode->timing.h_skew /= sublinks_count;
 		mode->pixel_clk_khz /= sublinks_count;
 	} else {
-		if (mode->priv_info->dsc_enabled)
+		if (mode->priv_info && mode->priv_info->dsc_enabled)
 			mode->priv_info->dsc.config.pic_width =
 				mode->timing.h_active;
 		mode->timing.h_active /= display->ctrl_count;
@@ -4114,6 +4114,8 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 
 	display->ctrl_count = dsi_display_get_phandle_count(display,
 					dsi_ctrl_name);
+	display->boot_ctrl_count = display->ctrl_count;
+
 	phy_count = dsi_display_get_phandle_count(display, dsi_phy_name);
 
 	DSI_DEBUG("ctrl count=%d, phy count=%d\n",
@@ -6327,14 +6329,12 @@ static int dsi_display_ext_get_mode_info(struct drm_connector *connector,
 	mode_info->frame_rate = drm_mode_vrefresh(drm_mode);
 	mode_info->vtotal = drm_mode->vtotal;
 	mode_info->comp_info.comp_type = MSM_DISPLAY_COMPRESSION_NONE;
+	if (!ext_display->panel->num_timing_nodes)
+		mode_info->no_panel_timing_node = 1;
 
 	topology = &mode_info->topology;
-	if (ext_display->panel->host_config.ext_bridge_always_dual_intf) {
-		topology->num_lm = ext_display->ctrl_count;
-	} else {
-		topology->num_lm = (avail_res->max_mixer_width
-				<= drm_mode->hdisplay) ? 2 : 1;
-	}
+	topology->num_lm = (avail_res->max_mixer_width
+			<= drm_mode->hdisplay) ? 2 : 1;
 	topology->num_enc = 0;
 	topology->num_intf = topology->num_lm;
 
