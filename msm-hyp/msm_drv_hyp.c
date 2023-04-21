@@ -90,8 +90,6 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_drv.h>
-#include <drm/drm_writeback.h>
-#include <drm/drm_modeset_helper_vtables.h>
 #include "msm_drv_hyp.h"
 #include "msm_hyp_utils.h"
 #include "msm_hyp_trace.h"
@@ -1907,51 +1905,6 @@ static void _msm_hyp_atomic_commit_dispatch(struct drm_device *dev,
 	HYP_ATRACE_END(__func__);
 }
 
-int msm_hyp_atomic_helper_prepare_planes(struct drm_device *dev, struct drm_atomic_state *state)
-{
-	struct drm_connector *connector;
-	struct drm_connector_state *new_conn_state;
-	struct drm_plane *plane;
-	struct drm_plane_state *new_plane_state;
-	int ret, i, j;
-
-	for_each_new_connector_in_state(state, connector, new_conn_state, i) {
-		if (!new_conn_state->writeback_job)
-			continue;
-		ret = drm_writeback_prepare_job(new_conn_state->writeback_job);
-		if (ret < 0)
-			return ret;
-	}
-
-	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
-		const struct drm_plane_helper_funcs *funcs;
-
-		funcs = plane->helper_private;
-
-		if (funcs->prepare_fb) {
-			ret = funcs->prepare_fb(plane, new_plane_state);
-			if (ret)
-				goto fail;
-		}
-	}
-	return 0;
-
-fail:
-	for_each_new_plane_in_state(state, plane, new_plane_state, j) {
-		const struct drm_plane_helper_funcs *funcs;
-
-		if (j >= i)
-			continue;
-
-		funcs = plane->helper_private;
-
-		if (funcs->cleanup_fb)
-			funcs->cleanup_fb(plane, new_plane_state);
-	}
-
-	return ret;
-}
-
 static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 		struct drm_atomic_state *state,
 		bool nonblock)
@@ -1962,9 +1915,7 @@ static int msm_hyp_atomic_helper_commit(struct drm_device *dev,
 	struct msm_hyp_commit *c;
 	int ret, i;
 
-	//TODO drm_atomic_helper_prepare_planes is crashing need to debug that
-	ret = msm_hyp_atomic_helper_prepare_planes(dev, state);
-//	ret = drm_atomic_helper_prepare_planes(dev, state);
+	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret)
 		return ret;
 	c = _msm_hyp_commit_init(state, nonblock);

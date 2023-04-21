@@ -1291,7 +1291,6 @@ static void virtio_kms_commit(struct msm_hyp_kms *kms,
 #ifdef VIRTIO_DEBUG
 	pr_err("virtio_kms_commit called\n");
 #endif
-	msleep(100);
 	for_each_new_crtc_in_state(old_state, crtc, crtc_state, i) {
 		c = to_msm_hyp_crtc(crtc);
 		priv = container_of(c->info,
@@ -1588,6 +1587,8 @@ static int virtio_gpu_hab_open(struct virtio_kms *kms)
 	} else {
 		pr_err("hab open failed mmid %d ret %d\n", kms->mmid_event, ret);
 	}
+
+	mutex_init(&kms->channel[client_id].hab_lock[CHANNEL_EVENTS]);
 
 #ifdef VIRTIO_DEBUG
 	pr_err("virtio: hab open mmid %d\n",kms->mmid_buffer);
