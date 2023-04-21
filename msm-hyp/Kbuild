@@ -3,8 +3,13 @@
 KDIR := $(TOP)/kernel_platform/msm-kernel
 
 #ifeq (y, $(findstring y, $(CONFIG_QTI_QUIN_GVM)))
-include $(DISPLAY_ROOT)/config/gvmdisp.conf
-LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmdispconf.h
+#ifeq ($(TARGET_USES_GHYHYP), true)
+	include $(DISPLAY_ROOT)/config/hgygvmdisp.conf
+	LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/hgygvmdispconf.h
+#else
+#	include $(DISPLAY_ROOT)/config/gvmdisp.conf
+#	LINUXINCLUDE += -include $(DISPLAY_ROOT)/config/gvmdispconf.h
+#endif
 #endif
 
 LINUX_INC +=    -Iinclude/linux \
