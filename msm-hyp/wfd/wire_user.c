@@ -24,6 +24,7 @@
  * ---------------------------------------------------------------------------
  */
 #define WIRE_USER_LOG_MODULE_NAME		"WireUser"
+#define MAX_SEND_RECV_RETRY			6
 
 #define WIRE_LOG_ERROR(fmt, ...)		\
 	USER_OS_UTILS_LOG_ERROR(		\
@@ -995,13 +996,15 @@ retry:
 			WIRE_LOG_ERROR("RPC call failed");
 
 			retry_times++;
-			if (retry_times >= 6) {
+			if (retry_times >= MAX_SEND_RECV_RETRY) {
 				/*
 				 * Drm fe try 6 times to send message to BE and wait 250ms, but no reply.
 				 * Need catch the system frame buffer to debug.
 				 * Normally, 100us is enough for the reply.
 				 */
+#ifdef WIRE_USER_DEBUG_BATCH
 				panic("wfdDeviceCommit");
+#endif
 			} else {
 				/* Add this msleep to let watch dog thread can be feed */
 				msleep(1);
