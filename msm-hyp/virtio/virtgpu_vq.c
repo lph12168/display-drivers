@@ -1411,8 +1411,8 @@ int virtio_gpu_cmd_set_resource_info(struct virtio_kms *kms,
 	cmd_p->ext_format = cpu_to_le32(ext_format);
 	cmd_p->modifiers = cpu_to_le32(modifiers);
 	for (i = 0; i < 4; i++) {
-		cmd_p->offsets[i] = cpu_to_le32(0);
-		cmd_p->strides[i] = cpu_to_le32(0);
+		cmd_p->offsets[i] = cpu_to_le32(offset[i]);
+		cmd_p->strides[i] = cpu_to_le32(pitches[i]);
 	}
 
 	rc = virtio_hab_send_and_recv(hab_socket,

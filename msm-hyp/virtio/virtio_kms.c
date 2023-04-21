@@ -678,8 +678,6 @@ static void virtio_kms_plane_zpos_adj_fe(struct drm_crtc *crtc,
 					struct virtio_plane_info_priv, base);
 
 			prop.z_order = i + 1;
-			//fucked up
-			prop.z_order = 1;
 			prop.mask |= Z_ORDER;
 			rc = virtio_gpu_cmd_set_plane_properties(priv->kms,
 				crtc_priv->scanout,
@@ -807,10 +805,10 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 
 #ifdef VIRTIO_DEBUG
 		pr_err("virtio_kms_plane_atomic_update send dest_rect %d %d %d %d\n",
-				plane->state->crtc_x >> 16,
-				plane->state->crtc_y >> 16,
-				plane->state->crtc_w >> 16,
-				plane->state->crtc_h >> 16);
+				plane->state->crtc_x,
+				plane->state->crtc_y,
+				plane->state->crtc_w,
+				plane->state->crtc_h);
 #endif
 		prop.dst_rect.x = plane->state->crtc_x;
 		prop.dst_rect.y = plane->state->crtc_y;
