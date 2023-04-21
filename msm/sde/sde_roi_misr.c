@@ -178,6 +178,11 @@ int sde_roi_misr_get_mode_info(struct drm_connector *connector,
 	topology_name = sde_rm_get_topology_name(&sde_kms->rm,
 			mode_info->topology);
 	num_misrs = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_name);
+	if (num_misrs == 0) {
+		SDE_DEBUG("roi misr is not supported\n");
+		return -EINVAL;
+	}
+
 	misr_width = drm_mode->hdisplay / num_misrs;
 	all_roi_num = num_misrs * ROI_MISR_MAX_ROIS_PER_MISR;
 	roi_factor = TOPOLOGY_3DMUX_MODE(topology_name)
@@ -668,6 +673,11 @@ int sde_roi_misr_irq_control(struct sde_encoder_phys *phys_enc,
 	}
 
 	irq_tbl_idx = base_irq_idx + roi_idx;
+	if (irq_tbl_idx >= INTR_IDX_MAX) {
+		SDE_ERROR("invalid interrupt index\n");
+		return -EINVAL;
+	}
+
 	irq = &phys_enc->irq[irq_tbl_idx];
 
 	if ((irq->irq_idx >= 0) && enable) {

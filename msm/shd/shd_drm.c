@@ -789,6 +789,10 @@ static int shd_connector_get_roi_misr_mode_info(
 	topology_name = sde_rm_get_topology_name(&sde_kms->rm,
 			mode_info->topology);
 	num_misrs = sde_rm_get_roi_misr_num(&sde_kms->rm, topology_name);
+	if (num_misrs == 0) {
+		SDE_DEBUG("roi misr is not supported\n");
+		return -EINVAL;
+	}
 
 	misr_mode_info->num_misrs = num_misrs;
 	misr_mode_info->mixer_width =
