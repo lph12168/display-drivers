@@ -2,6 +2,10 @@
 #define __khrplatform_h_
 
 /*
+** Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+*/
+
+/*
 ** Copyright (c) 2008-2018 The Khronos Group Inc.
 **
 ** Permission is hereby granted, free of charge, to any person obtaining a
@@ -251,8 +255,13 @@ typedef unsigned long  int     khronos_usize_t;
 #if KHRONOS_SUPPORT_FLOAT
 /*
  * Float type
+ * Disable float for Kernel module.
+ * Because floating registers will not be saved when system do
+ * process switch, or cause the wrong parameters to be used.
  */
-typedef          float         khronos_float_t;
+#ifdef ENABLE_FLOAT_USAGE
+typedef        float         khronos_float_t;
+#endif
 #endif
 
 #if KHRONOS_SUPPORT_INT64
