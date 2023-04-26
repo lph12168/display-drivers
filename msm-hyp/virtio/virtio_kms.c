@@ -912,7 +912,7 @@ static int virtio_kms_get_plane_infos(struct msm_hyp_kms *hyp_kms,
 			priv->base.max_width =
 				kms->outputs[i].plane_caps[j].max_width;
 			priv->base.max_bandwidth = 4500000000;
-
+			kms->max_sdma_width = priv->base.max_width;
 			priv->base.plane_funcs = &virtio_plane_helper_funcs;
 			priv->kms = kms;
 			priv->plane_id = kms->outputs[i].plane_caps[j].plane_id;
@@ -930,14 +930,16 @@ static void _virtio_kms_set_crtc_limit(struct virtio_kms *kms,
 	struct limit_val_pair *pair;
 	char buf[16];
 	int i;
-
+/*
 	for (i = 0; i < ARRAY_SIZE(constraints_table); i++) {
 		if (constraints_table[i].sdma_width == kms->max_sdma_width) {
 			constraints = &constraints_table[i];
 			break;
 		}
 	}
-
+*/
+	//TODO: Fix the sdma_width for getting the right constraint table index
+	constraints = &constraints_table[2];
 	if (!constraints)
 		return;
 
@@ -979,9 +981,9 @@ static int virtio_kms_get_crtc_infos(struct msm_hyp_kms *hyp_kms,
 			return -ENOMEM;
 		}
 
-		//get priv->base.max_blendstages
+		priv->base.max_blendstages =  kms->outputs[i].plane_cnt;
 		priv->base.primary_plane_index = plane_cnt;
-		plane_cnt = kms->outputs[i].plane_cnt;
+		plane_cnt += kms->outputs[i].plane_cnt;
 
 		/* these values should read from host */
 		priv->base.max_mdp_clk = 412500000LL;
