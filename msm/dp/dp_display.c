@@ -220,6 +220,7 @@ struct dp_display_private {
 	struct drm_connector *bond_primary;
 
 	struct device *msm_hdcp_dev;
+	u32 hdcp_cell_idx;
 };
 
 static const struct of_device_id dp_dt_match[] = {
@@ -685,7 +686,7 @@ static int dp_display_initialize_hdcp(struct dp_display_private *dp)
 	parser = dp->parser;
 
 	hdcp_init_data.client_id     = HDCP_CLIENT_DP;
-	hdcp_init_data.client_index  = dp->cell_idx;
+	hdcp_init_data.client_index  = dp->hdcp_cell_idx;
 	hdcp_init_data.drm_aux       = dp->aux->drm_aux;
 	hdcp_init_data.cb_data       = (void *)dp;
 	hdcp_init_data.workq         = dp->wq;
@@ -3548,6 +3549,7 @@ static int dp_parser_msm_hdcp_dev(struct dp_display_private *dp)
 {
 	struct device_node *node;
 	struct platform_device *pdev;
+	int ret;
 
 	node = of_parse_phandle(dp->pdev->dev.of_node, "qcom,msm-hdcp", 0);
 	if (!node) {
@@ -3558,9 +3560,16 @@ static int dp_parser_msm_hdcp_dev(struct dp_display_private *dp)
 
 	pdev = of_find_device_by_node(node);
 	if (!pdev) {
-		// defer the  module initialization
+		// defer the module initialization
 		pr_err("couldn't find msm-hdcp pdev defer probe\n");
 		return -EPROBE_DEFER;
+	}
+
+	ret = of_property_read_u32(node, "cell-index", &dp->hdcp_cell_idx);
+	if (ret < 0) {
+		// This is a non-fatal error, module initialization can proceed
+		pr_warn("couldn't find right hdcp cell-index");
+		return 0;
 	}
 
 	dp->msm_hdcp_dev = &pdev->dev;
