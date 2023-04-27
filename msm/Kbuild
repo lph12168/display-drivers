@@ -42,6 +42,8 @@ endif
 ifeq (y, $(findstring y, $(CONFIG_ARCH_LEMANS)))
 	include $(DISPLAY_ROOT)/config/augen4disp.conf
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/augen4dispconf.h
+	include $(DISPLAY_ROOT)/config/hdcp_qseecom.conf
+	LINUX_INC += -include $(DISPLAY_ROOT)/config/hdcp_qseecomconf.h
 endif
 
 LINUX_INC +=	-Iinclude/linux \
