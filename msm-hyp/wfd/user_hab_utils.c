@@ -29,7 +29,7 @@
 #define CHANNEL_EVENTS		1
 #define CHANNEL_BUFFERS		2
 #define MAX_CHANNELS		3
-#define MAX_RECV_PACKET_RETRY	6
+#define MAX_RECV_PACKET_RETRY	10
 #define WFD_MAX_NUM_OF_CLIENTS	10
 #define WFD_CLIENT_ID_BASE	WFD_CLIENT_ID_CLUSTER
 #define WFD_CLIENT_ID_LA_CONTAINER	0x7818
@@ -493,7 +493,7 @@ user_os_utils_send_recv(
 	snprintf(marker_buff, sizeof(marker_buff), "hab_recv %d\n", wfd_cmd_type);
 	HYP_ATRACE_BEGIN(marker_buff);
 
-retry:
+retry_recv_packet:
 	do {
 		/* TODO: Need handle exit hab_receive during deinit */
 		resp_size = sizeof(struct wire_packet);
@@ -525,8 +525,30 @@ retry:
 	HYP_ATRACE_END(marker_buff);
 
 	if (rc) {
-		UTILS_LOG_ERROR("habmm_socket_recv(payload type(%d)) failed",
-			payload_type);
+		UTILS_LOG_ERROR("habmm_socket_recv(payload type(%d)) failed, resp_size=%d, rc=%d",
+			payload_type, resp_size, rc);
+		if ((rc == -EAGAIN) && (retry_times < MAX_RECV_PACKET_RETRY))
+		{
+			if (handle) {
+				if (rel_hab_handle(ctx, chl_id, 0x00))
+					UTILS_LOG_ERROR("rel_hab_handle failed");
+			}
+			/*
+			 * Add this msleep to let watch dog thread can be feed
+			 * need release lock fisrt
+			 */
+			msleep(1);
+			handle = get_hab_handle(ctx, &chl_id, 0x00);
+			if (!handle) {
+				UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
+				rc = -1;
+				goto end;
+			}
+
+			retry_times++;
+			UTILS_LOG_ERROR("recv packet retry %d", retry_times);
+			goto retry_recv_packet;
+		}
 		rc = -1;
 		goto end;
 	}
@@ -550,14 +572,14 @@ retry:
 		rc = -1;
 		goto end;
 	}
-	if (timestamp != resp->hdr.timestamp) {
+	if (timestamp > resp->hdr.timestamp) {
 		UTILS_LOG_ERROR("wrong packet timestamp");
 		UTILS_LOG_ERROR("req packet timestamp : %lu\n", timestamp);
 		UTILS_LOG_ERROR("resp packet timestamp : %lu\n",
 					resp->hdr.timestamp);
 
 		/*
-		 * Drm fe try 5 times to get the correct packet
+		 * Drm fe try 10 times to get the correct packet
 		 */
 		if (retry_times > MAX_RECV_PACKET_RETRY) {
 			UTILS_LOG_ERROR("recv packet retry limit exceeded");
@@ -566,14 +588,31 @@ retry:
 #endif
 			rc = -1;
 		} else {
-			/* Add this msleep to let watch dog thread can be feed */
+			if (handle) {
+				if (rel_hab_handle(ctx, chl_id, 0x00))
+					UTILS_LOG_ERROR("rel_hab_handle failed");
+			}
+			/*
+			 * Add this msleep to let the watchdog thread can be feed
+			 * need release lock first
+			 */
 			msleep(1);
+			handle = get_hab_handle(ctx, &chl_id, 0x00);
+			if (!handle) {
+				UTILS_LOG_ERROR("get_hab_handle failed for chl_id=%d", chl_id);
+				rc = -1;
+				goto end;
+			}
+
 			retry_times++;
 			UTILS_LOG_ERROR("recv packet retry %d", retry_times);
-			goto retry;
+			goto retry_recv_packet;
 		}
+	} else if (timestamp < resp->hdr.timestamp) {
+		UTILS_LOG_ERROR(" Wrong packet timestamp req : %lu res : %lu \n", timestamp, resp->hdr.timestamp);
+		rc = -1;
+		goto end;
 	}
-
 	if (payload_type == OPENWFD_CMD) {
 		if (num_of_wfd_cmds != resp->payload.wfd_resp.num_of_cmds) {
 			UTILS_LOG_ERROR("num_of_wfd_cmds mismatch req=%d resp=%d",
@@ -596,7 +635,7 @@ end:
 			UTILS_LOG_ERROR("rel_hab_handle failed");
 	}
 
-	if ((rc == -1) && (req != NULL))
+	if (((rc == -1) || (retry_times > 0)) && (req != NULL))
 	{
 		UTILS_LOG_ERROR("packet receive error\n");
 		print_hex_dump(KERN_INFO, "hdr: ", DUMP_PREFIX_NONE, 16, 1,
