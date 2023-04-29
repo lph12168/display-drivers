@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Copyright (c) 2009 The Khronos Group Inc.
@@ -69,7 +70,10 @@ typedef enum
 
 
 #define WFD_MAX_INT   ((WFDint)16777216)
+
+#ifdef ENABLE_FLOAT_USAGE
 #define WFD_MAX_FLOAT ((WFDfloat)16777216)
+#endif
 
 #define WFD_INVALID_HANDLE ((WFDHandle)0)
 
@@ -393,11 +397,13 @@ WFD_API_CALL WFDint WFD_APIENTRY
                           WFDPortMode mode,
                           WFDPortModeAttrib attrib) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL WFDfloat WFD_APIENTRY
     wfdGetPortModeAttribf(WFDDevice device,
                           WFDPort port,
                           WFDPortMode mode,
                           WFDPortModeAttrib attrib) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPortMode(WFDDevice device,
@@ -412,10 +418,12 @@ WFD_API_CALL WFDint WFD_APIENTRY
                       WFDPort port,
                       WFDPortConfigAttrib attrib) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL WFDfloat WFD_APIENTRY
     wfdGetPortAttribf(WFDDevice device,
                       WFDPort port,
                       WFDPortConfigAttrib attrib) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdGetPortAttribiv(WFDDevice device,
@@ -424,12 +432,14 @@ WFD_API_CALL void WFD_APIENTRY
                        WFDint count,
                        WFDint *value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdGetPortAttribfv(WFDDevice device,
                        WFDPort port,
                        WFDPortConfigAttrib attrib,
                        WFDint count,
                        WFDfloat *value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPortAttribi(WFDDevice device,
@@ -437,11 +447,13 @@ WFD_API_CALL void WFD_APIENTRY
                       WFDPortConfigAttrib attrib,
                       WFDint value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPortAttribf(WFDDevice device,
                       WFDPort port,
                       WFDPortConfigAttrib attrib,
                       WFDfloat value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPortAttribiv(WFDDevice device,
@@ -450,12 +462,14 @@ WFD_API_CALL void WFD_APIENTRY
                        WFDint count,
                        const WFDint *value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPortAttribfv(WFDDevice device,
                        WFDPort port,
                        WFDPortConfigAttrib attrib,
                        WFDint count,
                        const WFDfloat *value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdBindPipelineToPort(WFDDevice device,
@@ -542,10 +556,12 @@ WFD_API_CALL WFDint WFD_APIENTRY
                           WFDPipeline pipeline,
                           WFDPipelineConfigAttrib attrib) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL WFDfloat WFD_APIENTRY
     wfdGetPipelineAttribf(WFDDevice device,
                           WFDPipeline pipeline,
                           WFDPipelineConfigAttrib attrib) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdGetPipelineAttribiv(WFDDevice device,
@@ -554,12 +570,14 @@ WFD_API_CALL void WFD_APIENTRY
                            WFDint count,
                            WFDint *value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdGetPipelineAttribfv(WFDDevice device,
                            WFDPipeline pipeline,
                            WFDPipelineConfigAttrib attrib,
                            WFDint count,
                            WFDfloat *value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPipelineAttribi(WFDDevice device,
@@ -567,11 +585,13 @@ WFD_API_CALL void WFD_APIENTRY
                           WFDPipelineConfigAttrib attrib,
                           WFDint value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPipelineAttribf(WFDDevice device,
                           WFDPipeline pipeline,
                           WFDPipelineConfigAttrib attrib,
                           WFDfloat value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPipelineAttribiv(WFDDevice device,
@@ -580,12 +600,14 @@ WFD_API_CALL void WFD_APIENTRY
                            WFDint count,
                            const WFDint *value) WFD_APIEXIT;
 
+#ifdef ENABLE_FLOAT_USAGE
 WFD_API_CALL void WFD_APIENTRY
     wfdSetPipelineAttribfv(WFDDevice device,
                            WFDPipeline pipeline,
                            WFDPipelineConfigAttrib attrib,
                            WFDint count,
                            const WFDfloat *value) WFD_APIEXIT;
+#endif
 
 WFD_API_CALL WFDint WFD_APIENTRY
     wfdGetPipelineTransparency(WFDDevice device,
