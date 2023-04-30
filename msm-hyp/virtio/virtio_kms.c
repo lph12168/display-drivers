@@ -26,7 +26,7 @@
 #define MAX_NUM_LIMIT_PAIRS    16
 #define MAX_MDP_CLK_KHZ        412500
 
-#define VIRTIO_DEBUG 1
+//#define VIRTIO_DEBUG 1
 
 struct limit_val_pair {
 	const char *str;
@@ -106,7 +106,6 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 		struct msm_hyp_framebuffer *fb);
 
 static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout);
-
 static const char* virtio_get_drm_format_string(uint32_t drm_format) {
  switch (drm_format) {
    case DRM_FORMAT_ABGR1555:
@@ -212,7 +211,6 @@ static const char* virtio_get_drm_format_string(uint32_t drm_format) {
   }
   return "Unknown";
 }
-
 static const struct {
          uint32_t drm_fmt;
          uint32_t virtio_fmt;
@@ -279,10 +277,6 @@ static int virtio_kms_connector_detect_ctx(struct drm_connector *connector,
 	struct msm_hyp_connector *c = to_msm_hyp_connector(connector);
 	struct virtio_connector_info_priv *priv = container_of(c->info,
 			struct virtio_connector_info_priv, base);
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_connector_detect_ctx called\n");
-	pr_err("virtio_kms_connector_detect_ctx done %d\n", priv->connector_status);
-#endif
 	return priv->connector_status;
 }
 
@@ -290,11 +284,6 @@ static struct drm_encoder *virtio_kms_connector_best_encoder(
 		struct drm_connector *connector)
 {
 	struct msm_hyp_connector *c_conn = to_msm_hyp_connector(connector);
-
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_connector_best_encoder Called\n");
-	pr_err("virtio_kms_connector_best_encoder Done\n");
-#endif
 	return &c_conn->encoder;
 }
 
@@ -305,9 +294,7 @@ static int virtio_kms_connector_get_modes(struct drm_connector *connector)
 	struct virtio_connector_info_priv *priv;
 	uint32_t i;
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_connector_get_modes called\n");
-#endif
+	pr_debug("virtio_kms_connector_get_modes called\n");
 	c_conn = to_msm_hyp_connector(connector);
 
 	priv = container_of(c_conn->info,
@@ -330,9 +317,7 @@ static int virtio_kms_connector_get_modes(struct drm_connector *connector)
 					c_conn->info->display_info.height_mm;
 	}
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_connector_get_modes done %d\n",  priv->mode_count);
-#endif
+	pr_debug("virtio_kms_connector_get_modes done %d\n",  priv->mode_count);
 	return priv->mode_count;
 }
 static const struct drm_connector_helper_funcs virtio_conn_helper_funcs = {
@@ -352,9 +337,7 @@ static void virtio_kms_bridge_mode_set(struct drm_bridge *drm_bridge,
 	uint32_t scanout;// = priv->scanout;
 	int rc = 0;
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_mode_set called\n");
-#endif
+	pr_debug("virtio_kms_bridge_mode_set called\n");
 	connector = container_of(drm_bridge, struct msm_hyp_connector, bridge);
 	priv = container_of(connector->info, struct virtio_connector_info_priv, base);
 	scanout = priv->scanout;
@@ -396,9 +379,7 @@ static void virtio_kms_bridge_mode_set(struct drm_bridge *drm_bridge,
 				mode_index);
 	}
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_mode_set done\n");
-#endif
+	pr_debug("virtio_kms_bridge_mode_set done\n");
 }
 
 static void virtio_kms_bridge_enable(struct drm_bridge *drm_bridge)
@@ -408,9 +389,6 @@ static void virtio_kms_bridge_enable(struct drm_bridge *drm_bridge)
 	struct virtio_gpu_rect dest_rect;
 	uint32_t scanout;
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_enable called\n");
-#endif
 	connector = container_of(drm_bridge, struct msm_hyp_connector, bridge);
 	priv = container_of(connector->info,struct virtio_connector_info_priv, base);
 	dest_rect.width = priv->mode_rect.width;
@@ -424,10 +402,6 @@ static void virtio_kms_bridge_enable(struct drm_bridge *drm_bridge)
 			priv->mode_index,
 			0,
 			dest_rect);
-
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_enable done\n");
-#endif
 }
 
 static void virtio_kms_bridge_disable(struct drm_bridge *drm_bridge)
@@ -437,9 +411,6 @@ static void virtio_kms_bridge_disable(struct drm_bridge *drm_bridge)
 	struct virtio_gpu_rect dest_rect;
 	uint32_t scanout;
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_disable called\n");
-#endif
 	connector = container_of(drm_bridge, struct msm_hyp_connector, bridge);
 	priv = container_of(connector->info, struct virtio_connector_info_priv, base);
 	dest_rect.width = priv->mode_rect.width;
@@ -454,10 +425,6 @@ static void virtio_kms_bridge_disable(struct drm_bridge *drm_bridge)
 			priv->mode_index,
 			0,
 			dest_rect);
-
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_bridge_disable done\n");
-#endif
 }
 
 static const struct drm_bridge_funcs virtio_bridge_ops = {
@@ -705,15 +672,12 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 	int rc = 0;
 	struct virtio_kms *kms;
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_plane_atomic_update called\n");
-#endif
+	pr_debug("virtio_kms_plane_atomic_update called\n");
 	p = to_msm_hyp_plane(plane);
 	plane_priv = container_of(p->info, struct virtio_plane_info_priv, base);
 	kms = plane_priv ? plane_priv->kms : NULL;
 
 	if (!kms) {
-		pr_err("kms failed \n");
 		return;
 	}
 
@@ -725,9 +689,7 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 
 	if (!plane->state->crtc) {
 
-#ifdef VIRTIO_DEBUG
-		pr_err("virtio_kms_plane_atomic_update crtc removed\n");
-#endif
+		pr_debug("virtio_kms_plane_atomic_update crtc removed\n");
 		crtc = to_msm_hyp_crtc(old_state->crtc);
 		crtc_priv = container_of(crtc->info,
 				struct virtio_crtc_info_priv,
@@ -744,9 +706,7 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 				struct virtio_crtc_info_priv,
 				base);
 
-#ifdef VIRTIO_DEBUG
-		pr_err("virtio_kms_plane_atomic_update fb removed plane id %d\n",plane_priv->plane_id);
-#endif
+		pr_debug("virtio_kms_plane_atomic_update fb removed plane id %d\n",plane_priv->plane_id);
 		rc = virtio_gpu_cmd_set_plane(kms,
 				crtc_priv->scanout,
 				plane_priv->plane_id,
@@ -764,7 +724,7 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 					struct virtio_crtc_info_priv,
 					base);
 		if (!fb_priv || !crtc_priv) {
-			pr_err("Something failed in commit\n");
+			pr_err("virtio : Something failed in commit\n");
 			return;
 		}
 
@@ -774,26 +734,24 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 				true : false;
 			rc = virtio_kms_create_framebuffer(kms,	fb);
 			if (rc)
-				pr_err("create frame buffer failed\n");
+				pr_err("virtio : create frame buffer failed\n");
 
 			rc = virtio_gpu_cmd_set_plane(kms,
 					crtc_priv->scanout,
 					plane_priv->plane_id,
 					fb_priv->hw_res_handle);
 			if (rc)
-				pr_err("set plane failed \n");
+				pr_err("virtio : set plane failed \n");
 		}
 	}
 
 	if (virtio_kms_plane_is_rect_changed(old_state, plane->state, true)) {
 
-#ifdef VIRTIO_DEBUG
-		pr_err("virtio_kms_plane_atomic_update send src_rect %d %d %d %d\n",
+		pr_debug("virtio_kms_plane_atomic_update send src_rect %d %d %d %d\n",
 				plane->state->src_x >> 16,
 				plane->state->src_y >> 16,
 				plane->state->src_w >> 16,
 				plane->state->src_h >> 16);
-#endif
 		prop.src_rect.x = plane->state->src_x >> 16;
 		prop.src_rect.y = plane->state->src_y >> 16;
 		prop.src_rect.width = plane->state->src_w >> 16;
@@ -803,13 +761,11 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 
 	if (virtio_kms_plane_is_rect_changed(old_state, plane->state, false)) {
 
-#ifdef VIRTIO_DEBUG
-		pr_err("virtio_kms_plane_atomic_update send dest_rect %d %d %d %d\n",
+		pr_debug("virtio_kms_plane_atomic_update send dest_rect %d %d %d %d\n",
 				plane->state->crtc_x,
 				plane->state->crtc_y,
 				plane->state->crtc_w,
 				plane->state->crtc_h);
-#endif
 		prop.dst_rect.x = plane->state->crtc_x;
 		prop.dst_rect.y = plane->state->crtc_y;
 		prop.dst_rect.width = plane->state->crtc_w;
@@ -827,7 +783,7 @@ static void virtio_kms_plane_atomic_update(struct drm_plane *plane,
 			plane_priv->plane_id,
 			prop);
 	if (rc) {
-		pr_err("set plane properties failed \n");
+		pr_err("virtio : set plane properties failed \n");
 	}
 
 	plane_priv->committed = true;
@@ -880,7 +836,7 @@ static int virtio_kms_get_plane_infos(struct msm_hyp_kms *hyp_kms,
 			formats = kms->outputs[i].plane_caps[j].formats;
 
 			if (!num_formats) {
-				pr_err("formats for plane ID %d\
+				pr_err("virtio :formats for plane ID %d\
 						for san out %d failed\n",
 						j, i);
 				kfree(priv);
@@ -889,16 +845,14 @@ static int virtio_kms_get_plane_infos(struct msm_hyp_kms *hyp_kms,
 			priv->base.format_types = kcalloc(num_formats, sizeof(uint32_t),
 							GFP_KERNEL);
 			if (priv->base.format_types == NULL) {
-				pr_err("base.format_types Memory allocation failed\n");
+				pr_err("virtio : base.format_types Memory allocation failed\n");
 				return -ENOMEM;
 			}
 
 			for (fmt_idx = 0; fmt_idx < num_formats; fmt_idx++) {
 				priv->base.format_types[fmt_idx] =
 					get_drm_format(formats[fmt_idx]);
-#ifdef VIRTIO_DEBUG
-				pr_err("Format %s\n", virtio_get_drm_format_string(priv->base.format_types[fmt_idx]));
-#endif
+				pr_debug("virtio : Format %s\n", virtio_get_drm_format_string(priv->base.format_types[fmt_idx]));
 			}
 			priv->base.format_count = num_formats;
 			//TODO : check for the support of scaling and csc
@@ -1005,7 +959,6 @@ static int virtio_kms_get_mode_info(struct msm_hyp_kms *kms,
 		const struct drm_display_mode *mode,
 		struct msm_hyp_mode_info *modeinfo)
 {
-	pr_err("virtio_kms_get_mode_info called\n");
 	modeinfo->num_lm = (mode->clock > MAX_MDP_CLK_KHZ) ? 2 : 1;
 	modeinfo->num_enc = 0;
 	modeinfo->num_intf = 1;
@@ -1032,6 +985,7 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 {
 	struct virtio_framebuffer_priv *fb_priv;
 	struct dma_buf *dma_buf;
+//	struct dma_buf *dma_buf_dump;
 	uint32_t client_id;
 	struct virtio_mem_info *mem;
 	uint32_t export_id = 0;
@@ -1042,7 +996,7 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 	uint32_t modifiers = 0;
 //	struct dma_buf_map map;
 //	char *ptr;
-//	int i;
+//	int i, offset = 0;
 
 	if (!fb) {
 		if (!fb->bo) {
@@ -1050,33 +1004,56 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 			return -EINVAL;
 		}
 	}
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_create_framebuffer called \n");
-	pr_err("create: FB ID: %d (%pK)", fb->base.base.id, fb);
-#endif
+	pr_debug("virtio : create: FB ID: %d (%pK)", fb->base.base.id, fb);
 
 	fb_priv = container_of(fb->info, struct virtio_framebuffer_priv, base);
 	client_id = fb_priv->kms->client_id;
         mem = &fb_priv->mem;
 	handle =  fb_priv->kms->channel[client_id].hab_socket[CHANNEL_BUFFERS];
 
-//	if (!fb_priv->created) {
-		if (fb->bo->import_attach) {
-#ifdef VIRTIO_DEBUG
-			pr_err(" virtio_kms_create_framebuffer import_attach\n");
-#endif
-			dma_buf = fb->bo->import_attach->dmabuf;
-			get_dma_buf(dma_buf);
-			/*
-			pr_err(" framebuffer dma_buf_vmap started \n");
-			dma_buf_begin_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
-			ret =  dma_buf_vmap(dma_buf, &map);
+	if (fb_priv->created) {
+		pr_debug("virtio : fb already created shmem_id%d\n",  mem->shmem_id);
+#if 0
+		if (mem->buffer) {
+			dma_buf_dump = mem->buffer;
+			pr_err(" virtio : framebuffer dma_buf_vmap started \n");
+			dma_buf_begin_cpu_access(dma_buf_dump, DMA_BIDIRECTIONAL);
+			ret =  dma_buf_vmap(dma_buf_dump, &map);
 			if (ret)
-				pr_err(" mmap failed for dma_buf_vmap\n");
+				pr_err(" virtio : mmap failed for dma_buf_vmap\n");
 			else {
 				ptr = (char *)map.vaddr;
 				if (!ptr) {
 					pr_err(" no memry map for da buffer\n");
+				}
+				else {
+					offset = 0x11030;
+					for (i = offset; i < offset + 100; ) {
+						pr_err("virtio : framebuffer data %x %x %x %x %x \n", ptr[i], ptr[i+1], ptr[i+2], ptr[i+3], ptr[i+4]);
+						i = i + 5;
+					}
+				}
+			}
+			pr_err("virtio : framebuffer dma_buf_vmap done %p\n", map.vaddr);
+			dma_buf_vunmap(dma_buf_dump, &map);
+			dma_buf_end_cpu_access(dma_buf_dump, DMA_BIDIRECTIONAL);
+		}
+#endif
+		return 0;
+	}
+		if (fb->bo->import_attach) {
+			dma_buf = fb->bo->import_attach->dmabuf;
+			get_dma_buf(dma_buf);
+#if 0
+			pr_err(" virtio : framebuffer dma_buf_vmap started \n");
+			dma_buf_begin_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
+			ret =  dma_buf_vmap(dma_buf, &map);
+			if (ret)
+				pr_err(" virtio : mmap failed for dma_buf_vmap\n");
+			else {
+				ptr = (char *)map.vaddr;
+				if (!ptr) {
+					pr_err(" virtio : no memry map for da buffer\n");
 				}
 				else {
 					for (i = 0; i < 50; ) {
@@ -1085,22 +1062,14 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 					}
 				}
 			}
-			pr_err("framebuffer dma_buf_vmap done %p\n", map.vaddr);
+			pr_err("virtio : framebuffer dma_buf_vmap done %p\n", map.vaddr);
 			dma_buf_vunmap(dma_buf, &map);
 		  	dma_buf_end_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
-			*/
-		} else if (fb->bo->dma_buf) {
-
-#ifdef VIRTIO_DEBUG
-			pr_err(" virtio_kms_create_framebuffer dma_buf \n");
 #endif
+		} else if (fb->bo->dma_buf) {
 			dma_buf = fb->bo->dma_buf;
 			get_dma_buf(dma_buf);
 		} else {
-
-#ifdef VIRTIO_DEBUG
-			pr_err("virtio_kms_create_framebuffer drm_gem_prime_export\n");
-#endif
 			dma_buf = drm_gem_prime_export(fb->bo, 0);
 			if (IS_ERR(dma_buf))
 				return PTR_ERR(dma_buf);
@@ -1124,14 +1093,9 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 			goto error;
 		}
 
-		pr_err("framebuffer fack resource_attach_backing returned \n");
-
 		mem->shmem_id = export_id;
-#ifdef VIRTIO_DEBUG
-		pr_err("framebuffer drm_gem_prime_export habmm_export done %d\n", mem->shmem_id);
-#endif
+		pr_debug("framebuffer drm_gem_prime_export habmm_export done %d\n", mem->shmem_id);
 		dma_buf_put(dma_buf);
-//	}
 
 
 	virtio_gpu_resource_id_get(&fb_priv->hw_res_handle);
@@ -1139,7 +1103,8 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 	//TODO : get the fence
 	ret = virtio_gpu_cmd_resource_create_2D(fb_priv->kms,
 			fb_priv->hw_res_handle,
-			VIRTIO_GPU_FORMAT_R8G8B8A8_UNORM,//fb_priv->format,
+			//VIRTIO_GPU_FORMAT_R8G8B8A8_UNORM,
+			fb_priv->format,
 			fb->base.width,
 			fb->base.height,
 			fence);
@@ -1147,7 +1112,6 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 		pr_err("resource_create_2D failed\n");
 		goto error;
 	}
-	//TODO : number of fb modifier
 	if (fb_priv->secure)
 		modifiers |= SECURE_SOURCE;
 
@@ -1169,9 +1133,7 @@ static int virtio_kms_create_framebuffer(struct virtio_kms *kms,
 	if (ret) {
 		pr_err("resource_attach_backing failed\n");
 	}
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_create_framebuffer done\n");
-#endif
+	pr_debug("virtio_kms_create_framebuffer done\n");
 
 	fb_priv->created = true;
 error:
@@ -1191,24 +1153,18 @@ static void virtio_kms_destroy_framebuffer(struct drm_framebuffer *framebuffer)
 //	char *ptr;
 //	int i;
 //	struct dma_buf_map map;
-
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_destroy_framebuffer called\n");
-#endif
 	fb = to_msm_hyp_fb(framebuffer);
 	fb_priv = container_of(fb->info, struct virtio_framebuffer_priv, base);
 	client_id = fb_priv->kms->client_id;
 	mem = &fb_priv->mem;
 	handle = fb_priv->kms->channel[client_id].hab_socket[CHANNEL_BUFFERS];
 
-#ifdef VIRTIO_DEBUG
-	pr_err("framebuffer create: FB ID: %d (%pK)", fb->base.base.id, fb);
-#endif
+	pr_debug("virtio : framebuffer destroy: FB ID: %d (%pK) created %d shmem_id%d", fb->base.base.id, fb, fb_priv->created, mem->shmem_id);
+
 	virtio_gpu_cmd_resource_detach_backing(fb_priv->kms,
 			fb_priv->hw_res_handle);
 
 	unexport_flags |= HABMM_EXPIMP_FLAGS_DMABUF;//HABMM_EXPIMP_FLAGS_FD;
-	pr_err("framebuffer habmm_unexport %d\n", mem->shmem_id);
 	rc = habmm_unexport(
 			handle,
 			mem->shmem_id,
@@ -1244,9 +1200,8 @@ static void virtio_kms_destroy_framebuffer(struct drm_framebuffer *framebuffer)
 	dma_buf_end_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
 	*/
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_destroy_framebuffer donei %d\n", fb_priv->hw_res_handle);
-#endif
+	pr_debug("virtio_kms_destroy_framebuffer donei %d\n", fb_priv->hw_res_handle);
+	fb_priv->created = false;
 	kfree(fb_priv);
 	fb->info = NULL;
 }
@@ -1288,9 +1243,7 @@ static void virtio_kms_commit(struct msm_hyp_kms *kms,
 
 	if (!old_state)
 		return;
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_commit called\n");
-#endif
+	pr_debug("virtio_kms_commit called\n");
 	for_each_new_crtc_in_state(old_state, crtc, crtc_state, i) {
 		c = to_msm_hyp_crtc(crtc);
 		priv = container_of(c->info,
@@ -1298,7 +1251,6 @@ static void virtio_kms_commit(struct msm_hyp_kms *kms,
 				base);
 
 		if (crtc_state->active) {
-			pr_err("virtio_kms_plane_zpos_adj_fe called \n");
 			virtio_kms_plane_zpos_adj_fe(crtc, old_state);
 		}
 
@@ -1312,9 +1264,7 @@ static void virtio_kms_commit(struct msm_hyp_kms *kms,
 				priv->scanout,
 				async);
 	}
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio_kms_commit done\n");
-#endif
+	pr_debug("virtio_kms_commit done\n");
 }
 
 static void virtio_kms_enable_vblank(struct msm_hyp_kms *hyp_kms,
@@ -1460,7 +1410,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 	uint32_t plane_id = 0;
 
 	if (scanout >= VIRTIO_GPU_MAX_SCANOUTS) {
-		pr_err(" Wrong Scanout ID\n");
+		pr_err("virtio : Wrong Scanout ID\n");
 		goto error;
 	}
 
@@ -1469,7 +1419,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 
 	rc = virtio_gpu_cmd_get_display_info_ext(kms, scanout);
 	if (rc) {
-		pr_err("get_display_info_ext failed %d\n",
+		pr_err("virtio : get_display_info_ext failed %d\n",
 				scanout);
 		goto error;
 	}
@@ -1487,7 +1437,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 	num_planes = kms->outputs[scanout].plane_cnt;
 
 	if (!num_planes)
-		pr_err("No planes passed\n");
+		pr_err("virtio : No planes passed\n");
 
 	for (plane = 0; plane < num_planes; plane++) {
 		plane_id = kms->outputs[scanout].plane_caps[plane].plane_id;
@@ -1495,7 +1445,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 				scanout,
 				plane_id);
 		if (rc) {
-			pr_err("Plane creation failed plane-id %d\n",
+			pr_err("virtio : Plane creation failed plane-id %d\n",
 					plane_id);
 			continue;
 		}
@@ -1503,7 +1453,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 				scanout,
 				plane_id);
 		if (rc) {
-			pr_err("virtio_gpu_cmd_get_plane_caps failed\n");
+			pr_err("virtio : virtio_gpu_cmd_get_plane_caps failed\n");
 			goto error;
 		}
 
@@ -1511,7 +1461,7 @@ static int virtio_kms_scanout_init(struct virtio_kms *kms, uint32_t scanout)
 				scanout,
 				plane_id);
 		if (rc) {
-			pr_err("virtio_gpu_cmd_get_plane_properties failed \n");
+			pr_err("virtio : virtio_gpu_cmd_get_plane_properties failed \n");
 			goto error;
 		}
 	}
@@ -1557,9 +1507,6 @@ static int virtio_gpu_hab_open(struct virtio_kms *kms)
 	uint32_t client_id = kms->client_id;
 	if (!kms)
 		pr_err("kms NULL\n");
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio: hab open mmid %d\n",kms->mmid_cmd);
-#endif
 	ret = habmm_socket_open(
 			&kms->channel[client_id].hab_socket[CHANNEL_CMD],
 			kms->mmid_cmd,
@@ -1574,9 +1521,6 @@ static int virtio_gpu_hab_open(struct virtio_kms *kms)
 	}
 	mutex_init(&kms->channel[client_id].hab_lock[CHANNEL_CMD]);
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio: hab open mmid %d\n",kms->mmid_event);
-#endif
 	ret = habmm_socket_open(
 			&kms->channel[client_id].hab_socket[CHANNEL_EVENTS],
 			kms->mmid_event,
@@ -1590,9 +1534,6 @@ static int virtio_gpu_hab_open(struct virtio_kms *kms)
 
 	mutex_init(&kms->channel[client_id].hab_lock[CHANNEL_EVENTS]);
 
-#ifdef VIRTIO_DEBUG
-	pr_err("virtio: hab open mmid %d\n",kms->mmid_buffer);
-#endif
 	ret = habmm_socket_open(
 			&kms->channel[client_id].hab_socket[CHANNEL_BUFFERS],
 			kms->mmid_buffer,
@@ -1621,10 +1562,8 @@ static int virtio_kms_service_hpd(struct virtio_kms *kms, uint32_t scanout)
 {
 	int rc = 0;
 	rc = virtio_kms_scanout_init(kms, scanout);
-	if (rc) {
+	if (rc)
 		 pr_err("scanout init failed %d\n", scanout);
-	}
-
 	return 0;
 }
 
