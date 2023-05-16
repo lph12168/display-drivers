@@ -203,6 +203,7 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
   *@mst_fixed_port: mst port_num reserved for fixed topology
  * @qos_cpu_mask: CPU mask for QOS
  * @qos_cpu_latency: CPU Latency setting for QOS
+* @display_type : display type as defined in device tree.
  * @parse: function to be called by client to parse device tree.
  * @get_io: function to be called by client to get io data.
  * @get_io_buf: function to be called by client to get io buffers.
@@ -233,6 +234,8 @@ struct dp_parser {
 	u32 qos_cpu_mask;
 	unsigned long qos_cpu_latency;
 	u32 dsc_version;
+
+	const char *display_type;
 
 	int (*parse)(struct dp_parser *parser);
 	struct dp_io_data *(*get_io)(struct dp_parser *parser, char *name);
