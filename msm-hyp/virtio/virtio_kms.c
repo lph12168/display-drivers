@@ -1160,6 +1160,7 @@ static void virtio_kms_destroy_framebuffer(struct drm_framebuffer *framebuffer)
 	handle = fb_priv->kms->channel[client_id].hab_socket[CHANNEL_BUFFERS];
 
 	pr_debug("virtio : framebuffer destroy: FB ID: %d (%pK) created %d shmem_id%d", fb->base.base.id, fb, fb_priv->created, mem->shmem_id);
+	return;
 
 	virtio_gpu_cmd_resource_detach_backing(fb_priv->kms,
 			fb_priv->hw_res_handle);
@@ -1200,7 +1201,7 @@ static void virtio_kms_destroy_framebuffer(struct drm_framebuffer *framebuffer)
 	dma_buf_end_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
 	*/
 
-	pr_debug("virtio_kms_destroy_framebuffer donei %d\n", fb_priv->hw_res_handle);
+	pr_debug("virtio_kms_destroy_framebuffer done %d\n", fb_priv->hw_res_handle);
 	fb_priv->created = false;
 	kfree(fb_priv);
 	fb->info = NULL;

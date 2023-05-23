@@ -87,9 +87,18 @@ retry:
 		&size,
 		2500, flags);
 		if (rc && max_retries) {
-	//		max_retries--;
-			pr_err("virtio : recv timout retry\n");
+			max_retries--;
+			pr_info("virtio : recv timout retry\n");
 			goto retry;
+		}
+		else if (rc && !max_retries) {
+			pr_info("virtio : retries done waiting for reply\n");
+			rc = habmm_socket_recv(hab_socket,
+				resp,
+				&size,
+				(uint32_t)-1, 0);
+			if (rc)
+				pr_err("socket_recv failed <%d>\n",rc);
 		}
 end:
 	return rc;
@@ -1283,8 +1292,8 @@ static int virtio_gpu_cmd_get_event (struct virtio_kms *kms,
 
 	pr_debug("virtio: cmd VIRTIO_GPU_CMD_WAIT_EVENTS (%d)\n",
 			cmd_p->max_num_events);
-//	rc = virtio_hab_send_and_recv_timeout(hab_socket,
-	rc = virtio_hab_send_and_recv(hab_socket,
+	rc = virtio_hab_send_and_recv_timeout(hab_socket,
+//	rc = virtio_hab_send_and_recv(hab_socket,
 			kms->channel[client_id].hab_lock[CHANNEL_EVENTS],
 			cmd_p,
 			sizeof(struct virtio_gpu_wait_events),
